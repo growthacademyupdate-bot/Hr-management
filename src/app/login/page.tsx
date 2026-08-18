@@ -31,7 +31,7 @@ export default function LoginPage() {
   function fill(role: "admin" | "hr" | "employee") {
     if (role === "admin") { setU("admin@gmail.com"); setP("admin123"); }
     if (role === "hr") { setU("hr@gmail.com"); setP("hr@123"); }
-    if (role === "employee") { setU("employee@example.com"); setP("emp123"); }
+    if (role === "employee") { setU("almawainternational2027@gmail.com"); setP("tushar123"); }
   }
 
   async function onSubmit(e: React.FormEvent) {
@@ -114,7 +114,7 @@ export default function LoginPage() {
                     <div className="mt-6 text-xs text-muted-foreground bg-muted/50 rounded-lg p-3 space-y-1">
                       <div><span className="font-semibold">Admin:</span> admin@gmail.com / admin123</div>
                       <div><span className="font-semibold">HR:</span> hr@gmail.com / hr@123</div>
-                      <div><span className="font-semibold">Employee:</span> employee@example.com / emp123</div>
+                      <div><span className="font-semibold">Employee:</span> almawainternational2027@gmail.com / tushar123</div>
                     </div>
                   </CardContent>
                 </Card>

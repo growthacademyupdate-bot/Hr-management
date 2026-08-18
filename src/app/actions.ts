@@ -79,8 +79,13 @@ export async function getEmployees() {
 
 export async function addEmployee(data: any) {
   await connectDB();
-  const count = await Employee.countDocuments();
-  const id = `EMP${String(count + 1).padStart(3, "0")}`;
+  const all = await Employee.find({}, { id: 1 }).lean();
+  let max = 0;
+  for (const doc of all) {
+    const num = parseInt((doc as any).id.replace("EMP", ""), 10);
+    if (!isNaN(num) && num > max) max = num;
+  }
+  const id = `EMP${String(max + 1).padStart(3, "0")}`;
   const emp = await Employee.create({
     ...data,
     id,
@@ -110,8 +115,13 @@ export async function getTasks() {
 
 export async function addTask(data: any) {
   await connectDB();
-  const count = await Task.countDocuments();
-  const id = `TASK${String(count + 1).padStart(3, "0")}`;
+  const all = await Task.find({}, { id: 1 }).lean();
+  let max = 0;
+  for (const doc of all) {
+    const num = parseInt((doc as any).id.replace("TASK", ""), 10);
+    if (!isNaN(num) && num > max) max = num;
+  }
+  const id = `TASK${String(max + 1).padStart(3, "0")}`;
   const task = await Task.create({
     ...data,
     id,
@@ -152,8 +162,13 @@ export async function getLeaves() {
 
 export async function addLeave(data: any) {
   await connectDB();
-  const count = await Leave.countDocuments();
-  const id = `LV${String(count + 1).padStart(3, "0")}`;
+  const all = await Leave.find({}, { id: 1 }).lean();
+  let max = 0;
+  for (const doc of all) {
+    const num = parseInt((doc as any).id.replace("LV", ""), 10);
+    if (!isNaN(num) && num > max) max = num;
+  }
+  const id = `LV${String(max + 1).padStart(3, "0")}`;
   const leave = await Leave.create({
     ...data,
     id,

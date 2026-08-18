@@ -13,7 +13,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
-import { Search, Plus, Eye, Pencil, Trash2 } from "lucide-react";
+import { Search, Plus, Eye, EyeOff, Pencil, Trash2 } from "lucide-react";
 import { StatusBadge } from "../dashboard/page";
 import { toast } from "sonner";
 
@@ -110,7 +110,7 @@ export default function EmployeesPage() {
                         <Button asChild variant="ghost" size="icon"><Link href={`/employees/${e.id}`}><Eye className="h-4 w-4" /></Link></Button>
                         {canManage && <>
                           <Button variant="ghost" size="icon" onClick={() => { setEditingEmp(e); setEditOpen(true); }}><Pencil className="h-4 w-4" /></Button>
-                          <Button variant="ghost" size="icon" className="text-destructive" onClick={() => { api.deleteEmployee(e.id); toast.success("Employee deleted"); }}><Trash2 className="h-4 w-4" /></Button>
+                          <Button variant="ghost" size="icon" className="text-destructive" onClick={async () => { await api.deleteEmployee(e.id); toast.success("Employee deleted"); }}><Trash2 className="h-4 w-4" /></Button>
                         </>}
                       </div>
                     </TableCell>
@@ -133,6 +133,7 @@ function AddEmployeeDialog({ onClose }: { onClose: () => void }) {
   const [form, setForm] = useState({
     name: "", email: "", mobile: "", department: "Engineering", designation: "", joiningDate: new Date().toISOString().slice(0,10), salary: 60000, password: "tushar123",
   });
+  const [showPw, setShowPw] = useState(false);
   async function submit() {
     if (!form.name || !form.email) { toast.error("Name and email are required"); return; }
     const newEmp = await api.addEmployee({ ...form, status: "Active" });
@@ -156,7 +157,15 @@ function AddEmployeeDialog({ onClose }: { onClose: () => void }) {
         <div className="space-y-1"><Label>Designation</Label><Input value={form.designation} onChange={(e) => setForm({...form, designation: e.target.value})} /></div>
         <div className="space-y-1"><Label>Joining Date</Label><Input type="date" value={form.joiningDate} onChange={(e) => setForm({...form, joiningDate: e.target.value})} /></div>
         <div className="space-y-1"><Label>Salary</Label><Input type="number" value={form.salary} onChange={(e) => setForm({...form, salary: +e.target.value})} /></div>
-        <div className="col-span-2 space-y-1"><Label>Password</Label><Input value={form.password} onChange={(e) => setForm({...form, password: e.target.value})} /></div>
+        <div className="col-span-2 space-y-1">
+          <Label>Password</Label>
+          <div className="relative">
+            <Input type={showPw ? "text" : "password"} value={form.password} onChange={(e) => setForm({...form, password: e.target.value})} />
+            <Button type="button" variant="ghost" size="icon" className="absolute right-0 top-0 h-full px-3 hover:bg-transparent" onClick={() => setShowPw(!showPw)}>
+              {showPw ? <EyeOff className="h-4 w-4 text-muted-foreground" /> : <Eye className="h-4 w-4 text-muted-foreground" />}
+            </Button>
+          </div>
+        </div>
       </div>
       <DialogFooter>
         <Button variant="outline" onClick={onClose}>Cancel</Button>
@@ -177,9 +186,10 @@ function EditEmployeeDialog({ employee, open, onClose }: { employee: Employee; o
     salary: employee.salary,
     password: employee.password,
   });
-  function submit() {
+  const [showPw, setShowPw] = useState(false);
+  async function submit() {
     if (!form.name || !form.email) { toast.error("Name and email are required"); return; }
-    api.updateEmployee(employee.id, { ...form, status: employee.status });
+    await api.updateEmployee(employee.id, { ...form, status: employee.status });
     toast.success("Employee updated");
     onClose();
   }
@@ -201,7 +211,15 @@ function EditEmployeeDialog({ employee, open, onClose }: { employee: Employee; o
           <div className="space-y-1"><Label>Designation</Label><Input value={form.designation} onChange={(e) => setForm({...form, designation: e.target.value})} /></div>
           <div className="space-y-1"><Label>Joining Date</Label><Input type="date" value={form.joiningDate} onChange={(e) => setForm({...form, joiningDate: e.target.value})} /></div>
           <div className="space-y-1"><Label>Salary</Label><Input type="number" value={form.salary} onChange={(e) => setForm({...form, salary: +e.target.value})} /></div>
-          <div className="col-span-2 space-y-1"><Label>Password</Label><Input value={form.password} onChange={(e) => setForm({...form, password: e.target.value})} /></div>
+          <div className="col-span-2 space-y-1">
+            <Label>Password</Label>
+            <div className="relative">
+              <Input type={showPw ? "text" : "password"} value={form.password || ""} onChange={(e) => setForm({...form, password: e.target.value})} />
+              <Button type="button" variant="ghost" size="icon" className="absolute right-0 top-0 h-full px-3 hover:bg-transparent" onClick={() => setShowPw(!showPw)}>
+                {showPw ? <EyeOff className="h-4 w-4 text-muted-foreground" /> : <Eye className="h-4 w-4 text-muted-foreground" />}
+              </Button>
+            </div>
+          </div>
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>Cancel</Button>
