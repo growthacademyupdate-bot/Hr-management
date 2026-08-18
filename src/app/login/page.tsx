@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState, useEffect } from "react";
-import { login, useAuth } from "@/lib/store";
+import { useAuth } from "@/lib/store";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -11,6 +11,8 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Activity, Shield, Users, BarChart3 } from "lucide-react";
 import { toast } from "sonner";
 import { Toaster } from "@/components/ui/sonner";
+
+import { loginAction } from "@/app/actions";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -27,16 +29,26 @@ export default function LoginPage() {
   const [p, setP] = useState("");
 
   function fill(role: "admin" | "hr" | "employee") {
-    if (role === "admin") { setU("admin"); setP("admin123"); }
-    if (role === "hr") { setU("hr"); setP("hr123"); }
+    if (role === "admin") { setU("admin@gmail.com"); setP("admin123"); }
+    if (role === "hr") { setU("hr@gmail.com"); setP("hr@123"); }
     if (role === "employee") { setU("employee@example.com"); setP("emp123"); }
   }
 
-  function onSubmit(e: React.FormEvent) {
+  async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
-    const usr = login(u, p);
-    if (!usr) { toast.error("Invalid credentials"); return; }
-    toast.success(`Welcome, ${usr.name}`);
+    
+    // Call the real backend authentication
+    const res = await loginAction(u, p);
+    if (!res.success || !res.user) { 
+      toast.error(res.error || "Invalid credentials"); 
+      return; 
+    }
+    
+    // Set local session
+    localStorage.setItem("ems_auth_v1", JSON.stringify(res.user));
+    window.dispatchEvent(new Event("ems_auth_change"));
+    
+    toast.success(`Welcome, ${res.user.name}`);
     router.push("/dashboard");
   }
 
@@ -94,12 +106,14 @@ export default function LoginPage() {
                         <Label>Password</Label>
                         <Input type="password" value={p} onChange={(e) => setP(e.target.value)} autoComplete="current-password" />
                       </div>
-                      <Button type="submit" className="w-full h-11">Sign in as {r}</Button>
-                      <Button type="button" variant="outline" className="w-full" onClick={() => fill(r)}>Use demo credentials</Button>
+                      <div className="flex gap-3">
+                        <Button type="submit" className="w-full h-11">Sign in as {r}</Button>
+                        <Button type="button" variant="outline" className="w-full h-11" onClick={() => fill(r)}>Demo credentials</Button>
+                      </div>
                     </form>
                     <div className="mt-6 text-xs text-muted-foreground bg-muted/50 rounded-lg p-3 space-y-1">
-                      <div><span className="font-semibold">Admin:</span> admin / admin123</div>
-                      <div><span className="font-semibold">HR:</span> hr / hr123</div>
+                      <div><span className="font-semibold">Admin:</span> admin@gmail.com / admin123</div>
+                      <div><span className="font-semibold">HR:</span> hr@gmail.com / hr@123</div>
                       <div><span className="font-semibold">Employee:</span> employee@example.com / emp123</div>
                     </div>
                   </CardContent>

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { useAuth, useDB, api } from "@/lib/store";
-import type { Employee } from "@/lib/mock-data";
+import type { Employee } from "@/lib/store";
 import { PageHeader } from "@/components/PageHeader";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -133,9 +133,9 @@ function AddEmployeeDialog({ onClose }: { onClose: () => void }) {
   const [form, setForm] = useState({
     name: "", email: "", mobile: "", department: "Engineering", designation: "", joiningDate: new Date().toISOString().slice(0,10), salary: 60000, password: "tushar123",
   });
-  function submit() {
+  async function submit() {
     if (!form.name || !form.email) { toast.error("Name and email are required"); return; }
-    const newEmp = api.addEmployee({ ...form, status: "Active" });
+    const newEmp = await api.addEmployee({ ...form, status: "Active" });
     toast.success(`Employee added! ID: ${newEmp.id}`);
     onClose();
   }

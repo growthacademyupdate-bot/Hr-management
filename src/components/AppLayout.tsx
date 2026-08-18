@@ -27,7 +27,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   const [mobileOpen, setMobileOpen] = useState(false);
 
   useEffect(() => {
-    if (!user) router.push("/login");
+    if (user === null) router.push("/login");
   }, [user, router]);
 
   if (!user) return null;
