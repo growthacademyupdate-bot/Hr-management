@@ -28,12 +28,6 @@ export default function LoginPage() {
   const [u, setU] = useState("");
   const [p, setP] = useState("");
 
-  function fill(role: "admin" | "hr" | "employee") {
-    if (role === "admin") { setU("admin@gmail.com"); setP("admin123"); }
-    if (role === "hr") { setU("hr@gmail.com"); setP("hr@123"); }
-    if (role === "employee") { setU("almawainternational2027@gmail.com"); setP("tushar123"); }
-  }
-
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     
@@ -86,9 +80,8 @@ export default function LoginPage() {
                     <form onSubmit={onSubmit} className="space-y-5">
                       <div className="space-y-2"><Label className="text-xs font-bold text-[#40534b]">{r === "employee" ? "Email address" : "Username"}</Label><Input className="h-12 rounded-xl border-[#dce5de] bg-[#fbfcfa] px-4 shadow-none focus-visible:ring-[#a8c84a]" value={u} onChange={(e) => setU(e.target.value)} placeholder={r === "employee" ? "employee@example.com" : r} autoComplete="username" /></div>
                       <div className="space-y-2"><Label className="text-xs font-bold text-[#40534b]">Password</Label><Input className="h-12 rounded-xl border-[#dce5de] bg-[#fbfcfa] px-4 shadow-none focus-visible:ring-[#a8c84a]" type="password" value={p} onChange={(e) => setP(e.target.value)} autoComplete="current-password" /></div>
-                      <div className="flex flex-col gap-3 pt-2 sm:flex-row"><Button type="submit" className="h-12 w-full rounded-xl bg-[#14231f] font-bold text-[#d8f56c] shadow-[0_8px_20px_rgba(20,35,31,0.16)] hover:bg-[#243b33]">Sign in as {r}</Button><Button type="button" variant="outline" className="h-12 w-full rounded-xl border-[#dce5de] bg-white font-semibold text-[#40534b] hover:bg-[#f5f7f4]" onClick={() => fill(r)}>Use demo login</Button></div>
+                      <div className="pt-2"><Button type="submit" className="h-12 w-full rounded-xl bg-[#14231f] font-bold text-[#d8f56c] shadow-[0_8px_20px_rgba(20,35,31,0.16)] hover:bg-[#243b33]">Sign in as {r}</Button></div>
                     </form>
-                    <div className="mt-6 border-t border-[#edf1ed] pt-5 text-xs leading-6 text-[#71817b]"><span className="font-bold text-[#40534b]">Demo access</span><br />Admin: admin@gmail.com / admin123<br />HR: hr@gmail.com / hr@123<br />Employee: almawainternational2027@gmail.com / tushar123</div>
                   </CardContent>
                 </Card>
               </TabsContent>
