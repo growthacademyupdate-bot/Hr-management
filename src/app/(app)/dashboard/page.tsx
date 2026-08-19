@@ -79,7 +79,7 @@ export default function Dashboard() {
         ) : (
           <StatCard label="To Review" value={db.tasks.filter((t) => t.status === "completed").length} icon={Clock} tone="warning" />
         )}
-        <StatCard label="Overdue Tasks" value={overdueTasks} icon={TrendingUp} tone="destructive" />
+        <StatCard label="Leave Requests" value={db.leaves.filter(l => l.status === (user.role === "admin" ? "hr_approved" : "pending")).length} icon={Clock} tone="warning" trend="Action needed" />
       </div>
 
       <div className="grid lg:grid-cols-3 gap-4">
@@ -258,7 +258,7 @@ function EmployeeDashboard() {
         <StatCard label="Working Hours" value={`${todayAtt?.workingHours || 0}h`} icon={Activity} tone="primary" />
         <StatCard label="Assigned Tasks" value={myTasks.length} icon={ListChecks} tone="primary" />
         <StatCard label="Completed" value={completedTasks} icon={CheckCircle2} tone="success" />
-        <StatCard label="Overdue Tasks" value={overdueTasks} icon={Clock} tone="destructive" />
+        <StatCard label="Leave Requests" value={db.leaves.filter(l => l.employeeId === empId).length} icon={Clock} tone="info" trend={`${db.leaves.filter(l => l.employeeId === empId && l.status === "admin_approved").length} approved`} />
         <StatCard label="Productivity" value={`${todayAtt?.productivity || 0}%`} icon={TrendingUp} tone="success" />
         <StatCard label="Pending" value={myTasks.filter(t => t.status === "assigned").length} icon={Clock} tone="warning" />
         <StatCard label="In Progress" value={myTasks.filter(t => t.status === "working_progress").length} icon={Activity} tone="info" />

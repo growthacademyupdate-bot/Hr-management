@@ -3,7 +3,7 @@ import { toast } from "sonner";
 import { 
   getEmployees, addEmployee, updateEmployee, deleteEmployee,
   getTasks, addTask, updateTask, deleteTask, addComment, updateTaskStatus, reviewTask,
-  getLeaves, addLeave, updateLeave,
+  getLeaves, addLeave, cancelLeave, hrReviewLeave, adminReviewLeave,
   getAttendance, getActivities, logLogoutActivity
 } from "@/app/actions";
 
@@ -21,7 +21,7 @@ export interface Task {
   id: string; title: string; description: string; assignedTo: string; assignedBy: string; priority: "low" | "medium" | "high" | "urgent"; status: "assigned" | "working_progress" | "completed" | "reviewed"; assignDate: string; dueDate: string; startedAt: string | null; completedAt: string | null; reviewedAt: string | null; hrRating: string | null; hrReview: string | null; reviewedBy: string | null; createdAt: string; updatedAt: string;
 }
 export interface Leave {
-  id: string; employeeId: string; type: string; startDate: string; endDate: string; reason: string; status: string; appliedAt: string;
+  id: string; employeeId: string; type: "Casual Leave" | "Sick Leave" | "Earned Leave" | "Emergency Leave" | "Other"; startDate: string; endDate: string; numberOfDays: number; reason: string; status: "pending" | "hr_approved" | "hr_rejected" | "admin_approved" | "admin_rejected" | "cancelled"; appliedAt: string; hrReviewedBy?: string | null; hrReviewedAt?: string | null; hrReviewComment?: string | null; adminReviewedBy?: string | null; adminReviewedAt?: string | null; adminReviewComment?: string | null; cancelledBy?: string | null; cancelledAt?: string | null;
 }
 export interface Activity {
   id: string; employeeId: string; time: string; label: string; type: string;
@@ -48,7 +48,7 @@ export function useDB() {
   useEffect(() => {
     const user = getCurrentUser();
     // Fetch real data on mount
-    Promise.all([getEmployees(), getAttendance(), getTasks(user?.role, user?.employeeId || user?.id), getLeaves(), getActivities()])
+    Promise.all([getEmployees(), getAttendance(), getTasks(user?.role, user?.employeeId || user?.id), getLeaves(user?.role, user?.employeeId || user?.id), getActivities()])
       .then(([emps, atts, ts, lvs, acts]) => {
         currentDB = { employees: emps, attendance: atts, tasks: ts, leaves: lvs, activities: acts };
         notify();
@@ -81,8 +81,10 @@ export const api = {
   async updateTaskStatus(taskId: string, status: string) { const user = getCurrentUser(); if(!user) return; const t = await updateTaskStatus(taskId, status, user.employeeId || user.id, user.role); currentDB.tasks = currentDB.tasks.map(x => x.id === taskId ? t : x); notify(); },
   async reviewTask(taskId: string, review: { hrRating: string; hrReview: string }) { const user = getCurrentUser(); if(!user) return; const t = await reviewTask(taskId, review, user.employeeId || user.id, user.role); currentDB.tasks = currentDB.tasks.map(x => x.id === taskId ? t : x); notify(); },
   
-  async addLeave(leave: any) { const l = await addLeave(leave); currentDB.leaves = [l, ...currentDB.leaves]; notify(); },
-  async updateLeave(id: string, patch: any) { const l = await updateLeave(id, patch); currentDB.leaves = currentDB.leaves.map(x => x.id === id ? l : x); notify(); },
+  async addLeave(leave: any) { const user = getCurrentUser(); if(!user) return; const l = await addLeave(leave, user.employeeId || user.id); currentDB.leaves = [l, ...currentDB.leaves]; notify(); return l; },
+  async cancelLeave(leaveId: string) { const user = getCurrentUser(); if(!user) return; const l = await cancelLeave(leaveId, user.employeeId || user.id); currentDB.leaves = currentDB.leaves.map(x => x.id === leaveId ? l : x); notify(); },
+  async hrReviewLeave(leaveId: string, action: "approve" | "reject", comment: string) { const user = getCurrentUser(); if(!user) return; const l = await hrReviewLeave(leaveId, action, comment, user.employeeId || user.id, user.role); currentDB.leaves = currentDB.leaves.map(x => x.id === leaveId ? l : x); notify(); },
+  async adminReviewLeave(leaveId: string, action: "approve" | "reject", comment: string) { const user = getCurrentUser(); if(!user) return; const l = await adminReviewLeave(leaveId, action, comment, user.employeeId || user.id, user.role); currentDB.leaves = currentDB.leaves.map(x => x.id === leaveId ? l : x); notify(); },
 };
 
 // Auth
