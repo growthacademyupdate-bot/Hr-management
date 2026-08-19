@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useAuth, logout, ROLE_MENUS } from "@/lib/store";
+import { useAuth, logout, ROLE_MENUS, useGlobalSearch, api } from "@/lib/store";
 import {
   LayoutDashboard, Users, CalendarCheck, ListTodo, CalendarOff, BarChart3, Settings, Activity, User as UserIcon,
   Bell, LogOut, Menu, Search, Sun,
@@ -25,6 +25,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const globalSearch = useGlobalSearch();
 
   useEffect(() => {
     if (user === null) router.push("/login");
@@ -64,7 +65,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
           })}
         </nav>
         <div className="p-3 border-t border-sidebar-border">
-          <div className="flex items-center gap-3 px-2 py-2 rounded-lg">
+          <div className="flex items-center gap-2 px-2 py-2 rounded-lg">
             <Avatar className="h-8 w-8">
               <AvatarImage src={user.avatar} />
               <AvatarFallback>{user.name[0]}</AvatarFallback>
@@ -73,6 +74,15 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
               <div className="text-sm font-medium truncate">{user.name}</div>
               <div className="text-xs text-sidebar-foreground/60 truncate">{user.email}</div>
             </div>
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              onClick={() => { logout(); router.push("/"); }} 
+              title="Log out" 
+              className="text-sidebar-foreground/60 hover:text-destructive hover:bg-destructive/10 shrink-0"
+            >
+              <LogOut className="h-4 w-4" />
+            </Button>
           </div>
         </div>
       </aside>
@@ -89,7 +99,12 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
           </Button>
           <div className="relative hidden md:block flex-1 max-w-md">
             <Search className="h-4 w-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-            <Input placeholder="Search employees, tasks…" className="pl-9 bg-muted/40 border-0" />
+            <Input 
+              placeholder="Search employees, tasks…" 
+              className="pl-9 bg-muted/40 border-0" 
+              value={globalSearch}
+              onChange={(e) => api.setGlobalSearch(e.target.value)}
+            />
           </div>
           <div className="flex-1 md:hidden" />
 
@@ -135,7 +150,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
               <DropdownMenuItem onClick={() => router.push("/profile")}><UserIcon className="h-4 w-4 mr-2" />Profile</DropdownMenuItem>
               <DropdownMenuItem><Settings className="h-4 w-4 mr-2" />Settings</DropdownMenuItem>
               <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={() => { logout(); router.push("/login"); }} className="text-destructive">
+              <DropdownMenuItem onClick={() => { logout(); router.push("/"); }} className="text-destructive focus:bg-destructive/10 focus:text-destructive cursor-pointer">
                 <LogOut className="h-4 w-4 mr-2" />Log out
               </DropdownMenuItem>
             </DropdownMenuContent>

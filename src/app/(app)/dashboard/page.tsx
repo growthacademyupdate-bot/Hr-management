@@ -22,8 +22,9 @@ export default function Dashboard() {
   const present = todayAtt.filter((a) => a.status === "Present").length;
   const absent = db.employees.length - todayAtt.length + todayAtt.filter((a) => a.status === "Absent").length;
   const active = db.employees.filter((e) => e.status === "Active").length;
-  const completed = db.tasks.filter((t) => t.status === "Completed" && employeeIds.has(t.assignedTo)).length;
-  const pending = db.tasks.filter((t) => t.status === "Pending" && employeeIds.has(t.assignedTo)).length;
+  const completed = db.tasks.filter((t) => (t.status === "completed" || t.status === "reviewed") && employeeIds.has(t.assignedTo)).length;
+  const pending = db.tasks.filter((t) => (t.status === "assigned" || t.status === "working_progress") && employeeIds.has(t.assignedTo)).length;
+  const overdueTasks = db.tasks.filter(t => new Date() > new Date(t.dueDate) && !["completed", "reviewed"].includes(t.status)).length;
   const productivity = todayAtt.length ? Math.round(todayAtt.reduce((s, a) => s + a.productivity, 0) / todayAtt.length) : 0;
 
   if (user.role === "employee") return <EmployeeDashboard />;
@@ -34,9 +35,9 @@ export default function Dashboard() {
     { name: "Leave", value: todayAtt.filter((a) => a.status === "Leave").length, color: "var(--color-warning)" },
   ];
   const taskPie = [
-    { name: "Completed", value: completed, color: "var(--color-success)" },
-    { name: "In Progress", value: db.tasks.filter((t) => t.status === "In Progress").length, color: "var(--color-info)" },
-    { name: "Pending", value: pending, color: "var(--color-warning)" },
+    { name: "Completed/Reviewed", value: completed, color: "var(--color-success)" },
+    { name: "Working Progress", value: db.tasks.filter((t) => t.status === "working_progress").length, color: "var(--color-info)" },
+    { name: "Assigned", value: db.tasks.filter((t) => t.status === "assigned").length, color: "var(--color-warning)" },
   ];
 
   // Weekly attendance
@@ -73,8 +74,12 @@ export default function Dashboard() {
         <StatCard label="Active Now" value={active} icon={Activity} tone="info" />
         <StatCard label="Total Tasks" value={db.tasks.length} icon={ListChecks} tone="primary" />
         <StatCard label="Completed" value={completed} icon={CheckCircle2} tone="success" />
-        <StatCard label="Pending" value={pending} icon={Clock} tone="warning" />
-        <StatCard label="Productivity" value={`${productivity}%`} icon={TrendingUp} tone="success" trend="↑ 4% vs last week" />
+        {user.role === "admin" ? (
+          <StatCard label="Pending" value={pending} icon={Clock} tone="warning" />
+        ) : (
+          <StatCard label="To Review" value={db.tasks.filter((t) => t.status === "completed").length} icon={Clock} tone="warning" />
+        )}
+        <StatCard label="Overdue Tasks" value={overdueTasks} icon={TrendingUp} tone="destructive" />
       </div>
 
       <div className="grid lg:grid-cols-3 gap-4">
@@ -211,14 +216,14 @@ export function StatusBadge({ status }: { status: string }) {
     Active: "bg-success/15 text-success border-success/20",
     Inactive: "bg-muted text-muted-foreground border-border",
     "On Leave": "bg-warning/15 text-warning border-warning/20",
-    Pending: "bg-warning/15 text-warning border-warning/20",
-    "In Progress": "bg-info/15 text-info border-info/20",
-    Completed: "bg-success/15 text-success border-success/20",
-    Approved: "bg-success/15 text-success border-success/20",
-    Rejected: "bg-destructive/15 text-destructive border-destructive/20",
-    High: "bg-destructive/15 text-destructive border-destructive/20",
-    Medium: "bg-warning/15 text-warning border-warning/20",
-    Low: "bg-info/15 text-info border-info/20",
+    "working_progress": "bg-info/15 text-info border-info/20",
+    completed: "bg-success/15 text-success border-success/20",
+    reviewed: "bg-success/15 text-success border-success/20",
+    assigned: "bg-warning/15 text-warning border-warning/20",
+    low: "bg-info/15 text-info border-info/20",
+    medium: "bg-warning/15 text-warning border-warning/20",
+    high: "bg-destructive/15 text-destructive border-destructive/20",
+    urgent: "bg-destructive/15 text-destructive border-destructive/20",
   };
   return <Badge variant="outline" className={map[status] || ""}>{status}</Badge>;
 }
@@ -232,7 +237,8 @@ function EmployeeDashboard() {
   const employeeIds = new Set(db.employees.map(e => e.id));
   const todayAtt = db.attendance.find((a) => a.employeeId === empId && a.date === today && employeeIds.has(a.employeeId));
   const myTasks = db.tasks.filter((t) => t.assignedTo === empId && employeeIds.has(t.assignedTo));
-  const completedTasks = myTasks.filter((t) => t.status === "Completed").length;
+  const completedTasks = myTasks.filter((t) => t.status === "completed" || t.status === "reviewed").length;
+  const overdueTasks = myTasks.filter(t => new Date() > new Date(t.dueDate) && !["completed", "reviewed"].includes(t.status)).length;
 
   const weekly = Array.from({ length: 7 }).map((_, i) => {
     const d = new Date(); d.setDate(d.getDate() - (6 - i));
@@ -252,10 +258,10 @@ function EmployeeDashboard() {
         <StatCard label="Working Hours" value={`${todayAtt?.workingHours || 0}h`} icon={Activity} tone="primary" />
         <StatCard label="Assigned Tasks" value={myTasks.length} icon={ListChecks} tone="primary" />
         <StatCard label="Completed" value={completedTasks} icon={CheckCircle2} tone="success" />
-        <StatCard label="Attendance" value={todayAtt?.status || "Not yet"} icon={UserCheck} tone="success" />
+        <StatCard label="Overdue Tasks" value={overdueTasks} icon={Clock} tone="destructive" />
         <StatCard label="Productivity" value={`${todayAtt?.productivity || 0}%`} icon={TrendingUp} tone="success" />
-        <StatCard label="Pending" value={myTasks.filter(t => t.status === "Pending").length} icon={Clock} tone="warning" />
-        <StatCard label="In Progress" value={myTasks.filter(t => t.status === "In Progress").length} icon={Activity} tone="info" />
+        <StatCard label="Pending" value={myTasks.filter(t => t.status === "assigned").length} icon={Clock} tone="warning" />
+        <StatCard label="In Progress" value={myTasks.filter(t => t.status === "working_progress").length} icon={Activity} tone="info" />
       </div>
 
       <div className="grid lg:grid-cols-2 gap-4">

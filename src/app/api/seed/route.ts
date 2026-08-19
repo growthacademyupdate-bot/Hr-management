@@ -51,7 +51,7 @@ export async function GET() {
         title: `Task ${i}`,
         description: "Complete this task soon.",
         assignedTo: rand(emps).id,
-        priority: "Medium",
+        priority: "medium",
         dueDate: "2026-12-31",
         status: rand(["Pending", "In Progress", "Completed"]),
         progress: 50,

@@ -5,11 +5,19 @@ const TaskSchema = new mongoose.Schema({
   title: { type: String, required: true },
   description: { type: String, required: true },
   assignedTo: { type: String, required: true }, // employee id
-  priority: { type: String, enum: ["High", "Medium", "Low"], default: "Medium" },
+  assignedBy: { type: String, required: true }, // admin id
+  priority: { type: String, enum: ["low", "medium", "high", "urgent"], default: "medium" },
+  status: { type: String, enum: ["assigned", "working_progress", "completed", "reviewed"], default: "assigned" },
+  assignDate: { type: String, required: true },
   dueDate: { type: String, required: true },
-  status: { type: String, enum: ["Pending", "In Progress", "Completed"], default: "Pending" },
+  startedAt: { type: String, default: null },
+  completedAt: { type: String, default: null },
+  reviewedAt: { type: String, default: null },
+  hrRating: { type: String, enum: ["very good", "good", "average", "poor"], default: null },
+  hrReview: { type: String, default: null },
+  reviewedBy: { type: String, default: null }, // hr id
+  // keeping progress and comments for backwards compatibility or if they want to use them later
   progress: { type: Number, default: 0 },
-  createdAt: { type: String, required: true },
   comments: [{ 
     author: String, 
     text: String, 
@@ -17,4 +25,7 @@ const TaskSchema = new mongoose.Schema({
   }],
 }, { timestamps: true });
 
-export const Task = mongoose.models.Task || mongoose.model("Task", TaskSchema);
+if (mongoose.models.Task) {
+  delete mongoose.models.Task;
+}
+export const Task = mongoose.model("Task", TaskSchema);
