@@ -47,6 +47,23 @@
     from { opacity: 0; transform: translateY(10px) scale(0.98); }
     to { opacity: 1; transform: translateY(0) scale(1); }
   }
+
+  @keyframes hr-pulse {
+    0%, 100% { opacity: 0.45; transform: scale(0.85); }
+    50% { opacity: 1; transform: scale(1.2); }
+  }
+
+  @keyframes hr-bar {
+    0%, 100% { transform: scaleY(0.72); opacity: 0.55; }
+    50% { transform: scaleY(1); opacity: 1; }
+  }
+}
+
+.hr-pulse { animation: hr-pulse 1.8s ease-in-out infinite; }
+.hr-bar { transform-origin: bottom; animation: hr-bar 2.4s ease-in-out infinite; }
+
+@media (prefers-reduced-motion: reduce) {
+  .hr-pulse, .hr-bar { animation: none; }
 }
 
 :root {
