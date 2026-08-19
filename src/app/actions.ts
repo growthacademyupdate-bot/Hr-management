@@ -13,61 +13,66 @@ function serialize(doc: any) {
 }
 
 export async function loginAction(usernameOrId: string, password: string) {
-  await connectDB();
-  
-  // Check against env admin credentials
-  if (usernameOrId === process.env.ADMIN_USERNAME && password === process.env.ADMIN_PASSWORD) {
-    return {
-      success: true,
-      user: {
-        id: "u_admin",
-        username: process.env.ADMIN_USERNAME,
-        password: process.env.ADMIN_PASSWORD,
-        role: "admin",
-        name: "Admin User",
-        email: process.env.ADMIN_USERNAME,
-        avatar: "https://i.pravatar.cc/120?u=admin",
-      }
-    };
-  }
+  try {
+    await connectDB();
+    
+    // Check against env admin credentials
+    if (usernameOrId === process.env.ADMIN_USERNAME && password === process.env.ADMIN_PASSWORD) {
+      return {
+        success: true,
+        user: {
+          id: "u_admin",
+          username: process.env.ADMIN_USERNAME,
+          password: process.env.ADMIN_PASSWORD,
+          role: "admin",
+          name: "Admin User",
+          email: process.env.ADMIN_USERNAME,
+          avatar: "https://i.pravatar.cc/120?u=admin",
+        }
+      };
+    }
 
-  // Check against env HR credentials
-  if (usernameOrId === process.env.HR_USERNAME && password === process.env.HR_PASSWORD) {
-    return {
-      success: true,
-      user: {
-        id: "u_hr",
-        username: process.env.HR_USERNAME,
-        password: process.env.HR_PASSWORD,
-        role: "hr",
-        name: "HR Manager",
-        email: process.env.HR_USERNAME,
-        avatar: "https://i.pravatar.cc/120?u=hr",
-      }
-    };
-  }
+    // Check against env HR credentials
+    if (usernameOrId === process.env.HR_USERNAME && password === process.env.HR_PASSWORD) {
+      return {
+        success: true,
+        user: {
+          id: "u_hr",
+          username: process.env.HR_USERNAME,
+          password: process.env.HR_PASSWORD,
+          role: "hr",
+          name: "HR Manager",
+          email: process.env.HR_USERNAME,
+          avatar: "https://i.pravatar.cc/120?u=hr",
+        }
+      };
+    }
 
-  // Check employees
-  const emp = await Employee.findOne({ email: new RegExp(`^${usernameOrId}$`, "i"), password });
-  if (emp) {
-    // Log login activity
-    await logLoginActivity(emp.id);
-    return {
-      success: true,
-      user: {
-        id: `u_${emp.id}`,
-        username: emp.email,
-        password: emp.password,
-        role: "employee",
-        employeeId: emp.id,
-        name: emp.name,
-        email: emp.email,
-        avatar: emp.avatar,
-      }
-    };
-  }
+    // Check employees
+    const emp = await Employee.findOne({ email: new RegExp(`^${usernameOrId}$`, "i"), password });
+    if (emp) {
+      // Log login activity
+      await logLoginActivity(emp.id);
+      return {
+        success: true,
+        user: {
+          id: `u_${emp.id}`,
+          username: emp.email,
+          password: emp.password,
+          role: "employee",
+          employeeId: emp.id,
+          name: emp.name,
+          email: emp.email,
+          avatar: emp.avatar,
+        }
+      };
+    }
 
-  return { success: false, error: "Invalid credentials" };
+    return { success: false, error: "Invalid credentials" };
+  } catch (error: any) {
+    console.error("Login Action Error:", error);
+    return { success: false, error: "Database connection or server error. If using MongoDB Atlas, please ensure your IP address is whitelisted." };
+  }
 }
 
 // ---------------- Employees ----------------
@@ -107,14 +112,21 @@ export async function deleteEmployee(id: string) {
 }
 
 // ---------------- Tasks ----------------
-export async function getTasks() {
+export async function getTasks(userRole?: string, userId?: string) {
   await connectDB();
+  if (userRole === "employee" && userId) {
+    const tasks = await Task.find({ assignedTo: userId }).sort({ createdAt: -1 }).lean();
+    return serialize(tasks);
+  }
+  // Admin and HR can see all tasks
   const tasks = await Task.find({}).sort({ createdAt: -1 }).lean();
   return serialize(tasks);
 }
 
-export async function addTask(data: any) {
+export async function addTask(data: any, userRole: string, userId: string) {
   await connectDB();
+  if (userRole !== "admin") throw new Error("Only Admin can create tasks");
+
   const all = await Task.find({}, { id: 1 }).lean();
   let max = 0;
   for (const doc of all) {
@@ -125,20 +137,77 @@ export async function addTask(data: any) {
   const task = await Task.create({
     ...data,
     id,
-    createdAt: new Date().toISOString(),
+    assignedBy: userId,
+    status: "assigned",
+    assignDate: data.assignDate || new Date().toISOString().slice(0, 10),
     comments: []
   });
   return serialize(task);
 }
 
-export async function updateTask(id: string, data: any) {
+export async function updateTask(id: string, data: any, userId: string, userRole: string) {
   await connectDB();
+  if (userRole !== "admin" && userRole !== "hr") {
+    throw new Error("Only Admin and HR can edit tasks");
+  }
   const task = await Task.findOneAndUpdate({ id }, data, { new: true }).lean();
   return serialize(task);
 }
 
-export async function deleteTask(id: string) {
+export async function updateTaskStatus(taskId: string, status: string, userId: string, userRole: string) {
   await connectDB();
+  const task = await Task.findOne({ id: taskId });
+  if (!task) throw new Error("Task not found");
+  
+  if (userRole === "employee" && task.assignedTo !== userId) {
+    throw new Error("Unauthorized: You can only update your own tasks");
+  }
+
+  if (status === task.status) {
+    return serialize(task);
+  }
+
+  if (status === "working_progress" && task.status === "assigned") {
+    task.status = "working_progress";
+    task.startedAt = new Date().toISOString();
+  } else if (status === "completed" && task.status === "working_progress") {
+    task.status = "completed";
+    task.completedAt = new Date().toISOString();
+  } else {
+    throw new Error(`Invalid status transition from '${task.status}' to '${status}' (Types: ${typeof task.status}, ${typeof status})`);
+  }
+
+  await task.save();
+  return serialize(task);
+}
+
+export async function reviewTask(taskId: string, review: { hrRating: "very good" | "good" | "average" | "poor" | string; hrReview: string }, userId: string, userRole: string) {
+  await connectDB();
+  if (userRole !== "hr" && userRole !== "admin") throw new Error("Unauthorized");
+
+  const task = await Task.findOne({ id: taskId });
+  if (!task) throw new Error("Task not found");
+  if (task.status !== "completed") throw new Error("Can only review completed tasks");
+
+  task.hrRating = review.hrRating as any;
+  task.hrReview = review.hrReview;
+  task.reviewedBy = userId;
+  task.reviewedAt = new Date().toISOString();
+  task.status = "reviewed";
+
+  await task.save();
+  return serialize(task);
+}
+
+export async function deleteTask(id: string, userId: string, userRole: string) {
+  await connectDB();
+  const task = await Task.findOne({ id });
+  if (!task) throw new Error("Task not found");
+
+  if (userRole === "employee" && task.assignedTo !== userId) {
+    throw new Error("Unauthorized to delete this task");
+  }
+
   await Task.findOneAndDelete({ id });
   return { success: true };
 }

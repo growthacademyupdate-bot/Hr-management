@@ -2,7 +2,7 @@ import { useEffect, useState, useSyncExternalStore } from "react";
 import { toast } from "sonner";
 import { 
   getEmployees, addEmployee, updateEmployee, deleteEmployee,
-  getTasks, addTask, updateTask, deleteTask, addComment,
+  getTasks, addTask, updateTask, deleteTask, addComment, updateTaskStatus, reviewTask,
   getLeaves, addLeave, updateLeave,
   getAttendance, getActivities, logLogoutActivity
 } from "@/app/actions";
@@ -18,7 +18,7 @@ export interface AttendanceRecord {
   id: string; employeeId: string; date: string; loginTime: string | null; logoutTime: string | null; workingHours: number; status: string; productivity: number;
 }
 export interface Task {
-  id: string; title: string; description: string; assignedTo: string; priority: string; dueDate: string; status: string; progress: number; createdAt: string; comments: { author: string; text: string; time: string }[];
+  id: string; title: string; description: string; assignedTo: string; assignedBy: string; priority: "low" | "medium" | "high" | "urgent"; status: "assigned" | "working_progress" | "completed" | "reviewed"; assignDate: string; dueDate: string; startedAt: string | null; completedAt: string | null; reviewedAt: string | null; hrRating: string | null; hrReview: string | null; reviewedBy: string | null; createdAt: string; updatedAt: string;
 }
 export interface Leave {
   id: string; employeeId: string; type: string; startDate: string; endDate: string; reason: string; status: string; appliedAt: string;
@@ -33,6 +33,7 @@ interface DB {
 
 const AUTH_KEY = "ems_auth_v1";
 let currentDB: DB = { employees: [], attendance: [], tasks: [], leaves: [], activities: [] };
+let globalSearch = "";
 const listeners = new Set<() => void>();
 
 function notify() { listeners.forEach((l) => l()); }
@@ -45,8 +46,9 @@ export function useDB() {
   );
 
   useEffect(() => {
+    const user = getCurrentUser();
     // Fetch real data on mount
-    Promise.all([getEmployees(), getAttendance(), getTasks(), getLeaves(), getActivities()])
+    Promise.all([getEmployees(), getAttendance(), getTasks(user?.role, user?.employeeId || user?.id), getLeaves(), getActivities()])
       .then(([emps, atts, ts, lvs, acts]) => {
         currentDB = { employees: emps, attendance: atts, tasks: ts, leaves: lvs, activities: acts };
         notify();
@@ -57,16 +59,27 @@ export function useDB() {
   return snap;
 }
 
+export function useGlobalSearch() {
+  const snap = useSyncExternalStore(
+    (cb) => { listeners.add(cb); return () => listeners.delete(cb); },
+    () => globalSearch,
+    () => globalSearch
+  );
+  return snap;
+}
+
 export const api = {
   resetDB() { /* No-op for real DB */ },
+  setGlobalSearch(q: string) { globalSearch = q; notify(); },
   async addEmployee(emp: any) { const e = await addEmployee(emp); currentDB.employees = [e, ...currentDB.employees]; notify(); return e; },
   async updateEmployee(id: string, patch: any) { const e = await updateEmployee(id, patch); currentDB.employees = currentDB.employees.map(x => x.id === id ? e : x); notify(); },
   async deleteEmployee(id: string) { await deleteEmployee(id); currentDB.employees = currentDB.employees.filter(x => x.id !== id); notify(); },
   
-  async addTask(task: any) { const t = await addTask(task); currentDB.tasks = [t, ...currentDB.tasks]; notify(); },
-  async updateTask(id: string, patch: any) { const t = await updateTask(id, patch); currentDB.tasks = currentDB.tasks.map(x => x.id === id ? t : x); notify(); },
-  async deleteTask(id: string) { await deleteTask(id); currentDB.tasks = currentDB.tasks.filter(x => x.id !== id); notify(); },
-  async addComment(taskId: string, comment: any) { const t = await addComment(taskId, comment); currentDB.tasks = currentDB.tasks.map(x => x.id === taskId ? t : x); notify(); },
+  async addTask(task: any) { const user = getCurrentUser(); if(!user) return; const t = await addTask(task, user.role, user.employeeId || user.id); currentDB.tasks = [t, ...currentDB.tasks]; notify(); return t; },
+  async updateTask(id: string, patch: any) { const user = getCurrentUser(); if(!user) return; const t = await updateTask(id, patch, user.employeeId || user.id, user.role); currentDB.tasks = currentDB.tasks.map(x => x.id === id ? t : x); notify(); },
+  async deleteTask(id: string) { const user = getCurrentUser(); if(!user) return; await deleteTask(id, user.employeeId || user.id, user.role); currentDB.tasks = currentDB.tasks.filter(x => x.id !== id); notify(); },
+  async updateTaskStatus(taskId: string, status: string) { const user = getCurrentUser(); if(!user) return; const t = await updateTaskStatus(taskId, status, user.employeeId || user.id, user.role); currentDB.tasks = currentDB.tasks.map(x => x.id === taskId ? t : x); notify(); },
+  async reviewTask(taskId: string, review: { hrRating: string; hrReview: string }) { const user = getCurrentUser(); if(!user) return; const t = await reviewTask(taskId, review, user.employeeId || user.id, user.role); currentDB.tasks = currentDB.tasks.map(x => x.id === taskId ? t : x); notify(); },
   
   async addLeave(leave: any) { const l = await addLeave(leave); currentDB.leaves = [l, ...currentDB.leaves]; notify(); },
   async updateLeave(id: string, patch: any) { const l = await updateLeave(id, patch); currentDB.leaves = currentDB.leaves.map(x => x.id === id ? l : x); notify(); },
