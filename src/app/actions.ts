@@ -223,33 +223,108 @@ export async function addComment(taskId: string, comment: { author: string; text
 }
 
 // ---------------- Leaves ----------------
-export async function getLeaves() {
+export async function getLeaves(userRole?: string, userId?: string) {
   await connectDB();
+  if (userRole === "employee" && userId) {
+    const leaves = await Leave.find({ employeeId: userId }).sort({ createdAt: -1 }).lean();
+    return serialize(leaves);
+  }
   const leaves = await Leave.find({}).sort({ createdAt: -1 }).lean();
   return serialize(leaves);
 }
 
-export async function addLeave(data: any) {
+export async function addLeave(data: any, userId: string) {
   await connectDB();
+  
+  // Overlap validation
+  const existingLeaves = await Leave.find({ 
+    employeeId: userId,
+    status: { $in: ["pending", "hr_approved", "admin_approved"] }
+  }).lean();
+  
+  const newStart = new Date(data.startDate).getTime();
+  const newEnd = new Date(data.endDate).getTime();
+  
+  for (const l of existingLeaves) {
+    const exStart = new Date((l as any).startDate).getTime();
+    const exEnd = new Date((l as any).endDate).getTime();
+    if (newStart <= exEnd && newEnd >= exStart) {
+      throw new Error("You already have an overlapping leave request during this period.");
+    }
+  }
+
   const all = await Leave.find({}, { id: 1 }).lean();
   let max = 0;
   for (const doc of all) {
     const num = parseInt((doc as any).id.replace("LV", ""), 10);
     if (!isNaN(num) && num > max) max = num;
   }
+  
   const id = `LV${String(max + 1).padStart(3, "0")}`;
+  
+  // Calculate days (inclusive)
+  const days = Math.round((newEnd - newStart) / (1000 * 60 * 60 * 24)) + 1;
+  
   const leave = await Leave.create({
     ...data,
     id,
+    employeeId: userId,
+    numberOfDays: days,
     appliedAt: new Date().toISOString(),
-    status: "Pending"
+    status: "pending"
   });
   return serialize(leave);
 }
 
-export async function updateLeave(id: string, data: any) {
+export async function cancelLeave(leaveId: string, userId: string) {
   await connectDB();
-  const leave = await Leave.findOneAndUpdate({ id }, data, { new: true }).lean();
+  const leave = await Leave.findOne({ id: leaveId });
+  if (!leave) throw new Error("Leave not found");
+  if (leave.employeeId !== userId) throw new Error("Unauthorized");
+  if (leave.status !== "pending") throw new Error("Can only cancel pending leaves");
+  
+  leave.status = "cancelled";
+  leave.cancelledBy = userId;
+  leave.cancelledAt = new Date().toISOString();
+  await leave.save();
+  return serialize(leave);
+}
+
+export async function hrReviewLeave(leaveId: string, action: "approve" | "reject", comment: string, hrId: string, userRole: string) {
+  await connectDB();
+  if (userRole !== "hr" && userRole !== "admin") throw new Error("Unauthorized");
+  
+  const leave = await Leave.findOne({ id: leaveId });
+  if (!leave) throw new Error("Leave not found");
+  if (leave.status !== "pending") throw new Error("Leave is not pending HR review");
+  
+  if (action === "reject" && !comment) throw new Error("Rejection comment is required");
+  
+  leave.status = action === "approve" ? "hr_approved" : "hr_rejected";
+  leave.hrReviewedBy = hrId;
+  leave.hrReviewedAt = new Date().toISOString();
+  leave.hrReviewComment = comment || null;
+  
+  await leave.save();
+  return serialize(leave);
+}
+
+export async function adminReviewLeave(leaveId: string, action: "approve" | "reject", comment: string, adminId: string, userRole: string) {
+  await connectDB();
+  if (userRole !== "admin") throw new Error("Unauthorized");
+  
+  const leave = await Leave.findOne({ id: leaveId });
+  if (!leave) throw new Error("Leave not found");
+  if (leave.status !== "hr_approved") throw new Error("Leave must be HR approved first");
+  
+  if (action === "reject" && !comment) throw new Error("Rejection comment is required");
+  
+  leave.status = action === "approve" ? "admin_approved" : "admin_rejected";
+  leave.adminReviewedBy = adminId;
+  leave.adminReviewedAt = new Date().toISOString();
+  leave.adminReviewComment = comment || null;
+  
+  await leave.save();
   return serialize(leave);
 }
 
