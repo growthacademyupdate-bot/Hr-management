@@ -30,6 +30,7 @@ export interface Leave {
 }
 export interface Activity {
   id: string; employeeId: string; time: string; label: string; type: string;
+  actorId?: string; actorRole?: string; module?: string; referenceId?: string; metadata?: any;
 }
 
 interface DB {
