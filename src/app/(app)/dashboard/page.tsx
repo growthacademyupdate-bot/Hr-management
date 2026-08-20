@@ -185,9 +185,9 @@ export default function Dashboard() {
                         </div>
                       </TableCell>
                       <TableCell className="text-muted-foreground">{emp.department}</TableCell>
-                      <TableCell>{att?.loginTime || "—"}</TableCell>
-                      <TableCell>{att?.logoutTime || "—"}</TableCell>
-                      <TableCell>{att?.workingHours || 0}h</TableCell>
+                      <TableCell>{att?.firstLoginAt ? new Date(att.firstLoginAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : att?.loginTime || "—"}</TableCell>
+                      <TableCell>{att?.lastLogoutAt ? new Date(att.lastLogoutAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : att?.logoutTime || "—"}</TableCell>
+                      <TableCell>{att?.totalWorkingSeconds ? formatDuration(att.totalWorkingSeconds) : `${att?.workingHours || 0}h`}</TableCell>
                       <TableCell><StatusBadge status={att?.status || "Absent"} /></TableCell>
                       <TableCell>
                         <div className="flex items-center gap-3">
@@ -213,6 +213,9 @@ export function StatusBadge({ status }: { status: string }) {
     Absent: "bg-destructive/15 text-destructive border-destructive/20",
     Leave: "bg-warning/15 text-warning border-warning/20",
     "Half Day": "bg-info/15 text-info border-info/20",
+    "Short Day": "bg-warning/15 text-warning border-warning/20",
+    Incomplete: "bg-muted text-muted-foreground border-border",
+    Pending: "bg-muted text-muted-foreground border-border",
     Active: "bg-success/15 text-success border-success/20",
     Inactive: "bg-muted text-muted-foreground border-border",
     "On Leave": "bg-warning/15 text-warning border-warning/20",
@@ -226,6 +229,13 @@ export function StatusBadge({ status }: { status: string }) {
     urgent: "bg-destructive/15 text-destructive border-destructive/20",
   };
   return <Badge variant="outline" className={map[status] || ""}>{status}</Badge>;
+}
+
+function formatDuration(seconds?: number) {
+  if (!seconds) return "0h 0m";
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  return `${h}h ${m}m`;
 }
 
 function EmployeeDashboard() {
@@ -254,8 +264,8 @@ function EmployeeDashboard() {
       <PageHeader title={`Hi ${user.name.split(" ")[0]} 👋`} description="Here's your work summary for today." />
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard label="Today's Login" value={todayAtt?.loginTime || "—"} icon={Clock} tone="info" />
-        <StatCard label="Working Hours" value={`${todayAtt?.workingHours || 0}h`} icon={Activity} tone="primary" />
+        <StatCard label="Today's Login" value={todayAtt?.firstLoginAt ? new Date(todayAtt.firstLoginAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : todayAtt?.loginTime || "—"} icon={Clock} tone="info" />
+        <StatCard label="Working Hours" value={todayAtt?.totalWorkingSeconds ? formatDuration(todayAtt.totalWorkingSeconds) : `${todayAtt?.workingHours || 0}h`} icon={Activity} tone="primary" />
         <StatCard label="Assigned Tasks" value={myTasks.length} icon={ListChecks} tone="primary" />
         <StatCard label="Completed" value={completedTasks} icon={CheckCircle2} tone="success" />
         <StatCard label="Leave Requests" value={db.leaves.filter(l => l.employeeId === empId).length} icon={Clock} tone="info" trend={`${db.leaves.filter(l => l.employeeId === empId && l.status === "admin_approved").length} approved`} />
