@@ -196,6 +196,15 @@ export async function reviewTask(taskId: string, review: { hrRating: "very good"
   task.status = "reviewed";
 
   await task.save();
+
+  await Activity.create({
+    id: `ACT${Date.now()}`,
+    employeeId: userId,
+    time: new Date().toISOString(),
+    label: `HR reviewed task ${task.id} with rating ${review.hrRating}`,
+    type: "task_review"
+  });
+
   return serialize(task);
 }
 
@@ -306,6 +315,15 @@ export async function hrReviewLeave(leaveId: string, action: "approve" | "reject
   leave.hrReviewComment = comment || null;
   
   await leave.save();
+
+  await Activity.create({
+    id: `ACT${Date.now()}`,
+    employeeId: hrId,
+    time: new Date().toISOString(),
+    label: `HR ${action === "approve" ? "Approved" : "Rejected"} leave ${leave.id}`,
+    type: "leave_review"
+  });
+
   return serialize(leave);
 }
 
