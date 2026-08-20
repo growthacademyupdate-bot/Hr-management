@@ -12,6 +12,30 @@ function serialize(doc: any) {
   return JSON.parse(JSON.stringify(doc));
 }
 
+export async function createActivity(data: {
+  employeeId: string;
+  actorId?: string;
+  actorRole?: string;
+  activityType: string;
+  module: string;
+  referenceId?: string;
+  message: string;
+  metadata?: any;
+}) {
+  await Activity.create({
+    id: `ACT${Date.now()}${Math.floor(Math.random() * 1000)}`,
+    employeeId: data.employeeId,
+    actorId: data.actorId,
+    actorRole: data.actorRole,
+    type: data.activityType,
+    module: data.module,
+    referenceId: data.referenceId,
+    label: data.message,
+    metadata: data.metadata,
+    time: new Date().toISOString()
+  });
+}
+
 export async function loginAction(usernameOrId: string, password: string) {
   try {
     await connectDB();
@@ -20,15 +44,7 @@ export async function loginAction(usernameOrId: string, password: string) {
     if (usernameOrId === process.env.ADMIN_USERNAME && password === process.env.ADMIN_PASSWORD) {
       return {
         success: true,
-        user: {
-          id: "u_admin",
-          username: process.env.ADMIN_USERNAME,
-          password: process.env.ADMIN_PASSWORD,
-          role: "admin",
-          name: "Admin User",
-          email: process.env.ADMIN_USERNAME,
-          avatar: "https://i.pravatar.cc/120?u=admin",
-        }
+        user: { id: "u_admin", username: process.env.ADMIN_USERNAME, password: process.env.ADMIN_PASSWORD, role: "admin", name: "Admin User", email: process.env.ADMIN_USERNAME, avatar: "https://i.pravatar.cc/120?u=admin" }
       };
     }
 
@@ -36,42 +52,24 @@ export async function loginAction(usernameOrId: string, password: string) {
     if (usernameOrId === process.env.HR_USERNAME && password === process.env.HR_PASSWORD) {
       return {
         success: true,
-        user: {
-          id: "u_hr",
-          username: process.env.HR_USERNAME,
-          password: process.env.HR_PASSWORD,
-          role: "hr",
-          name: "HR Manager",
-          email: process.env.HR_USERNAME,
-          avatar: "https://i.pravatar.cc/120?u=hr",
-        }
+        user: { id: "u_hr", username: process.env.HR_USERNAME, password: process.env.HR_PASSWORD, role: "hr", name: "HR Manager", email: process.env.HR_USERNAME, avatar: "https://i.pravatar.cc/120?u=hr" }
       };
     }
 
     // Check employees
     const emp = await Employee.findOne({ email: new RegExp(`^${usernameOrId}$`, "i"), password });
     if (emp) {
-      // Log login activity
       await logLoginActivity(emp.id);
       return {
         success: true,
-        user: {
-          id: `u_${emp.id}`,
-          username: emp.email,
-          password: emp.password,
-          role: "employee",
-          employeeId: emp.id,
-          name: emp.name,
-          email: emp.email,
-          avatar: emp.avatar,
-        }
+        user: { id: `u_${emp.id}`, username: emp.email, password: emp.password, role: "employee", employeeId: emp.id, name: emp.name, email: emp.email, avatar: emp.avatar }
       };
     }
 
     return { success: false, error: "Invalid credentials" };
   } catch (error: any) {
     console.error("Login Action Error:", error);
-    return { success: false, error: "Database connection or server error. If using MongoDB Atlas, please ensure your IP address is whitelisted." };
+    return { success: false, error: "Database connection or server error." };
   }
 }
 
@@ -91,11 +89,7 @@ export async function addEmployee(data: any) {
     if (!isNaN(num) && num > max) max = num;
   }
   const id = `EMP${String(max + 1).padStart(3, "0")}`;
-  const emp = await Employee.create({
-    ...data,
-    id,
-    avatar: data.avatar || `https://i.pravatar.cc/120?u=${id}`
-  });
+  const emp = await Employee.create({ ...data, id, avatar: data.avatar || `https://i.pravatar.cc/120?u=${id}` });
   return serialize(emp);
 }
 
@@ -118,7 +112,6 @@ export async function getTasks(userRole?: string, userId?: string) {
     const tasks = await Task.find({ assignedTo: userId }).sort({ createdAt: -1 }).lean();
     return serialize(tasks);
   }
-  // Admin and HR can see all tasks
   const tasks = await Task.find({}).sort({ createdAt: -1 }).lean();
   return serialize(tasks);
 }
@@ -135,21 +128,21 @@ export async function addTask(data: any, userRole: string, userId: string) {
   }
   const id = `TASK${String(max + 1).padStart(3, "0")}`;
   const task = await Task.create({
-    ...data,
-    id,
-    assignedBy: userId,
-    status: "assigned",
-    assignDate: data.assignDate || new Date().toISOString().slice(0, 10),
-    comments: []
+    ...data, id, assignedBy: userId, status: "assigned", assignDate: data.assignDate || new Date().toISOString().slice(0, 10), comments: []
   });
+  
+  await createActivity({
+    employeeId: data.assignedTo, actorId: userId, actorRole: userRole,
+    activityType: "TASK_ASSIGNED", module: "TASK", referenceId: id,
+    message: `Admin assigned you a new task: ${data.title}`
+  });
+
   return serialize(task);
 }
 
 export async function updateTask(id: string, data: any, userId: string, userRole: string) {
   await connectDB();
-  if (userRole !== "admin" && userRole !== "hr") {
-    throw new Error("Only Admin and HR can edit tasks");
-  }
+  if (userRole !== "admin" && userRole !== "hr") throw new Error("Only Admin and HR can edit tasks");
   const task = await Task.findOneAndUpdate({ id }, data, { new: true }).lean();
   return serialize(task);
 }
@@ -159,32 +152,36 @@ export async function updateTaskStatus(taskId: string, status: string, userId: s
   const task = await Task.findOne({ id: taskId });
   if (!task) throw new Error("Task not found");
   
-  if (userRole === "employee" && task.assignedTo !== userId) {
-    throw new Error("Unauthorized: You can only update your own tasks");
-  }
-
-  if (status === task.status) {
-    return serialize(task);
-  }
+  if (userRole === "employee" && task.assignedTo !== userId) throw new Error("Unauthorized");
+  if (status === task.status) return serialize(task);
 
   if (status === "working_progress" && task.status === "assigned") {
     task.status = "working_progress";
     task.startedAt = new Date().toISOString();
+    await createActivity({
+      employeeId: task.assignedTo, actorId: userId, actorRole: userRole,
+      activityType: "TASK_STARTED", module: "TASK", referenceId: taskId,
+      message: `You started working on the task: ${task.title}`
+    });
   } else if (status === "completed" && task.status === "working_progress") {
     task.status = "completed";
     task.completedAt = new Date().toISOString();
+    await createActivity({
+      employeeId: task.assignedTo, actorId: userId, actorRole: userRole,
+      activityType: "TASK_COMPLETED", module: "TASK", referenceId: taskId,
+      message: `You completed the task: ${task.title}`
+    });
   } else {
-    throw new Error(`Invalid status transition from '${task.status}' to '${status}' (Types: ${typeof task.status}, ${typeof status})`);
+    throw new Error(`Invalid status transition`);
   }
 
   await task.save();
   return serialize(task);
 }
 
-export async function reviewTask(taskId: string, review: { hrRating: "very good" | "good" | "average" | "poor" | string; hrReview: string }, userId: string, userRole: string) {
+export async function reviewTask(taskId: string, review: { hrRating: string; hrReview: string }, userId: string, userRole: string) {
   await connectDB();
   if (userRole !== "hr" && userRole !== "admin") throw new Error("Unauthorized");
-
   const task = await Task.findOne({ id: taskId });
   if (!task) throw new Error("Task not found");
   if (task.status !== "completed") throw new Error("Can only review completed tasks");
@@ -194,15 +191,13 @@ export async function reviewTask(taskId: string, review: { hrRating: "very good"
   task.reviewedBy = userId;
   task.reviewedAt = new Date().toISOString();
   task.status = "reviewed";
-
   await task.save();
 
-  await Activity.create({
-    id: `ACT${Date.now()}`,
-    employeeId: userId,
-    time: new Date().toISOString(),
-    label: `HR reviewed task ${task.id} with rating ${review.hrRating}`,
-    type: "task_review"
+  await createActivity({
+    employeeId: task.assignedTo, actorId: userId, actorRole: userRole,
+    activityType: "TASK_REVIEWED", module: "TASK", referenceId: taskId,
+    message: `HR reviewed your completed task: ${task.title}`,
+    metadata: { rating: review.hrRating, feedback: review.hrReview }
   });
 
   return serialize(task);
@@ -212,11 +207,7 @@ export async function deleteTask(id: string, userId: string, userRole: string) {
   await connectDB();
   const task = await Task.findOne({ id });
   if (!task) throw new Error("Task not found");
-
-  if (userRole === "employee" && task.assignedTo !== userId) {
-    throw new Error("Unauthorized to delete this task");
-  }
-
+  if (userRole === "employee" && task.assignedTo !== userId) throw new Error("Unauthorized");
   await Task.findOneAndDelete({ id });
   return { success: true };
 }
@@ -224,9 +215,7 @@ export async function deleteTask(id: string, userId: string, userRole: string) {
 export async function addComment(taskId: string, comment: { author: string; text: string }) {
   await connectDB();
   const task = await Task.findOneAndUpdate(
-    { id: taskId },
-    { $push: { comments: { ...comment, time: new Date().toISOString() } } },
-    { new: true }
+    { id: taskId }, { $push: { comments: { ...comment, time: new Date().toISOString() } } }, { new: true }
   ).lean();
   return serialize(task);
 }
@@ -244,22 +233,14 @@ export async function getLeaves(userRole?: string, userId?: string) {
 
 export async function addLeave(data: any, userId: string) {
   await connectDB();
-  
-  // Overlap validation
-  const existingLeaves = await Leave.find({ 
-    employeeId: userId,
-    status: { $in: ["pending", "hr_approved", "admin_approved"] }
-  }).lean();
-  
+  const existingLeaves = await Leave.find({ employeeId: userId, status: { $in: ["pending", "hr_approved", "admin_approved"] } }).lean();
   const newStart = new Date(data.startDate).getTime();
   const newEnd = new Date(data.endDate).getTime();
   
   for (const l of existingLeaves) {
     const exStart = new Date((l as any).startDate).getTime();
     const exEnd = new Date((l as any).endDate).getTime();
-    if (newStart <= exEnd && newEnd >= exStart) {
-      throw new Error("You already have an overlapping leave request during this period.");
-    }
+    if (newStart <= exEnd && newEnd >= exStart) throw new Error("Overlapping leave request.");
   }
 
   const all = await Leave.find({}, { id: 1 }).lean();
@@ -268,20 +249,17 @@ export async function addLeave(data: any, userId: string) {
     const num = parseInt((doc as any).id.replace("LV", ""), 10);
     if (!isNaN(num) && num > max) max = num;
   }
-  
   const id = `LV${String(max + 1).padStart(3, "0")}`;
-  
-  // Calculate days (inclusive)
   const days = Math.round((newEnd - newStart) / (1000 * 60 * 60 * 24)) + 1;
   
-  const leave = await Leave.create({
-    ...data,
-    id,
-    employeeId: userId,
-    numberOfDays: days,
-    appliedAt: new Date().toISOString(),
-    status: "pending"
+  const leave = await Leave.create({ ...data, id, employeeId: userId, numberOfDays: days, appliedAt: new Date().toISOString(), status: "pending" });
+  
+  await createActivity({
+    employeeId: userId, actorId: userId, actorRole: "employee",
+    activityType: "LEAVE_APPLIED", module: "LEAVE", referenceId: id,
+    message: `Leave request submitted for ${days} day(s).`
   });
+
   return serialize(leave);
 }
 
@@ -296,32 +274,35 @@ export async function cancelLeave(leaveId: string, userId: string) {
   leave.cancelledBy = userId;
   leave.cancelledAt = new Date().toISOString();
   await leave.save();
+  
+  await createActivity({
+    employeeId: userId, actorId: userId, actorRole: "employee",
+    activityType: "LEAVE_CANCELLED", module: "LEAVE", referenceId: leaveId,
+    message: `You cancelled your leave request.`
+  });
+
   return serialize(leave);
 }
 
 export async function hrReviewLeave(leaveId: string, action: "approve" | "reject", comment: string, hrId: string, userRole: string) {
   await connectDB();
   if (userRole !== "hr" && userRole !== "admin") throw new Error("Unauthorized");
-  
   const leave = await Leave.findOne({ id: leaveId });
   if (!leave) throw new Error("Leave not found");
   if (leave.status !== "pending") throw new Error("Leave is not pending HR review");
-  
   if (action === "reject" && !comment) throw new Error("Rejection comment is required");
   
   leave.status = action === "approve" ? "hr_approved" : "hr_rejected";
   leave.hrReviewedBy = hrId;
   leave.hrReviewedAt = new Date().toISOString();
   leave.hrReviewComment = comment || null;
-  
   await leave.save();
 
-  await Activity.create({
-    id: `ACT${Date.now()}`,
-    employeeId: hrId,
-    time: new Date().toISOString(),
-    label: `HR ${action === "approve" ? "Approved" : "Rejected"} leave ${leave.id}`,
-    type: "leave_review"
+  await createActivity({
+    employeeId: leave.employeeId, actorId: hrId, actorRole: userRole,
+    activityType: action === "approve" ? "LEAVE_HR_APPROVED" : "LEAVE_HR_REJECTED", module: "LEAVE", referenceId: leaveId,
+    message: `Your leave request has been ${action === "approve" ? "approved" : "rejected"} by HR.`,
+    metadata: { reason: comment }
   });
 
   return serialize(leave);
@@ -330,19 +311,24 @@ export async function hrReviewLeave(leaveId: string, action: "approve" | "reject
 export async function adminReviewLeave(leaveId: string, action: "approve" | "reject", comment: string, adminId: string, userRole: string) {
   await connectDB();
   if (userRole !== "admin") throw new Error("Unauthorized");
-  
   const leave = await Leave.findOne({ id: leaveId });
   if (!leave) throw new Error("Leave not found");
   if (leave.status !== "hr_approved") throw new Error("Leave must be HR approved first");
-  
   if (action === "reject" && !comment) throw new Error("Rejection comment is required");
   
   leave.status = action === "approve" ? "admin_approved" : "admin_rejected";
   leave.adminReviewedBy = adminId;
   leave.adminReviewedAt = new Date().toISOString();
   leave.adminReviewComment = comment || null;
-  
   await leave.save();
+
+  await createActivity({
+    employeeId: leave.employeeId, actorId: adminId, actorRole: userRole,
+    activityType: action === "approve" ? "LEAVE_ADMIN_APPROVED" : "LEAVE_ADMIN_REJECTED", module: "LEAVE", referenceId: leaveId,
+    message: `Your leave request has been finally ${action === "approve" ? "approved" : "rejected"} by Admin.`,
+    metadata: { reason: comment }
+  });
+
   return serialize(leave);
 }
 
@@ -355,7 +341,7 @@ export async function getAttendance() {
 
 export async function getActivities() {
   await connectDB();
-  const acts = await Activity.find({}).sort({ createdAt: -1 }).lean();
+  const acts = await Activity.find({}).sort({ time: -1 }).lean();
   return serialize(acts);
 }
 
@@ -365,36 +351,23 @@ async function logLoginActivity(employeeId: string) {
   const time = now.toTimeString().slice(0, 5);
   
   let existing = await Attendance.findOne({ employeeId, date });
-  
   if (!existing) {
-    existing = new Attendance({
-      id: `${employeeId}-${date}`,
-      employeeId,
-      date,
-      firstLoginAt: now,
-      sessions: [],
-      status: "Incomplete",
-      productivity: 80,
-      loginTime: time, // Legacy support
-    });
+    existing = new Attendance({ id: `${employeeId}-${date}`, employeeId, date, firstLoginAt: now, sessions: [], status: "Incomplete", productivity: 80, loginTime: time });
   }
   
-  // Check for active session
   const activeSession = existing.sessions?.find((s: any) => !s.logoutAt);
   if (!activeSession) {
     existing.sessions.push({ loginAt: now });
     if (!existing.firstLoginAt) existing.firstLoginAt = now;
-    existing.loginTime = time; // Update legacy for UI
+    existing.loginTime = time; 
     await existing.save();
+    
+    await createActivity({
+      employeeId, actorId: employeeId, actorRole: "employee",
+      activityType: "ATTENDANCE_LOGIN", module: "ATTENDANCE", referenceId: existing.id,
+      message: "You logged in successfully."
+    });
   }
-  
-  await Activity.create({
-    id: `ACT${Date.now()}`,
-    employeeId,
-    time: now.toISOString(),
-    label: "Logged in",
-    type: "login"
-  });
 }
 
 export async function logLogoutActivity(employeeId: string) {
@@ -409,12 +382,11 @@ export async function logLogoutActivity(employeeId: string) {
     if (activeSession) {
       activeSession.logoutAt = now;
       activeSession.durationSeconds = Math.floor((now.getTime() - activeSession.loginAt.getTime()) / 1000);
-      
       rec.totalWorkingSeconds = (rec.totalWorkingSeconds || 0) + activeSession.durationSeconds;
       rec.totalWorkingHours = Number((rec.totalWorkingSeconds / 3600).toFixed(2));
-      rec.workingHours = rec.totalWorkingHours; // Legacy
+      rec.workingHours = rec.totalWorkingHours; 
       rec.lastLogoutAt = now;
-      rec.logoutTime = time; // Legacy
+      rec.logoutTime = time; 
       
       if (rec.totalWorkingHours >= 8) rec.status = "Present";
       else if (rec.totalWorkingHours >= 4) rec.status = "Half Day";
@@ -422,26 +394,20 @@ export async function logLogoutActivity(employeeId: string) {
       else rec.status = "Incomplete";
       
       await rec.save();
+
+      await createActivity({
+        employeeId, actorId: employeeId, actorRole: "employee",
+        activityType: "ATTENDANCE_LOGOUT", module: "ATTENDANCE", referenceId: rec.id,
+        message: "You logged out successfully."
+      });
     }
   }
-  
-  await Activity.create({
-    id: `ACT${Date.now()}`,
-    employeeId,
-    time: now.toISOString(),
-    label: "Logged out",
-    type: "logout"
-  });
-  
   return { success: true };
 }
 
 export async function deleteAttendance(id: string, userRole: string) {
   await connectDB();
   if (userRole !== "admin") throw new Error("Only Admin can delete attendance records");
-  const att = await Attendance.findOne({ id });
-  if (!att) throw new Error("Attendance record not found");
-  
   await Attendance.findOneAndDelete({ id });
   return { success: true };
 }

@@ -292,13 +292,19 @@ function EmployeeDashboard() {
         <Card className="border-0 shadow-sm">
           <CardHeader><CardTitle>Recent Activity</CardTitle></CardHeader>
           <CardContent>
-            <ol className="relative border-l border-border ml-3 space-y-4">
+            <ol className="relative border-l border-border ml-3 space-y-4 h-64 overflow-y-auto pr-2">
               {myActivities.length === 0 && <div className="text-sm text-muted-foreground">No activity yet today.</div>}
               {myActivities.map((a) => (
                 <li key={a.id} className="ml-4">
                   <div className="absolute -left-1.5 h-3 w-3 rounded-full bg-primary mt-1.5" />
-                  <time className="text-xs text-muted-foreground">{new Date(a.time).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</time>
-                  <p className="text-sm font-medium">{a.label}</p>
+                  <div className="flex justify-between items-start">
+                    <time className="text-xs text-muted-foreground">{new Date(a.time).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</time>
+                    {a.module && <span className="text-[10px] uppercase font-semibold text-muted-foreground bg-muted px-1 rounded">{a.module}</span>}
+                  </div>
+                  <p className="text-sm font-medium mt-1">{a.label}</p>
+                  {a.actorRole && a.actorRole !== "employee" && (
+                    <p className="text-xs text-muted-foreground mt-0.5">Performed By: <span className="capitalize">{a.actorRole}</span></p>
+                  )}
                 </li>
               ))}
             </ol>
