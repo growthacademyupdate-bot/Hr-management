@@ -4,7 +4,7 @@ import {
   getEmployees, addEmployee, updateEmployee, deleteEmployee,
   getTasks, addTask, updateTask, deleteTask, addComment, updateTaskStatus, reviewTask,
   getLeaves, addLeave, cancelLeave, hrReviewLeave, adminReviewLeave,
-  getAttendance, getActivities, logLogoutActivity
+  getAttendance, getActivities, logLogoutActivity, deleteAttendance
 } from "@/app/actions";
 
 export type Role = "admin" | "hr" | "employee";
@@ -14,8 +14,13 @@ export interface User {
 export interface Employee {
   id: string; name: string; email: string; mobile: string; department: string; designation: string; joiningDate: string; salary: number; status: string; avatar?: string; password?: string;
 }
+export interface AttendanceSession {
+  loginAt: string;
+  logoutAt: string | null;
+  durationSeconds: number;
+}
 export interface AttendanceRecord {
-  id: string; employeeId: string; date: string; loginTime: string | null; logoutTime: string | null; workingHours: number; status: string; productivity: number;
+  id: string; employeeId: string; date: string; loginTime: string | null; logoutTime: string | null; workingHours: number; status: string; productivity: number; firstLoginAt?: string; lastLogoutAt?: string; totalWorkingSeconds?: number; totalWorkingHours?: number; sessions?: AttendanceSession[];
 }
 export interface Task {
   id: string; title: string; description: string; assignedTo: string; assignedBy: string; priority: "low" | "medium" | "high" | "urgent"; status: "assigned" | "working_progress" | "completed" | "reviewed"; assignDate: string; dueDate: string; startedAt: string | null; completedAt: string | null; reviewedAt: string | null; hrRating: string | null; hrReview: string | null; reviewedBy: string | null; createdAt: string; updatedAt: string;
@@ -85,6 +90,8 @@ export const api = {
   async cancelLeave(leaveId: string) { const user = getCurrentUser(); if(!user) return; const l = await cancelLeave(leaveId, user.employeeId || user.id); currentDB.leaves = currentDB.leaves.map(x => x.id === leaveId ? l : x); notify(); },
   async hrReviewLeave(leaveId: string, action: "approve" | "reject", comment: string) { const user = getCurrentUser(); if(!user) return; const l = await hrReviewLeave(leaveId, action, comment, user.employeeId || user.id, user.role); currentDB.leaves = currentDB.leaves.map(x => x.id === leaveId ? l : x); notify(); },
   async adminReviewLeave(leaveId: string, action: "approve" | "reject", comment: string) { const user = getCurrentUser(); if(!user) return; const l = await adminReviewLeave(leaveId, action, comment, user.employeeId || user.id, user.role); currentDB.leaves = currentDB.leaves.map(x => x.id === leaveId ? l : x); notify(); },
+
+  async deleteAttendance(id: string) { const user = getCurrentUser(); if(!user) return; await deleteAttendance(id, user.role); currentDB.attendance = currentDB.attendance.filter(x => x.id !== id); notify(); },
 };
 
 // Auth

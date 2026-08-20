@@ -342,30 +342,38 @@ export async function getActivities() {
 }
 
 async function logLoginActivity(employeeId: string) {
-  const date = new Date().toISOString().slice(0, 10);
-  const time = new Date().toTimeString().slice(0, 5);
+  const now = new Date();
+  const date = now.toISOString().slice(0, 10);
+  const time = now.toTimeString().slice(0, 5);
   
-  const existing = await Attendance.findOne({ employeeId, date });
-  if (existing) {
-    if (!existing.loginTime) {
-      existing.loginTime = time;
-      await existing.save();
-    }
-  } else {
-    await Attendance.create({
+  let existing = await Attendance.findOne({ employeeId, date });
+  
+  if (!existing) {
+    existing = new Attendance({
       id: `${employeeId}-${date}`,
       employeeId,
       date,
-      loginTime: time,
-      status: "Present",
-      productivity: 80
+      firstLoginAt: now,
+      sessions: [],
+      status: "Incomplete",
+      productivity: 80,
+      loginTime: time, // Legacy support
     });
+  }
+  
+  // Check for active session
+  const activeSession = existing.sessions?.find((s: any) => !s.logoutAt);
+  if (!activeSession) {
+    existing.sessions.push({ loginAt: now });
+    if (!existing.firstLoginAt) existing.firstLoginAt = now;
+    existing.loginTime = time; // Update legacy for UI
+    await existing.save();
   }
   
   await Activity.create({
     id: `ACT${Date.now()}`,
     employeeId,
-    time: new Date().toISOString(),
+    time: now.toISOString(),
     label: "Logged in",
     type: "login"
   });
@@ -373,25 +381,49 @@ async function logLoginActivity(employeeId: string) {
 
 export async function logLogoutActivity(employeeId: string) {
   await connectDB();
-  const date = new Date().toISOString().slice(0, 10);
-  const time = new Date().toTimeString().slice(0, 5);
+  const now = new Date();
+  const date = now.toISOString().slice(0, 10);
+  const time = now.toTimeString().slice(0, 5);
   
   const rec = await Attendance.findOne({ employeeId, date });
-  if (rec && rec.loginTime) {
-    rec.logoutTime = time;
-    const [lh, lm] = rec.loginTime.split(":").map(Number);
-    const [oh, om] = time.split(":").map(Number);
-    rec.workingHours = Math.max(0, +((oh * 60 + om - lh * 60 - lm) / 60).toFixed(1));
-    await rec.save();
+  if (rec) {
+    const activeSession = rec.sessions?.find((s: any) => !s.logoutAt);
+    if (activeSession) {
+      activeSession.logoutAt = now;
+      activeSession.durationSeconds = Math.floor((now.getTime() - activeSession.loginAt.getTime()) / 1000);
+      
+      rec.totalWorkingSeconds = (rec.totalWorkingSeconds || 0) + activeSession.durationSeconds;
+      rec.totalWorkingHours = Number((rec.totalWorkingSeconds / 3600).toFixed(2));
+      rec.workingHours = rec.totalWorkingHours; // Legacy
+      rec.lastLogoutAt = now;
+      rec.logoutTime = time; // Legacy
+      
+      if (rec.totalWorkingHours >= 8) rec.status = "Present";
+      else if (rec.totalWorkingHours >= 4) rec.status = "Half Day";
+      else if (rec.totalWorkingHours > 0) rec.status = "Short Day";
+      else rec.status = "Incomplete";
+      
+      await rec.save();
+    }
   }
   
   await Activity.create({
     id: `ACT${Date.now()}`,
     employeeId,
-    time: new Date().toISOString(),
+    time: now.toISOString(),
     label: "Logged out",
     type: "logout"
   });
   
+  return { success: true };
+}
+
+export async function deleteAttendance(id: string, userRole: string) {
+  await connectDB();
+  if (userRole !== "admin") throw new Error("Only Admin can delete attendance records");
+  const att = await Attendance.findOne({ id });
+  if (!att) throw new Error("Attendance record not found");
+  
+  await Attendance.findOneAndDelete({ id });
   return { success: true };
 }
