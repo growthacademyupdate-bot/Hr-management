@@ -6,6 +6,7 @@ import { Task } from "@/models/Task";
 import { Leave } from "@/models/Leave";
 import { Attendance } from "@/models/Attendance";
 import { Activity } from "@/models/Activity";
+import { Setting } from "@/models/Setting";
 
 // Helper to serialize Mongoose documents
 function serialize(doc: any) {
@@ -42,17 +43,19 @@ export async function loginAction(usernameOrId: string, password: string) {
     
     // Check against env admin credentials
     if (usernameOrId === process.env.ADMIN_USERNAME && password === process.env.ADMIN_PASSWORD) {
+      const avatarSetting = await Setting.findOne({ key: "admin_avatar" });
       return {
         success: true,
-        user: { id: "u_admin", username: process.env.ADMIN_USERNAME, password: process.env.ADMIN_PASSWORD, role: "admin", name: "Admin User", email: process.env.ADMIN_USERNAME, avatar: "https://i.pravatar.cc/120?u=admin" }
+        user: { id: "u_admin", username: process.env.ADMIN_USERNAME, password: process.env.ADMIN_PASSWORD, role: "admin", name: "Admin User", email: process.env.ADMIN_USERNAME, avatar: avatarSetting?.value || "" }
       };
     }
 
     // Check against env HR credentials
     if (usernameOrId === process.env.HR_USERNAME && password === process.env.HR_PASSWORD) {
+      const avatarSetting = await Setting.findOne({ key: "hr_avatar" });
       return {
         success: true,
-        user: { id: "u_hr", username: process.env.HR_USERNAME, password: process.env.HR_PASSWORD, role: "hr", name: "HR Manager", email: process.env.HR_USERNAME, avatar: "https://i.pravatar.cc/120?u=hr" }
+        user: { id: "u_hr", username: process.env.HR_USERNAME, password: process.env.HR_PASSWORD, role: "hr", name: "HR Manager", email: process.env.HR_USERNAME, avatar: avatarSetting?.value || "" }
       };
     }
 
@@ -62,7 +65,7 @@ export async function loginAction(usernameOrId: string, password: string) {
       await logLoginActivity(emp.id);
       return {
         success: true,
-        user: { id: `u_${emp.id}`, username: emp.email, password: emp.password, role: "employee", employeeId: emp.id, name: emp.name, email: emp.email, avatar: emp.avatar }
+        user: { id: `u_${emp.id}`, username: emp.email, password: emp.password, role: "employee", employeeId: emp.id, name: emp.name, email: emp.email, avatar: emp.avatar || "" }
       };
     }
 
@@ -76,6 +79,7 @@ export async function loginAction(usernameOrId: string, password: string) {
 // ---------------- Employees ----------------
 export async function getEmployees() {
   await connectDB();
+  await Employee.updateMany({ department: "Application Point" }, { $set: { department: "Mobile App" } });
   const emps = await Employee.find({}).sort({ createdAt: -1 }).lean();
   return serialize(emps);
 }
@@ -89,7 +93,7 @@ export async function addEmployee(data: any) {
     if (!isNaN(num) && num > max) max = num;
   }
   const id = `EMP${String(max + 1).padStart(3, "0")}`;
-  const emp = await Employee.create({ ...data, id, avatar: data.avatar || `https://i.pravatar.cc/120?u=${id}` });
+  const emp = await Employee.create({ ...data, id, avatar: data.avatar || "" });
   return serialize(emp);
 }
 
@@ -409,5 +413,30 @@ export async function deleteAttendance(id: string, userRole: string) {
   await connectDB();
   if (userRole !== "admin") throw new Error("Only Admin can delete attendance records");
   await Attendance.findOneAndDelete({ id });
+  return { success: true };
+}
+
+export async function updateSystemSetting(key: string, value: string) {
+  await connectDB();
+  const setting = await Setting.findOneAndUpdate(
+    { key },
+    { value },
+    { new: true, upsert: true }
+  ).lean();
+  return serialize(setting);
+}
+
+export async function getSystemSettings() {
+  await connectDB();
+  const settings = await Setting.find({}).lean();
+  return serialize(settings);
+}
+
+export async function updateSystemSettings(settings: Record<string, string>) {
+  await connectDB();
+  const promises = Object.entries(settings).map(([key, value]) =>
+    Setting.findOneAndUpdate({ key }, { value }, { new: true, upsert: true }).lean()
+  );
+  await Promise.all(promises);
   return { success: true };
 }

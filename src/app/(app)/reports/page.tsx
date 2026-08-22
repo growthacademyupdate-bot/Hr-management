@@ -6,6 +6,7 @@ import { PageHeader } from "@/components/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { StatusBadge } from "../dashboard/page";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
@@ -20,6 +21,49 @@ export default function ReportsPage() {
   const isAdmin = user.role === "admin";
   const isHR = user.role === "hr";
   const isEmployee = user.role === "employee";
+
+  // CSV Export helper
+  const exportCSV = (rows: string[][], filename: string) => {
+    const csv = rows.map(r => r.map(c => `"${c}"`).join(",")).join("\n");
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = filename; a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  // Salary Report Data
+  const getSalaryData = () => {
+    const deptMap: Record<string, { count: number; total: number; employees: any[] }> = {};
+    db.employees.forEach(emp => {
+      if (!deptMap[emp.department]) deptMap[emp.department] = { count: 0, total: 0, employees: [] };
+      deptMap[emp.department].count++;
+      deptMap[emp.department].total += emp.salary || 0;
+      deptMap[emp.department].employees.push(emp);
+    });
+    return Object.entries(deptMap).map(([dept, d]) => ({
+      dept, count: d.count, total: d.total, avg: d.count ? Math.round(d.total / d.count) : 0, employees: d.employees
+    })).sort((a, b) => b.total - a.total);
+  };
+
+  const handleExportSalaryCSV = () => {
+    const header = ["Employee ID", "Name", "Department", "Designation", "Salary", "Status"];
+    const rows = db.employees.map(e => [e.id, e.name, e.department, e.designation, String(e.salary || 0), e.status]);
+    exportCSV([header, ...rows], "salary_report.csv");
+  };
+
+  const handleExportAttendanceCSV = () => {
+    const header = ["Employee", "Date", "Login", "Logout", "Hours", "Status", "Productivity"];
+    const rows = db.attendance.filter(a => filterByDate(a.date)).map(a => {
+      const emp = db.employees.find(e => e.id === a.employeeId);
+      return [
+        emp?.name || a.employeeId, a.date,
+        a.loginTime || "—", a.logoutTime || "—",
+        String(a.workingHours), a.status, `${a.productivity}%`
+      ];
+    });
+    exportCSV([header, ...rows], "attendance_report.csv");
+  };
 
   // Filter Date Helper
   const filterByDate = (dateString: string) => {
@@ -100,6 +144,7 @@ export default function ReportsPage() {
           <>
             <button onClick={() => setActiveTab("summary")} className={`px-4 py-2 text-sm font-medium border-b-2 whitespace-nowrap ${activeTab === "summary" ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`}>Company Summary</button>
             <button onClick={() => setActiveTab("hr-activity")} className={`px-4 py-2 text-sm font-medium border-b-2 whitespace-nowrap ${activeTab === "hr-activity" ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`}>HR Activity</button>
+            <button onClick={() => setActiveTab("salary")} className={`px-4 py-2 text-sm font-medium border-b-2 whitespace-nowrap ${activeTab === "salary" ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`}>Salary Report</button>
           </>
         )}
         <button onClick={() => setActiveTab("performance")} className={`px-4 py-2 text-sm font-medium border-b-2 whitespace-nowrap ${activeTab === "performance" ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`}>
@@ -111,6 +156,9 @@ export default function ReportsPage() {
         <button onClick={() => setActiveTab("leaves")} className={`px-4 py-2 text-sm font-medium border-b-2 whitespace-nowrap ${activeTab === "leaves" ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`}>
           {isEmployee ? "My Leaves" : "Leave Reports"}
         </button>
+        {(isAdmin || isHR) && (
+          <button onClick={() => setActiveTab("attendance-export")} className={`px-4 py-2 text-sm font-medium border-b-2 whitespace-nowrap ${activeTab === "attendance-export" ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`}>Attendance Export</button>
+        )}
       </div>
 
       <div className="pt-4">
@@ -260,6 +308,99 @@ export default function ReportsPage() {
             </CardContent>
           </Card>
         )}
+        {/* SALARY REPORT TAB */}
+        {activeTab === "salary" && isAdmin && (
+          <Card className="border-0 shadow-sm">
+            <CardHeader className="flex flex-row items-center justify-between">
+              <CardTitle>Salary Report — Department Breakdown</CardTitle>
+              <Button size="sm" variant="outline" onClick={handleExportSalaryCSV}>
+                ⬇ Export CSV
+              </Button>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                <div className="p-4 rounded-lg bg-muted/40 border">
+                  <div className="text-sm text-muted-foreground">Total Employees</div>
+                  <div className="text-2xl font-bold mt-1">{db.employees.length}</div>
+                </div>
+                <div className="p-4 rounded-lg bg-muted/40 border">
+                  <div className="text-sm text-muted-foreground">Total Monthly Payroll</div>
+                  <div className="text-2xl font-bold mt-1">₹{db.employees.reduce((s, e) => s + (e.salary || 0), 0).toLocaleString()}</div>
+                </div>
+                <div className="p-4 rounded-lg bg-muted/40 border">
+                  <div className="text-sm text-muted-foreground">Avg. Salary</div>
+                  <div className="text-2xl font-bold mt-1">₹{db.employees.length ? Math.round(db.employees.reduce((s, e) => s + (e.salary || 0), 0) / db.employees.length).toLocaleString() : 0}</div>
+                </div>
+              </div>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Department</TableHead>
+                    <TableHead>Employees</TableHead>
+                    <TableHead>Total Payroll</TableHead>
+                    <TableHead>Avg. Salary</TableHead>
+                    <TableHead>Highest Salary</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {getSalaryData().map(d => (
+                    <TableRow key={d.dept}>
+                      <TableCell className="font-medium">{d.dept}</TableCell>
+                      <TableCell>{d.count}</TableCell>
+                      <TableCell>₹{d.total.toLocaleString()}</TableCell>
+                      <TableCell>₹{d.avg.toLocaleString()}</TableCell>
+                      <TableCell>₹{Math.max(...d.employees.map(e => e.salary || 0)).toLocaleString()}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* ATTENDANCE EXPORT TAB */}
+        {activeTab === "attendance-export" && (isAdmin || isHR) && (
+          <Card className="border-0 shadow-sm">
+            <CardHeader className="flex flex-row items-center justify-between">
+              <CardTitle>Attendance Export</CardTitle>
+              <Button size="sm" variant="outline" onClick={handleExportAttendanceCSV}>
+                ⬇ Export CSV
+              </Button>
+            </CardHeader>
+            <CardContent>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Employee</TableHead>
+                    <TableHead>Date</TableHead>
+                    <TableHead>Login</TableHead>
+                    <TableHead>Logout</TableHead>
+                    <TableHead>Hours</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Productivity</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {db.attendance.filter(a => filterByDate(a.date)).slice(0, 50).map(a => {
+                    const emp = db.employees.find(e => e.id === a.employeeId);
+                    return (
+                      <TableRow key={a.id}>
+                        <TableCell className="font-medium">{emp?.name || a.employeeId}</TableCell>
+                        <TableCell>{a.date}</TableCell>
+                        <TableCell>{a.loginTime || "—"}</TableCell>
+                        <TableCell>{a.logoutTime || "—"}</TableCell>
+                        <TableCell>{a.workingHours}h</TableCell>
+                        <TableCell><StatusBadge status={a.status} /></TableCell>
+                        <TableCell>{a.productivity}%</TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        )}
+
       </div>
     </div>
   );

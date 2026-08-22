@@ -6,7 +6,7 @@ import { Leave } from "@/models/Leave";
 import { Attendance } from "@/models/Attendance";
 import { Activity } from "@/models/Activity";
 
-const DEPARTMENTS = ["Design", "Marketing", "Sales", "HR", "Web", "Finance", "Operations"];
+const DEPARTMENTS = ["Design", "Marketing", "Sales", "HR", "Web", "Finance", "Operations", "Mobile App"];
 const FIRST = ["Aarav","Vivaan","Aditya","Priya","Ananya","Diya","Sara","Riya"];
 const LAST = ["Sharma","Verma","Patel","Gupta","Smith","Johnson","Brown","Davis"];
 
@@ -39,7 +39,7 @@ export async function GET() {
         joiningDate: "2023-01-15",
         salary: 60000,
         status: "Active",
-        avatar: `https://i.pravatar.cc/120?u=${id}`,
+        avatar: "",
         password: "emp123" // Explicitly setting this password so demo login works
       });
       emps.push(emp);
