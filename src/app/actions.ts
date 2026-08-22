@@ -8,6 +8,7 @@ import { Attendance } from "@/models/Attendance";
 import { Activity } from "@/models/Activity";
 import { Setting } from "@/models/Setting";
 import { Holiday } from "@/models/Holiday";
+import { Notification } from "@/models/Notification";
 
 // Helper to serialize Mongoose documents
 function serialize(doc: any) {
@@ -36,6 +37,119 @@ export async function createActivity(data: {
     metadata: data.metadata,
     time: new Date().toISOString()
   });
+}
+
+export async function createNotification(data: {
+  recipientId: string;
+  recipientRole?: string;
+  senderId?: string;
+  senderRole?: string;
+  title: string;
+  message: string;
+  type: string;
+  module: string;
+  referenceId?: string;
+  actionUrl?: string;
+  metadata?: any;
+}) {
+  await connectDB();
+  await Notification.create({
+    id: `NOT${Date.now()}${Math.floor(Math.random() * 1000)}`,
+    ...data
+  });
+}
+
+export async function broadcastNotification(data: {
+  title: string;
+  message: string;
+  senderId: string;
+  senderRole: string;
+}) {
+  await connectDB();
+  const employees = await Employee.find({ status: "Active" }, { id: 1 }).lean();
+  const broadcastId = `BCAST${Date.now()}`;
+  
+  const bulkNotifications = employees.map((emp: any) => ({
+    id: `NOT${Date.now()}${Math.floor(Math.random() * 1000)}${emp.id}`,
+    recipientId: emp.id,
+    senderId: data.senderId,
+    senderRole: data.senderRole,
+    title: data.title,
+    message: data.message,
+    type: "SYSTEM_NOTIFICATION",
+    module: "SYSTEM",
+    referenceId: broadcastId
+  }));
+
+  // Also notify HR if the sender isn't HR
+  if (data.senderRole !== "hr") {
+    bulkNotifications.push({
+      id: `NOT${Date.now()}${Math.floor(Math.random() * 1000)}hr`,
+      recipientId: "u_hr",
+      senderId: data.senderId,
+      senderRole: data.senderRole,
+      title: data.title,
+      message: data.message,
+      type: "SYSTEM_NOTIFICATION",
+      module: "SYSTEM",
+      referenceId: broadcastId
+    });
+  }
+
+  await Notification.insertMany(bulkNotifications);
+  return { success: true, broadcastId };
+}
+
+export async function editBroadcastNotification(broadcastId: string, data: { title: string, message: string }) {
+  await connectDB();
+  await Notification.updateMany(
+    { referenceId: broadcastId, module: "SYSTEM" },
+    { $set: { title: data.title, message: data.message } }
+  );
+  return { success: true };
+}
+
+export async function deleteBroadcastNotification(broadcastId: string) {
+  await connectDB();
+  await Notification.deleteMany({ referenceId: broadcastId, module: "SYSTEM" });
+  return { success: true };
+}
+
+export async function getSentBroadcasts(userId: string) {
+  await connectDB();
+  // Fetch one notification per broadcastId where senderId matches
+  const broadcasts = await Notification.aggregate([
+    { $match: { senderId: userId, module: "SYSTEM" } },
+    { $group: { _id: "$referenceId", doc: { $first: "$$ROOT" } } },
+    { $replaceRoot: { newRoot: "$doc" } },
+    { $sort: { createdAt: -1 } }
+  ]);
+  
+  // Map _id back to string to prevent hydration errors and ensure referenceId exists
+  const mapped = broadcasts.map(b => ({
+    ...b,
+    _id: b._id.toString(),
+    referenceId: b.referenceId
+  }));
+  return serialize(mapped);
+}
+
+export async function getNotifications(userId: string) {
+  await connectDB();
+  const notifs = await Notification.find({ recipientId: userId }).sort({ createdAt: -1 }).limit(100).lean();
+  return serialize(notifs);
+}
+
+export async function markNotificationAsRead(id: string, userId: string) {
+  await connectDB();
+  const notif = await Notification.findOneAndUpdate({ id, recipientId: userId }, { isRead: true, readAt: new Date().toISOString() }, { new: true }).lean();
+  return serialize(notif);
+}
+
+export async function markAllNotificationsAsRead(userId: string) {
+  await connectDB();
+  await Notification.updateMany({ recipientId: userId, isRead: false }, { isRead: true, readAt: new Date().toISOString() });
+  return { success: true };
 }
 
 export async function loginAction(usernameOrId: string, password: string) {
@@ -142,6 +256,18 @@ export async function addTask(data: any, userRole: string, userId: string) {
     message: `Admin assigned you a new task: ${data.title}`
   });
 
+  await createNotification({
+    recipientId: data.assignedTo,
+    senderId: userId,
+    senderRole: userRole,
+    title: "New Task Assigned",
+    message: `You have been assigned a new task: ${data.title}`,
+    type: "TASK_ASSIGNED",
+    module: "TASK",
+    referenceId: id,
+    actionUrl: `/tasks`,
+  });
+
   return serialize(task);
 }
 
@@ -168,13 +294,26 @@ export async function updateTaskStatus(taskId: string, status: string, userId: s
       activityType: "TASK_STARTED", module: "TASK", referenceId: taskId,
       message: `You started working on the task: ${task.title}`
     });
-  } else if (status === "completed" && task.status === "working_progress") {
+    } else if (status === "completed" && task.status === "working_progress") {
     task.status = "completed";
     task.completedAt = new Date().toISOString();
     await createActivity({
       employeeId: task.assignedTo, actorId: userId, actorRole: userRole,
       activityType: "TASK_COMPLETED", module: "TASK", referenceId: taskId,
       message: `You completed the task: ${task.title}`
+    });
+    
+    // Notify Admin (assigner)
+    await createNotification({
+      recipientId: task.assignedBy || "u_admin",
+      senderId: userId,
+      senderRole: userRole,
+      title: "Task Completed",
+      message: `Employee completed the task: ${task.title}. Review required.`,
+      type: "TASK_COMPLETED",
+      module: "TASK",
+      referenceId: taskId,
+      actionUrl: `/tasks`,
     });
   } else {
     throw new Error(`Invalid status transition`);
@@ -203,6 +342,18 @@ export async function reviewTask(taskId: string, review: { hrRating: string; hrR
     activityType: "TASK_REVIEWED", module: "TASK", referenceId: taskId,
     message: `HR reviewed your completed task: ${task.title}`,
     metadata: { rating: review.hrRating, feedback: review.hrReview }
+  });
+
+  await createNotification({
+    recipientId: task.assignedTo,
+    senderId: userId,
+    senderRole: userRole,
+    title: "Task Reviewed",
+    message: `Your task '${task.title}' has received a rating of ${review.hrRating}/5.`,
+    type: "TASK_REVIEWED",
+    module: "TASK",
+    referenceId: taskId,
+    actionUrl: `/tasks`,
   });
 
   return serialize(task);
@@ -290,6 +441,18 @@ export async function addLeave(data: any, userId: string) {
     message: `Leave request submitted for ${days} day(s).`
   });
 
+  await createNotification({
+    recipientId: "u_hr", // Using HR system account as recipient
+    senderId: userId,
+    senderRole: "employee",
+    title: "New Leave Request",
+    message: `New leave request submitted by employee for ${days} day(s).`,
+    type: "LEAVE_APPLIED",
+    module: "LEAVE",
+    referenceId: id,
+    actionUrl: `/leaves`,
+  });
+
   return serialize(leave);
 }
 
@@ -335,6 +498,32 @@ export async function hrReviewLeave(leaveId: string, action: "approve" | "reject
     metadata: { reason: comment }
   });
 
+  await createNotification({
+    recipientId: leave.employeeId,
+    senderId: hrId,
+    senderRole: userRole,
+    title: `Leave ${action === "approve" ? "Approved" : "Rejected"} by HR`,
+    message: `Your leave request has been ${action === "approve" ? "approved" : "rejected"} by HR.`,
+    type: action === "approve" ? "LEAVE_HR_APPROVED" : "LEAVE_HR_REJECTED",
+    module: "LEAVE",
+    referenceId: leaveId,
+    actionUrl: `/leaves`,
+  });
+
+  if (action === "approve") {
+    await createNotification({
+      recipientId: "u_admin",
+      senderId: hrId,
+      senderRole: userRole,
+      title: "Leave Requires Final Approval",
+      message: `HR approved a leave request. Final Admin approval is required.`,
+      type: "LEAVE_HR_APPROVED",
+      module: "LEAVE",
+      referenceId: leaveId,
+      actionUrl: `/leaves`,
+    });
+  }
+
   return serialize(leave);
 }
 
@@ -357,6 +546,18 @@ export async function adminReviewLeave(leaveId: string, action: "approve" | "rej
     activityType: action === "approve" ? "LEAVE_ADMIN_APPROVED" : "LEAVE_ADMIN_REJECTED", module: "LEAVE", referenceId: leaveId,
     message: `Your leave request has been finally ${action === "approve" ? "approved" : "rejected"} by Admin.`,
     metadata: { reason: comment }
+  });
+
+  await createNotification({
+    recipientId: leave.employeeId,
+    senderId: adminId,
+    senderRole: userRole,
+    title: `Leave ${action === "approve" ? "Approved" : "Rejected"} by Admin`,
+    message: `Your leave request has been finally ${action === "approve" ? "approved" : "rejected"} by Admin.`,
+    type: action === "approve" ? "LEAVE_ADMIN_APPROVED" : "LEAVE_ADMIN_REJECTED",
+    module: "LEAVE",
+    referenceId: leaveId,
+    actionUrl: `/leaves`,
   });
 
   return serialize(leave);
@@ -496,6 +697,37 @@ export async function createHoliday(data: any, adminId: string, userRole: string
     message: `Admin created a new holiday: ${holiday.name}.`,
     metadata: { holidayId: holiday.id }
   });
+
+  // Bulk Notification to all employees and HR
+  const employees = await Employee.find({ status: "Active" }, { id: 1 }).lean();
+  const bulkNotifications = employees.map((emp: any) => ({
+    id: `NOT${Date.now()}${Math.floor(Math.random() * 1000)}${emp.id}`,
+    recipientId: emp.id,
+    senderId: adminId,
+    senderRole: userRole,
+    title: "New Holiday Added",
+    message: `New holiday added: ${holiday.name} - ${new Date(holiday.startDate).toLocaleDateString()}`,
+    type: "HOLIDAY_CREATED",
+    module: "HOLIDAY",
+    referenceId: holiday.id,
+    actionUrl: `/holidays`,
+  }));
+  
+  // Add HR to the bulk notification
+  bulkNotifications.push({
+    id: `NOT${Date.now()}${Math.floor(Math.random() * 1000)}hr`,
+    recipientId: "u_hr",
+    senderId: adminId,
+    senderRole: userRole,
+    title: "New Holiday Added",
+    message: `New holiday added: ${holiday.name} - ${new Date(holiday.startDate).toLocaleDateString()}`,
+    type: "HOLIDAY_CREATED",
+    module: "HOLIDAY",
+    referenceId: holiday.id,
+    actionUrl: `/holidays`,
+  });
+
+  await Notification.insertMany(bulkNotifications);
 
   return serialize(holiday);
 }
