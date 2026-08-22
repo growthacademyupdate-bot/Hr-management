@@ -150,13 +150,26 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-80">
-                <DropdownMenuLabel>Notifications</DropdownMenuLabel>
+                <DropdownMenuLabel className="font-bold">Notifications</DropdownMenuLabel>
                 <DropdownMenuSeparator />
-                {["New leave request from Aarav Sharma","Task 'Design landing page' completed","System backup successful"].map((n, i) => (
-                  <DropdownMenuItem key={i} className="py-3">
-                    <div>
-                      <div className="text-sm font-medium">{n}</div>
-                      <div className="text-xs text-muted-foreground">{i + 1}h ago</div>
+                {(user.role === "employee" ? [
+                  { id: 1, title: "Leave request status updated", desc: "View your leave approval status", time: "15m ago", path: "/leaves" },
+                  { id: 2, title: "New task assigned", desc: "Check your task list for updates", time: "1h ago", path: "/tasks" },
+                  { id: 3, title: "Attendance recorded", desc: "Check today's check-in/out times", time: "3h ago", path: "/attendance" },
+                ] : [
+                  { id: 1, title: "New leave request submitted", desc: "Aarav Sharma requested 3 days leave", time: "15m ago", path: "/leaves" },
+                  { id: 2, title: "Task 'Design landing page' completed", desc: "Pending HR review & rating", time: "1h ago", path: "/tasks" },
+                  { id: 3, title: "Salary & Attendance Report ready", desc: "View and export department report", time: "3h ago", path: "/reports" },
+                ]).map((n) => (
+                  <DropdownMenuItem 
+                    key={n.id} 
+                    onClick={() => router.push(n.path)}
+                    className="py-3 cursor-pointer hover:bg-muted/80 transition-colors"
+                  >
+                    <div className="space-y-1">
+                      <div className="text-sm font-semibold leading-tight">{n.title}</div>
+                      <div className="text-xs text-muted-foreground">{n.desc}</div>
+                      <div className="text-[10px] text-primary font-medium">{n.time}</div>
                     </div>
                   </DropdownMenuItem>
                 ))}
