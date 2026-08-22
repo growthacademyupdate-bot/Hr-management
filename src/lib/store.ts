@@ -5,7 +5,8 @@ import {
   getTasks, addTask, updateTask, deleteTask, addComment, updateTaskStatus, reviewTask,
   getLeaves, addLeave, cancelLeave, hrReviewLeave, adminReviewLeave,
   getAttendance, getActivities, logLogoutActivity, deleteAttendance, updateSystemSetting, getSystemSettings, updateSystemSettings,
-  getHolidays, createHoliday, updateHoliday, deleteHoliday
+  getHolidays, createHoliday, updateHoliday, deleteHoliday,
+  getNotifications, markNotificationAsRead, markAllNotificationsAsRead, broadcastNotification, editBroadcastNotification, deleteBroadcastNotification
 } from "@/app/actions";
 
 export type Role = "admin" | "hr" | "employee";
@@ -37,13 +38,16 @@ export interface Activity {
 export interface Holiday {
   id: string; name: string; description?: string; holidayType: "COMPANY_HOLIDAY" | "OPTIONAL_HOLIDAY" | "RESTRICTED_HOLIDAY" | "CUSTOM_HOLIDAY"; startDate: string; endDate: string; isActive: boolean; createdBy?: string; updatedBy?: string; createdAt: string; updatedAt: string;
 }
+export interface Notification {
+  id: string; recipientId: string; recipientRole?: string; senderId?: string; senderRole?: string; title: string; message: string; type: string; module: string; referenceId?: string; actionUrl?: string; isRead: boolean; readAt?: string; metadata?: any; createdAt: string;
+}
 
 interface DB {
-  employees: Employee[]; attendance: AttendanceRecord[]; tasks: Task[]; leaves: Leave[]; activities: Activity[]; holidays: Holiday[];
+  employees: Employee[]; attendance: AttendanceRecord[]; tasks: Task[]; leaves: Leave[]; activities: Activity[]; holidays: Holiday[]; notifications: Notification[];
 }
 
 const AUTH_KEY = "ems_auth_v1";
-let currentDB: DB = { employees: [], attendance: [], tasks: [], leaves: [], activities: [], holidays: [] };
+let currentDB: DB = { employees: [], attendance: [], tasks: [], leaves: [], activities: [], holidays: [], notifications: [] };
 let globalSearch = "";
 const listeners = new Set<() => void>();
 
@@ -58,13 +62,33 @@ export function useDB() {
 
   useEffect(() => {
     const user = getCurrentUser();
+    const userId = user?.employeeId || user?.id;
     // Fetch real data on mount
-    Promise.all([getEmployees(), getAttendance(), getTasks(user?.role, user?.employeeId || user?.id), getLeaves(user?.role, user?.employeeId || user?.id), getActivities(), getHolidays()])
-      .then(([emps, atts, ts, lvs, acts, hols]) => {
-        currentDB = { employees: emps, attendance: atts, tasks: ts, leaves: lvs, activities: acts, holidays: hols };
+    Promise.all([
+      getEmployees(), getAttendance(), getTasks(user?.role, userId), 
+      getLeaves(user?.role, userId), getActivities(), getHolidays(),
+      userId ? getNotifications(userId) : Promise.resolve([])
+    ])
+      .then(([emps, atts, ts, lvs, acts, hols, notifs]) => {
+        currentDB = { employees: emps, attendance: atts, tasks: ts, leaves: lvs, activities: acts, holidays: hols, notifications: notifs };
         notify();
       })
       .catch(console.error);
+
+    // Polling for notifications
+    let pollInterval: NodeJS.Timeout;
+    if (userId) {
+      pollInterval = setInterval(() => {
+        getNotifications(userId).then(notifs => {
+          currentDB.notifications = notifs;
+          notify();
+        }).catch(console.error);
+      }, 30000); // 30 seconds
+    }
+
+    return () => {
+      if (pollInterval) clearInterval(pollInterval);
+    };
   }, []);
 
   return snap;
@@ -105,6 +129,23 @@ export const api = {
   async createHoliday(data: any) { const user = getCurrentUser(); if(!user) return; const h = await createHoliday(data, user.employeeId || user.id, user.role); currentDB.holidays = [...currentDB.holidays, h].sort((a,b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime()); notify(); return h; },
   async updateHoliday(id: string, patch: any) { const user = getCurrentUser(); if(!user) return; const h = await updateHoliday(id, patch, user.employeeId || user.id, user.role); currentDB.holidays = currentDB.holidays.map(x => x.id === id ? h : x); notify(); },
   async deleteHoliday(id: string) { const user = getCurrentUser(); if(!user) return; await deleteHoliday(id, user.employeeId || user.id, user.role); currentDB.holidays = currentDB.holidays.filter(x => x.id !== id); notify(); },
+  
+  async markNotificationAsRead(id: string) { const user = getCurrentUser(); if(!user) return; const n = await markNotificationAsRead(id, user.employeeId || user.id); currentDB.notifications = currentDB.notifications.map(x => x.id === id ? n : x); notify(); },
+  async markAllNotificationsAsRead() { const user = getCurrentUser(); if(!user) return; await markAllNotificationsAsRead(user.employeeId || user.id); currentDB.notifications = currentDB.notifications.map(x => ({ ...x, isRead: true })); notify(); },
+  async broadcastNotification(data: { title: string, message: string }) { 
+    const user = getCurrentUser(); 
+    if(!user) return; 
+    await broadcastNotification({ ...data, senderId: user.employeeId || user.id, senderRole: user.role }); 
+    toast.success("Broadcast sent successfully!");
+  },
+  async editBroadcastNotification(broadcastId: string, data: { title: string, message: string }) {
+    await editBroadcastNotification(broadcastId, data);
+    toast.success("Broadcast updated successfully!");
+  },
+  async deleteBroadcastNotification(broadcastId: string) {
+    await deleteBroadcastNotification(broadcastId);
+    toast.success("Broadcast deleted successfully!");
+  }
 };
 
 // Auth
@@ -148,6 +189,7 @@ export const ROLE_MENUS: Record<Role, { label: string; to: string; icon: string 
     { label: "Leaves", to: "/leaves", icon: "CalendarOff" },
     { label: "Holidays", to: "/holidays", icon: "CalendarDays" },
     { label: "Reports", to: "/reports", icon: "BarChart3" },
+    { label: "Notifications", to: "/notifications", icon: "Bell" },
     { label: "Settings", to: "/settings", icon: "Settings" },
     { label: "Profile", to: "/profile", icon: "User" },
   ],
@@ -158,6 +200,7 @@ export const ROLE_MENUS: Record<Role, { label: string; to: string; icon: string 
     { label: "Leaves", to: "/leaves", icon: "CalendarOff" },
     { label: "Holidays", to: "/holidays", icon: "CalendarDays" },
     { label: "Reports", to: "/reports", icon: "BarChart3" },
+    { label: "Notifications", to: "/notifications", icon: "Bell" },
     { label: "Profile", to: "/profile", icon: "User" },
   ],
   employee: [
@@ -167,6 +210,7 @@ export const ROLE_MENUS: Record<Role, { label: string; to: string; icon: string 
     { label: "Activity", to: "/activity", icon: "Activity" },
     { label: "Leaves", to: "/leaves", icon: "CalendarOff" },
     { label: "Holidays", to: "/holidays", icon: "CalendarDays" },
+    { label: "Notifications", to: "/notifications", icon: "Bell" },
     { label: "Profile", to: "/profile", icon: "User" },
   ],
 };
