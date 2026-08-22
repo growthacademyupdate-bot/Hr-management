@@ -4,7 +4,7 @@ import {
   getEmployees, addEmployee, updateEmployee, deleteEmployee,
   getTasks, addTask, updateTask, deleteTask, addComment, updateTaskStatus, reviewTask,
   getLeaves, addLeave, cancelLeave, hrReviewLeave, adminReviewLeave,
-  getAttendance, getActivities, logLogoutActivity, deleteAttendance
+  getAttendance, getActivities, logLogoutActivity, deleteAttendance, updateSystemSetting, getSystemSettings, updateSystemSettings
 } from "@/app/actions";
 
 export type Role = "admin" | "hr" | "employee";
@@ -93,6 +93,9 @@ export const api = {
   async adminReviewLeave(leaveId: string, action: "approve" | "reject", comment: string) { const user = getCurrentUser(); if(!user) return; const l = await adminReviewLeave(leaveId, action, comment, user.employeeId || user.id, user.role); currentDB.leaves = currentDB.leaves.map(x => x.id === leaveId ? l : x); notify(); },
 
   async deleteAttendance(id: string) { const user = getCurrentUser(); if(!user) return; await deleteAttendance(id, user.role); currentDB.attendance = currentDB.attendance.filter(x => x.id !== id); notify(); },
+  async updateSystemSetting(key: string, value: string) { await updateSystemSetting(key, value); },
+  async getSystemSettings() { return await getSystemSettings(); },
+  async updateSystemSettings(settings: Record<string, string>) { return await updateSystemSettings(settings); },
 };
 
 // Auth
@@ -136,6 +139,7 @@ export const ROLE_MENUS: Record<Role, { label: string; to: string; icon: string 
     { label: "Leaves", to: "/leaves", icon: "CalendarOff" },
     { label: "Reports", to: "/reports", icon: "BarChart3" },
     { label: "Settings", to: "/settings", icon: "Settings" },
+    { label: "Profile", to: "/profile", icon: "User" },
   ],
   hr: [
     { label: "Dashboard", to: "/dashboard", icon: "LayoutDashboard" },
@@ -143,6 +147,7 @@ export const ROLE_MENUS: Record<Role, { label: string; to: string; icon: string 
     { label: "Tasks", to: "/tasks", icon: "ListTodo" },
     { label: "Leaves", to: "/leaves", icon: "CalendarOff" },
     { label: "Reports", to: "/reports", icon: "BarChart3" },
+    { label: "Profile", to: "/profile", icon: "User" },
   ],
   employee: [
     { label: "Dashboard", to: "/dashboard", icon: "LayoutDashboard" },

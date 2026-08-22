@@ -17,7 +17,7 @@ import { Search, Plus, Eye, EyeOff, Pencil, Trash2 } from "lucide-react";
 import { StatusBadge } from "../dashboard/page";
 import { toast } from "sonner";
 
-const DEPARTMENTS = ["Design", "Marketing", "Sales", "HR", "Web", "Finance", "Operations"];
+const DEPARTMENTS = ["Design", "Marketing", "Sales", "HR", "Web", "Finance", "Operations", "Mobile App"];
 
 export default function EmployeesPage() {
   const user = useAuth();
@@ -131,7 +131,7 @@ export default function EmployeesPage() {
 
 function AddEmployeeDialog({ onClose }: { onClose: () => void }) {
   const [form, setForm] = useState({
-    name: "", email: "", mobile: "", department: "Engineering", designation: "", joiningDate: new Date().toISOString().slice(0,10), salary: 60000, password: "tushar123",
+    name: "", email: "", mobile: "", department: "Design", designation: "", joiningDate: new Date().toISOString().slice(0,10), salary: 60000, password: "tushar123", avatar: "",
   });
   const [showPw, setShowPw] = useState(false);
   async function submit() {
@@ -144,6 +144,48 @@ function AddEmployeeDialog({ onClose }: { onClose: () => void }) {
     <DialogContent className="max-w-lg">
       <DialogHeader><DialogTitle>Add New Employee</DialogTitle></DialogHeader>
       <div className="grid grid-cols-2 gap-3">
+        {/* Photo Upload Row */}
+        <div className="col-span-2 flex items-center gap-4 py-2 border-b border-muted">
+          <Avatar className="h-16 w-16 ring-2 ring-primary/10">
+            <AvatarImage src={form.avatar} className="object-cover" />
+            <AvatarFallback className="text-xl font-semibold">{form.name?.[0]?.toUpperCase() || "E"}</AvatarFallback>
+          </Avatar>
+          <div className="space-y-1">
+            <Label className="text-sm font-medium">Employee Photo</Label>
+            <div className="flex gap-2">
+              <Button type="button" variant="outline" size="sm" asChild>
+                <label className="cursor-pointer">
+                  Choose Image
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) {
+                        if (file.size > 2 * 1024 * 1024) {
+                          toast.error("Image file size must be less than 2MB");
+                          return;
+                        }
+                        const reader = new FileReader();
+                        reader.onloadend = () => {
+                          setForm({ ...form, avatar: reader.result as string });
+                        };
+                        reader.readAsDataURL(file);
+                      }
+                    }}
+                  />
+                </label>
+              </Button>
+              {form.avatar && (
+                <Button type="button" variant="ghost" size="sm" className="text-destructive" onClick={() => setForm({ ...form, avatar: "" })}>
+                  Remove
+                </Button>
+              )}
+            </div>
+          </div>
+        </div>
+
         <div className="col-span-2 space-y-1"><Label>Full Name</Label><Input value={form.name} onChange={(e) => setForm({...form, name: e.target.value})} /></div>
         <div className="space-y-1"><Label>Email</Label><Input value={form.email} onChange={(e) => setForm({...form, email: e.target.value})} /></div>
         <div className="space-y-1"><Label>Mobile</Label><Input value={form.mobile} onChange={(e) => setForm({...form, mobile: e.target.value})} /></div>
@@ -185,6 +227,7 @@ function EditEmployeeDialog({ employee, open, onClose }: { employee: Employee; o
     joiningDate: employee.joiningDate,
     salary: employee.salary,
     password: employee.password,
+    avatar: employee.avatar || "",
   });
   const [showPw, setShowPw] = useState(false);
   async function submit() {
@@ -198,6 +241,48 @@ function EditEmployeeDialog({ employee, open, onClose }: { employee: Employee; o
       <DialogContent className="max-w-lg">
         <DialogHeader><DialogTitle>Edit Employee</DialogTitle></DialogHeader>
         <div className="grid grid-cols-2 gap-3">
+          {/* Photo Upload Row */}
+          <div className="col-span-2 flex items-center gap-4 py-2 border-b border-muted">
+            <Avatar className="h-16 w-16 ring-2 ring-primary/10">
+              <AvatarImage src={form.avatar} className="object-cover" />
+              <AvatarFallback className="text-xl font-semibold">{form.name?.[0]?.toUpperCase() || "E"}</AvatarFallback>
+            </Avatar>
+            <div className="space-y-1">
+              <Label className="text-sm font-medium">Employee Photo</Label>
+              <div className="flex gap-2">
+                <Button type="button" variant="outline" size="sm" asChild>
+                  <label className="cursor-pointer">
+                    Choose Image
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          if (file.size > 2 * 1024 * 1024) {
+                            toast.error("Image file size must be less than 2MB");
+                            return;
+                          }
+                          const reader = new FileReader();
+                          reader.onloadend = () => {
+                            setForm({ ...form, avatar: reader.result as string });
+                          };
+                          reader.readAsDataURL(file);
+                        }
+                      }}
+                    />
+                  </label>
+                </Button>
+                {form.avatar && (
+                  <Button type="button" variant="ghost" size="sm" className="text-destructive" onClick={() => setForm({ ...form, avatar: "" })}>
+                    Remove
+                  </Button>
+                )}
+              </div>
+            </div>
+          </div>
+
           <div className="col-span-2 space-y-1"><Label>Full Name</Label><Input value={form.name} onChange={(e) => setForm({...form, name: e.target.value})} /></div>
           <div className="space-y-1"><Label>Email</Label><Input value={form.email} onChange={(e) => setForm({...form, email: e.target.value})} /></div>
           <div className="space-y-1"><Label>Mobile</Label><Input value={form.mobile} onChange={(e) => setForm({...form, mobile: e.target.value})} /></div>

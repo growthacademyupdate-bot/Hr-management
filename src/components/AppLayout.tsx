@@ -93,10 +93,42 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
 
       {/* Main */}
       <div className="flex-1 flex flex-col min-w-0">
-        <header className="sticky top-0 z-20 h-16 bg-card/95 backdrop-blur border-b flex items-center gap-3 px-4 lg:px-6">
+        <header className="sticky top-0 z-20 h-16 bg-card/95 backdrop-blur border-b flex items-center gap-4 px-4 lg:px-6">
           <Button variant="ghost" size="icon" className="lg:hidden" onClick={() => setMobileOpen(true)}>
             <Menu className="h-5 w-5" />
           </Button>
+
+          {/* 1. User Profile First */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button className="flex items-center gap-2 rounded-lg pl-1 pr-3 py-1 hover:bg-muted transition cursor-pointer">
+                <Avatar className="h-8 w-8">
+                  <AvatarImage src={user.avatar} />
+                  <AvatarFallback>{user.name[0]}</AvatarFallback>
+                </Avatar>
+                <div className="hidden sm:block text-left leading-tight">
+                  <div className="text-sm font-semibold">{user.name}</div>
+                  <div className="text-xs text-muted-foreground capitalize">{user.role}</div>
+                </div>
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="w-56">
+              <DropdownMenuLabel>My Account</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={() => router.push("/profile")} className="cursor-pointer">
+                <UserIcon className="h-4 w-4 mr-2" />Profile
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => router.push("/settings")} className="cursor-pointer">
+                <Settings className="h-4 w-4 mr-2" />Settings
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={() => { logout(); router.push("/"); }} className="text-destructive focus:bg-destructive/10 focus:text-destructive cursor-pointer">
+                <LogOut className="h-4 w-4 mr-2" />Log out
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+
+          {/* 2. Search Bar Second */}
           <div className="relative hidden md:block flex-1 max-w-md">
             <Search className="h-4 w-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
             <Input 
@@ -108,53 +140,31 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
           </div>
           <div className="flex-1 md:hidden" />
 
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon" className="relative">
-                <Bell className="h-5 w-5" />
-                <Badge className="absolute -top-1 -right-1 h-5 w-5 p-0 grid place-items-center bg-primary text-primary-foreground">3</Badge>
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-80">
-              <DropdownMenuLabel>Notifications</DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              {["New leave request from Aarav Sharma","Task 'Design landing page' completed","System backup successful"].map((n, i) => (
-                <DropdownMenuItem key={i} className="py-3">
-                  <div>
-                    <div className="text-sm font-medium">{n}</div>
-                    <div className="text-xs text-muted-foreground">{i + 1}h ago</div>
-                  </div>
-                </DropdownMenuItem>
-              ))}
-            </DropdownMenuContent>
-          </DropdownMenu>
+          {/* 3. Notifications & Controls Right */}
+          <div className="flex items-center gap-2 ml-auto">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon" className="relative">
+                  <Bell className="h-5 w-5" />
+                  <Badge className="absolute -top-1 -right-1 h-5 w-5 p-0 grid place-items-center bg-primary text-primary-foreground">3</Badge>
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-80">
+                <DropdownMenuLabel>Notifications</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                {["New leave request from Aarav Sharma","Task 'Design landing page' completed","System backup successful"].map((n, i) => (
+                  <DropdownMenuItem key={i} className="py-3">
+                    <div>
+                      <div className="text-sm font-medium">{n}</div>
+                      <div className="text-xs text-muted-foreground">{i + 1}h ago</div>
+                    </div>
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
 
-          <Button variant="ghost" size="icon"><Sun className="h-5 w-5" /></Button>
-
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <button className="flex items-center gap-2 rounded-lg pl-1 pr-3 py-1 hover:bg-muted transition">
-                <Avatar className="h-8 w-8">
-                  <AvatarImage src={user.avatar} />
-                  <AvatarFallback>{user.name[0]}</AvatarFallback>
-                </Avatar>
-                <div className="hidden sm:block text-left leading-tight">
-                  <div className="text-sm font-semibold">{user.name}</div>
-                  <div className="text-xs text-muted-foreground capitalize">{user.role}</div>
-                </div>
-              </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-56">
-              <DropdownMenuLabel>My Account</DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={() => router.push("/profile")}><UserIcon className="h-4 w-4 mr-2" />Profile</DropdownMenuItem>
-              <DropdownMenuItem><Settings className="h-4 w-4 mr-2" />Settings</DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={() => { logout(); router.push("/"); }} className="text-destructive focus:bg-destructive/10 focus:text-destructive cursor-pointer">
-                <LogOut className="h-4 w-4 mr-2" />Log out
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+            <Button variant="ghost" size="icon"><Sun className="h-5 w-5" /></Button>
+          </div>
         </header>
 
         <main className="flex-1 p-4 lg:p-8 max-w-[1600px] w-full mx-auto">
