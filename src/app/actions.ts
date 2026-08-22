@@ -7,6 +7,7 @@ import { Leave } from "@/models/Leave";
 import { Attendance } from "@/models/Attendance";
 import { Activity } from "@/models/Activity";
 import { Setting } from "@/models/Setting";
+import { Holiday } from "@/models/Holiday";
 
 // Helper to serialize Mongoose documents
 function serialize(doc: any) {
@@ -254,8 +255,33 @@ export async function addLeave(data: any, userId: string) {
     if (!isNaN(num) && num > max) max = num;
   }
   const id = `LV${String(max + 1).padStart(3, "0")}`;
-  const days = Math.round((newEnd - newStart) / (1000 * 60 * 60 * 24)) + 1;
   
+  let days = Math.round((newEnd - newStart) / (1000 * 60 * 60 * 24)) + 1;
+  
+  // Find overlapping company holidays and subtract them
+  const holidays = await Holiday.find({
+    isActive: true,
+    holidayType: "COMPANY_HOLIDAY",
+    $or: [
+      { startDate: { $lte: data.endDate }, endDate: { $gte: data.startDate } }
+    ]
+  }).lean();
+
+  let holidayDates = new Set<string>();
+  for (const h of holidays) {
+    let curr = new Date((h as any).startDate);
+    const endHol = new Date((h as any).endDate);
+    while (curr <= endHol) {
+      if (curr.getTime() >= newStart && curr.getTime() <= newEnd) {
+        holidayDates.add(curr.toISOString().slice(0, 10));
+      }
+      curr.setDate(curr.getDate() + 1);
+    }
+  }
+  
+  days = Math.max(0, days - holidayDates.size);
+  if (days === 0) throw new Error("Leave duration is 0 after excluding company holidays.");
+
   const leave = await Leave.create({ ...data, id, employeeId: userId, numberOfDays: days, appliedAt: new Date().toISOString(), status: "pending" });
   
   await createActivity({
@@ -438,5 +464,84 @@ export async function updateSystemSettings(settings: Record<string, string>) {
     Setting.findOneAndUpdate({ key }, { value }, { new: true, upsert: true }).lean()
   );
   await Promise.all(promises);
+  return { success: true };
+}
+
+// ---------------- Holidays ----------------
+
+export async function getHolidays() {
+  await connectDB();
+  const holidays = await Holiday.find({}).sort({ startDate: 1 }).lean();
+  return serialize(holidays);
+}
+
+export async function createHoliday(data: any, adminId: string, userRole: string) {
+  await connectDB();
+  if (userRole !== "admin") throw new Error("Unauthorized: Only Admin can create holidays");
+
+  // Validate dates
+  if (new Date(data.endDate) < new Date(data.startDate)) {
+    throw new Error("End date cannot be before start date");
+  }
+
+  const holiday = await Holiday.create({
+    ...data,
+    id: `HOL-${Date.now()}`,
+    createdBy: adminId
+  });
+
+  await createActivity({
+    employeeId: adminId, actorId: adminId, actorRole: userRole,
+    activityType: "HOLIDAY_CREATED", module: "HOLIDAY", referenceId: holiday.id,
+    message: `Admin created a new holiday: ${holiday.name}.`,
+    metadata: { holidayId: holiday.id }
+  });
+
+  return serialize(holiday);
+}
+
+export async function updateHoliday(id: string, data: any, adminId: string, userRole: string) {
+  await connectDB();
+  if (userRole !== "admin") throw new Error("Unauthorized: Only Admin can update holidays");
+
+  // Validate dates
+  if (data.startDate && data.endDate && new Date(data.endDate) < new Date(data.startDate)) {
+    throw new Error("End date cannot be before start date");
+  }
+
+  const holiday = await Holiday.findOneAndUpdate(
+    { id },
+    { ...data, updatedBy: adminId },
+    { new: true }
+  ).lean();
+  
+  if (!holiday) throw new Error("Holiday not found");
+
+  await createActivity({
+    employeeId: adminId, actorId: adminId, actorRole: userRole,
+    activityType: "HOLIDAY_UPDATED", module: "HOLIDAY", referenceId: id,
+    message: `Admin updated the holiday: ${holiday.name}.`,
+    metadata: { holidayId: id }
+  });
+
+  return serialize(holiday);
+}
+
+export async function deleteHoliday(id: string, adminId: string, userRole: string) {
+  await connectDB();
+  if (userRole !== "admin") throw new Error("Unauthorized: Only Admin can delete holidays");
+
+  const holiday = await Holiday.findOne({ id });
+  if (!holiday) throw new Error("Holiday not found");
+
+  await Holiday.findOneAndDelete({ id });
+
+  await createActivity({
+    employeeId: adminId, actorId: adminId, actorRole: userRole,
+    activityType: "HOLIDAY_DELETED", module: "HOLIDAY", referenceId: id,
+    message: `Admin deleted the holiday: ${holiday.name}.`,
+    metadata: { holidayId: id }
+  });
+
   return { success: true };
 }

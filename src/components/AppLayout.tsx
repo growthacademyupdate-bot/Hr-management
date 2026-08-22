@@ -5,7 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useAuth, logout, ROLE_MENUS, useGlobalSearch, api } from "@/lib/store";
 import {
   LayoutDashboard, Users, CalendarCheck, ListTodo, CalendarOff, BarChart3, Settings, Activity, User as UserIcon,
-  Bell, LogOut, Menu, Search, Sun,
+  Bell, LogOut, Menu, Search, Sun, CalendarDays
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -17,7 +17,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 
 const ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
-  LayoutDashboard, Users, CalendarCheck, ListTodo, CalendarOff, BarChart3, Settings, Activity, User: UserIcon,
+  LayoutDashboard, Users, CalendarCheck, ListTodo, CalendarOff, BarChart3, Settings, Activity, User: UserIcon, CalendarDays
 };
 
 export function AppLayout({ children }: { children: React.ReactNode }) {

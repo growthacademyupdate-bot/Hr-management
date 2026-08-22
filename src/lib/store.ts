@@ -4,7 +4,8 @@ import {
   getEmployees, addEmployee, updateEmployee, deleteEmployee,
   getTasks, addTask, updateTask, deleteTask, addComment, updateTaskStatus, reviewTask,
   getLeaves, addLeave, cancelLeave, hrReviewLeave, adminReviewLeave,
-  getAttendance, getActivities, logLogoutActivity, deleteAttendance, updateSystemSetting, getSystemSettings, updateSystemSettings
+  getAttendance, getActivities, logLogoutActivity, deleteAttendance, updateSystemSetting, getSystemSettings, updateSystemSettings,
+  getHolidays, createHoliday, updateHoliday, deleteHoliday
 } from "@/app/actions";
 
 export type Role = "admin" | "hr" | "employee";
@@ -33,12 +34,16 @@ export interface Activity {
   actorId?: string; actorRole?: string; module?: string; referenceId?: string; metadata?: any;
 }
 
+export interface Holiday {
+  id: string; name: string; description?: string; holidayType: "COMPANY_HOLIDAY" | "OPTIONAL_HOLIDAY" | "RESTRICTED_HOLIDAY" | "CUSTOM_HOLIDAY"; startDate: string; endDate: string; isActive: boolean; createdBy?: string; updatedBy?: string; createdAt: string; updatedAt: string;
+}
+
 interface DB {
-  employees: Employee[]; attendance: AttendanceRecord[]; tasks: Task[]; leaves: Leave[]; activities: Activity[];
+  employees: Employee[]; attendance: AttendanceRecord[]; tasks: Task[]; leaves: Leave[]; activities: Activity[]; holidays: Holiday[];
 }
 
 const AUTH_KEY = "ems_auth_v1";
-let currentDB: DB = { employees: [], attendance: [], tasks: [], leaves: [], activities: [] };
+let currentDB: DB = { employees: [], attendance: [], tasks: [], leaves: [], activities: [], holidays: [] };
 let globalSearch = "";
 const listeners = new Set<() => void>();
 
@@ -54,9 +59,9 @@ export function useDB() {
   useEffect(() => {
     const user = getCurrentUser();
     // Fetch real data on mount
-    Promise.all([getEmployees(), getAttendance(), getTasks(user?.role, user?.employeeId || user?.id), getLeaves(user?.role, user?.employeeId || user?.id), getActivities()])
-      .then(([emps, atts, ts, lvs, acts]) => {
-        currentDB = { employees: emps, attendance: atts, tasks: ts, leaves: lvs, activities: acts };
+    Promise.all([getEmployees(), getAttendance(), getTasks(user?.role, user?.employeeId || user?.id), getLeaves(user?.role, user?.employeeId || user?.id), getActivities(), getHolidays()])
+      .then(([emps, atts, ts, lvs, acts, hols]) => {
+        currentDB = { employees: emps, attendance: atts, tasks: ts, leaves: lvs, activities: acts, holidays: hols };
         notify();
       })
       .catch(console.error);
@@ -96,6 +101,10 @@ export const api = {
   async updateSystemSetting(key: string, value: string) { await updateSystemSetting(key, value); },
   async getSystemSettings() { return await getSystemSettings(); },
   async updateSystemSettings(settings: Record<string, string>) { return await updateSystemSettings(settings); },
+  
+  async createHoliday(data: any) { const user = getCurrentUser(); if(!user) return; const h = await createHoliday(data, user.employeeId || user.id, user.role); currentDB.holidays = [...currentDB.holidays, h].sort((a,b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime()); notify(); return h; },
+  async updateHoliday(id: string, patch: any) { const user = getCurrentUser(); if(!user) return; const h = await updateHoliday(id, patch, user.employeeId || user.id, user.role); currentDB.holidays = currentDB.holidays.map(x => x.id === id ? h : x); notify(); },
+  async deleteHoliday(id: string) { const user = getCurrentUser(); if(!user) return; await deleteHoliday(id, user.employeeId || user.id, user.role); currentDB.holidays = currentDB.holidays.filter(x => x.id !== id); notify(); },
 };
 
 // Auth
@@ -137,6 +146,7 @@ export const ROLE_MENUS: Record<Role, { label: string; to: string; icon: string 
     { label: "Attendance", to: "/attendance", icon: "CalendarCheck" },
     { label: "Tasks", to: "/tasks", icon: "ListTodo" },
     { label: "Leaves", to: "/leaves", icon: "CalendarOff" },
+    { label: "Holidays", to: "/holidays", icon: "CalendarDays" },
     { label: "Reports", to: "/reports", icon: "BarChart3" },
     { label: "Settings", to: "/settings", icon: "Settings" },
     { label: "Profile", to: "/profile", icon: "User" },
@@ -146,6 +156,7 @@ export const ROLE_MENUS: Record<Role, { label: string; to: string; icon: string 
     { label: "Employees", to: "/employees", icon: "Users" },
     { label: "Tasks", to: "/tasks", icon: "ListTodo" },
     { label: "Leaves", to: "/leaves", icon: "CalendarOff" },
+    { label: "Holidays", to: "/holidays", icon: "CalendarDays" },
     { label: "Reports", to: "/reports", icon: "BarChart3" },
     { label: "Profile", to: "/profile", icon: "User" },
   ],
@@ -155,6 +166,7 @@ export const ROLE_MENUS: Record<Role, { label: string; to: string; icon: string 
     { label: "Attendance", to: "/attendance", icon: "CalendarCheck" },
     { label: "Activity", to: "/activity", icon: "Activity" },
     { label: "Leaves", to: "/leaves", icon: "CalendarOff" },
+    { label: "Holidays", to: "/holidays", icon: "CalendarDays" },
     { label: "Profile", to: "/profile", icon: "User" },
   ],
 };

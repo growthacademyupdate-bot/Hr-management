@@ -19,7 +19,7 @@ const AttendanceSchema = new mongoose.Schema({
   
   sessions: [SessionSchema],
 
-  status: { type: String, enum: ["Present", "Absent", "Leave", "Half Day", "Short Day", "Incomplete", "Pending"], default: "Absent" },
+  status: { type: String, enum: ["Present", "Absent", "Leave", "Half Day", "Short Day", "Incomplete", "Pending", "Holiday"], default: "Absent" },
   productivity: { type: Number, default: 0 },
   
   // Keep legacy string fields to not completely break un-updated frontend components

@@ -18,14 +18,16 @@ export default function Dashboard() {
 
   const today = new Date().toISOString().slice(0, 10);
   const employeeIds = new Set(db.employees.map(e => e.id));
+  const isTodayHoliday = db.holidays?.some(h => h.isActive && h.holidayType === "COMPANY_HOLIDAY" && h.startDate <= today && h.endDate >= today);
   const todayAtt = db.attendance.filter((a) => a.date === today && employeeIds.has(a.employeeId));
   const present = todayAtt.filter((a) => a.status === "Present").length;
-  const absent = db.employees.length - todayAtt.length + todayAtt.filter((a) => a.status === "Absent").length;
+  const absent = isTodayHoliday ? 0 : db.employees.length - todayAtt.length + todayAtt.filter((a) => a.status === "Absent").length;
   const active = db.employees.filter((e) => e.status === "Active").length;
   const completed = db.tasks.filter((t) => (t.status === "completed" || t.status === "reviewed") && employeeIds.has(t.assignedTo)).length;
   const pending = db.tasks.filter((t) => (t.status === "assigned" || t.status === "working_progress") && employeeIds.has(t.assignedTo)).length;
   const overdueTasks = db.tasks.filter(t => new Date() > new Date(t.dueDate) && !["completed", "reviewed"].includes(t.status)).length;
   const productivity = todayAtt.length ? Math.round(todayAtt.reduce((s, a) => s + a.productivity, 0) / todayAtt.length) : 0;
+  const upcomingHolidays = db.holidays?.filter(h => h.isActive && h.startDate >= today).sort((a,b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime()).slice(0, 3) || [];
 
   if (user.role === "employee") return <EmployeeDashboard />;
 
@@ -33,6 +35,7 @@ export default function Dashboard() {
     { name: "Present", value: present, color: "var(--color-success)" },
     { name: "Absent", value: Math.max(absent, 0), color: "var(--color-destructive)" },
     { name: "Leave", value: todayAtt.filter((a) => a.status === "Leave").length, color: "var(--color-warning)" },
+    ...(isTodayHoliday ? [{ name: "Holiday", value: db.employees.length - present, color: "var(--color-info)" }] : []),
   ];
   const taskPie = [
     { name: "Completed/Reviewed", value: completed, color: "var(--color-success)" },
@@ -258,6 +261,7 @@ function EmployeeDashboard() {
   });
 
   const myActivities = db.activities.filter((a) => a.employeeId === empId && employeeIds.has(a.employeeId)).slice(0, 10);
+  const upcomingHolidays = db.holidays?.filter(h => h.isActive && h.startDate >= today).sort((a,b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime()).slice(0, 3) || [];
 
   return (
     <div className="space-y-6">
@@ -274,7 +278,7 @@ function EmployeeDashboard() {
         <StatCard label="In Progress" value={myTasks.filter(t => t.status === "working_progress").length} icon={Activity} tone="info" />
       </div>
 
-      <div className="grid lg:grid-cols-2 gap-4">
+      <div className="grid lg:grid-cols-3 gap-4">
         <Card className="border-0 shadow-sm">
           <CardHeader><CardTitle>Weekly Hours</CardTitle></CardHeader>
           <CardContent className="h-64">
@@ -308,6 +312,28 @@ function EmployeeDashboard() {
                 </li>
               ))}
             </ol>
+          </CardContent>
+        </Card>
+        <Card className="border-0 shadow-sm">
+          <CardHeader><CardTitle>Upcoming Holidays</CardTitle></CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              {upcomingHolidays.length === 0 && <div className="text-sm text-muted-foreground">No upcoming holidays.</div>}
+              {upcomingHolidays.map((h) => (
+                <div key={h.id} className="flex flex-col gap-1 bg-muted/40 p-3 rounded-lg border border-border/50">
+                  <div className="flex justify-between items-start">
+                    <p className="font-medium text-sm leading-none">{h.name}</p>
+                    <Badge variant="outline" className={`text-[10px] px-1 py-0 h-4 ${h.holidayType === "COMPANY_HOLIDAY" ? "bg-success/10 text-success" : ""}`}>
+                      {h.holidayType.replace("_", " ")}
+                    </Badge>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {new Date(h.startDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
+                    {h.startDate !== h.endDate && ` - ${new Date(h.endDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}`}
+                  </p>
+                </div>
+              ))}
+            </div>
           </CardContent>
         </Card>
       </div>
