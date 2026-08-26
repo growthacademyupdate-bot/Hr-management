@@ -135,7 +135,10 @@ function AddEmployeeDialog({ onClose }: { onClose: () => void }) {
   });
   const [showPw, setShowPw] = useState(false);
   async function submit() {
-    if (!form.name || !form.email) { toast.error("Name and email are required"); return; }
+    if (!form.name || !form.email || !form.mobile || !form.designation || !form.password) { 
+      toast.error("Please fill in all required fields (Name, Email, Mobile, Designation, Password)"); 
+      return; 
+    }
     const newEmp = await api.addEmployee({ ...form, status: "Active" });
     toast.success(`Employee added! ID: ${newEmp.id}`);
     onClose();
@@ -231,7 +234,10 @@ function EditEmployeeDialog({ employee, open, onClose }: { employee: Employee; o
   });
   const [showPw, setShowPw] = useState(false);
   async function submit() {
-    if (!form.name || !form.email) { toast.error("Name and email are required"); return; }
+    if (!form.name || !form.email || !form.mobile || !form.designation || !form.password) { 
+      toast.error("Please fill in all required fields (Name, Email, Mobile, Designation, Password)"); 
+      return; 
+    }
     await api.updateEmployee(employee.id, { ...form, status: employee.status });
     toast.success("Employee updated");
     onClose();

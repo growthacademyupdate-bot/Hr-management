@@ -214,7 +214,17 @@ export async function addEmployee(data: any) {
     if (result.success) data.avatar = result.url;
   }
   
-  const emp = await Employee.create({ ...data, id, avatar: data.avatar || "" });
+  const emp = await Employee.create({ 
+    designation: "Staff",
+    mobile: "Not Provided",
+    department: "General",
+    joiningDate: new Date().toISOString().slice(0, 10),
+    salary: 0,
+    password: "password123",
+    ...data, 
+    id, 
+    avatar: data.avatar || "" 
+  });
   return serialize(emp);
 }
 
