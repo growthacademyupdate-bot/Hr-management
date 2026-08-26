@@ -1,15 +1,20 @@
 "use client";
 
+import { useMemo, useState } from "react";
 import { useAuth, useDB } from "@/lib/store";
 import { PageHeader } from "@/components/PageHeader";
 import { StatCard } from "@/components/StatCard";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Users, UserCheck, UserX, Activity, ListChecks, CheckCircle2, Clock, TrendingUp } from "lucide-react";
+import { Users, UserCheck, UserX, Activity, ListChecks, CheckCircle2, Clock, TrendingUp, Search } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Input } from "@/components/ui/input";
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, PieChart, Pie, Cell, AreaChart, Area, Legend } from "recharts";
+import { useDataTable } from "@/hooks/useDataTable";
+import { SortableHeader } from "@/components/SortableHeader";
+import { DataTablePagination } from "@/components/DataTablePagination";
 
 export default function Dashboard() {
   const user = useAuth();
@@ -157,56 +162,98 @@ export default function Dashboard() {
         </Card>
       </div>
 
-      <Card className="border-0 shadow-sm">
-        <CardHeader><CardTitle>Employee Activity</CardTitle></CardHeader>
-        <CardContent>
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Employee</TableHead>
-                  <TableHead>Department</TableHead>
-                  <TableHead>Login</TableHead>
-                  <TableHead>Logout</TableHead>
-                  <TableHead>Hours</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="w-48">Productivity</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {db.employees.slice(0, 8).map((emp) => {
-                  const att = todayAtt.find((a) => a.employeeId === emp.id);
-                  return (
-                    <TableRow key={emp.id}>
-                      <TableCell>
-                        <div className="flex items-center gap-3">
-                          <Avatar className="h-8 w-8"><AvatarImage src={emp.avatar} /><AvatarFallback>{emp.name[0]}</AvatarFallback></Avatar>
-                          <div>
-                            <div className="font-medium">{emp.name}</div>
-                            <div className="text-xs text-muted-foreground">{emp.id}</div>
-                          </div>
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-muted-foreground">{emp.department}</TableCell>
-                      <TableCell>{att?.firstLoginAt ? new Date(att.firstLoginAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : att?.loginTime || "—"}</TableCell>
-                      <TableCell>{att?.lastLogoutAt ? new Date(att.lastLogoutAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : att?.logoutTime || "—"}</TableCell>
-                      <TableCell>{att?.totalWorkingSeconds ? formatDuration(att.totalWorkingSeconds) : `${att?.workingHours || 0}h`}</TableCell>
-                      <TableCell><StatusBadge status={att?.status || "Absent"} /></TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-3">
-                          <Progress value={att?.productivity || 0} className="h-2" />
-                          <span className="text-xs font-medium tabular-nums w-10">{att?.productivity || 0}%</span>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
-          </div>
-        </CardContent>
-      </Card>
+      <EmployeeActivityTable todayAtt={todayAtt} />
     </div>
+  );
+}
+
+function EmployeeActivityTable({ todayAtt }: { todayAtt: any[] }) {
+  const db = useDB();
+
+  const activityData = useMemo(() => {
+    return db.employees.map((emp) => {
+      const att = todayAtt.find((a) => a.employeeId === emp.id);
+      return {
+        id: emp.id,
+        name: emp.name,
+        avatar: emp.avatar,
+        department: emp.department,
+        status: att?.status || "Absent",
+        firstLoginAt: att?.firstLoginAt,
+        loginTime: att?.firstLoginAt ? new Date(att.firstLoginAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : att?.loginTime || "—",
+        lastLogoutAt: att?.lastLogoutAt,
+        logoutTime: att?.lastLogoutAt ? new Date(att.lastLogoutAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : att?.logoutTime || "—",
+        workingSeconds: att?.totalWorkingSeconds || (att?.workingHours ? att.workingHours * 3600 : 0),
+        hoursLabel: att?.totalWorkingSeconds ? formatDuration(att.totalWorkingSeconds) : `${att?.workingHours || 0}h`,
+        productivity: att?.productivity || 0,
+      };
+    });
+  }, [db.employees, todayAtt]);
+
+  const { search, setSearch, sortField, sortOrder, toggleSort, page, setPage, pageSize, setPageSize, totalPages, totalItems, startIndex, endIndex, paginatedData } = useDataTable({
+    data: activityData,
+    searchFields: (e) => [e.name, e.id, e.department, e.status, e.loginTime, e.logoutTime],
+    defaultSortField: "name",
+    defaultSortOrder: "asc",
+    defaultPageSize: 5,
+  });
+
+  return (
+    <Card className="border-0 shadow-sm overflow-hidden">
+      <CardHeader className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <CardTitle>Employee Activity</CardTitle>
+        <div className="relative w-full sm:w-64">
+          <Search className="h-4 w-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+          <Input placeholder="Search employee activity..." className="pl-9 text-xs" value={search} onChange={(e) => setSearch(e.target.value)} />
+        </div>
+      </CardHeader>
+      <CardContent className="p-0">
+        <div className="overflow-x-auto">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <SortableHeader field="name" currentSortField={sortField} currentSortOrder={sortOrder} onSort={toggleSort}>Employee</SortableHeader>
+                <SortableHeader field="department" currentSortField={sortField} currentSortOrder={sortOrder} onSort={toggleSort}>Department</SortableHeader>
+                <SortableHeader field="loginTime" currentSortField={sortField} currentSortOrder={sortOrder} onSort={toggleSort}>Login</SortableHeader>
+                <SortableHeader field="logoutTime" currentSortField={sortField} currentSortOrder={sortOrder} onSort={toggleSort}>Logout</SortableHeader>
+                <SortableHeader field="workingSeconds" currentSortField={sortField} currentSortOrder={sortOrder} onSort={toggleSort}>Hours</SortableHeader>
+                <SortableHeader field="status" currentSortField={sortField} currentSortOrder={sortOrder} onSort={toggleSort}>Status</SortableHeader>
+                <SortableHeader field="productivity" currentSortField={sortField} currentSortOrder={sortOrder} onSort={toggleSort} className="w-48">Productivity</SortableHeader>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {paginatedData.length === 0 ? (
+                <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground">No matching activity.</TableCell></TableRow>
+              ) : paginatedData.map((emp) => (
+                <TableRow key={emp.id}>
+                  <TableCell>
+                    <div className="flex items-center gap-3">
+                      <Avatar className="h-8 w-8"><AvatarImage src={emp.avatar} /><AvatarFallback>{emp.name[0]}</AvatarFallback></Avatar>
+                      <div>
+                        <div className="font-medium">{emp.name}</div>
+                        <div className="text-xs text-muted-foreground">{emp.id}</div>
+                      </div>
+                    </div>
+                  </TableCell>
+                  <TableCell className="text-muted-foreground">{emp.department}</TableCell>
+                  <TableCell>{emp.loginTime}</TableCell>
+                  <TableCell>{emp.logoutTime}</TableCell>
+                  <TableCell>{emp.hoursLabel}</TableCell>
+                  <TableCell><StatusBadge status={emp.status} /></TableCell>
+                  <TableCell>
+                    <div className="flex items-center gap-3">
+                      <Progress value={emp.productivity} className="h-2" />
+                      <span className="text-xs font-medium tabular-nums w-10">{emp.productivity}%</span>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+        <DataTablePagination page={page} pageSize={pageSize} totalPages={totalPages} totalItems={totalItems} startIndex={startIndex} endIndex={endIndex} onPageChange={setPage} onPageSizeChange={setPageSize} pageSizeOptions={[5, 10, 20]} />
+      </CardContent>
+    </Card>
   );
 }
 

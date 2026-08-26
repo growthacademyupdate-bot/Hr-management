@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useAuth, useDB, api, useGlobalSearch } from "@/lib/store";
 import { PageHeader } from "@/components/PageHeader";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -13,6 +13,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { Switch } from "@/components/ui/switch";
+import { Search } from "lucide-react";
+import { useDataTable } from "@/hooks/useDataTable";
+import { SortableHeader } from "@/components/SortableHeader";
+import { DataTablePagination } from "@/components/DataTablePagination";
 
 export function HolidayTypeBadge({ type }: { type: string }) {
   const map: Record<string, string> = {
@@ -33,22 +37,54 @@ export function HolidayTypeBadge({ type }: { type: string }) {
 export default function HolidaysPage() {
   const user = useAuth();
   const db = useDB();
-  const globalSearch = useGlobalSearch().toLowerCase();
+  const globalSearch = useGlobalSearch();
 
   const [isApplyOpen, setIsApplyOpen] = useState(false);
   const [editingHoliday, setEditingHoliday] = useState<any>(null);
 
+  const getDays = (start: string, end: string) => {
+    const s = new Date(start);
+    const e = new Date(end);
+    return Math.max(1, Math.round((e.getTime() - s.getTime()) / (1000 * 60 * 60 * 24)) + 1);
+  };
+
+  const holidaysWithMeta = useMemo(() => {
+    return (db.holidays || []).map((h) => ({
+      ...h,
+      totalDays: getDays(h.startDate, h.endDate),
+    }));
+  }, [db.holidays]);
+
+  const {
+    search,
+    setSearch,
+    sortField,
+    sortOrder,
+    toggleSort,
+    page,
+    setPage,
+    pageSize,
+    setPageSize,
+    totalPages,
+    totalItems,
+    startIndex,
+    endIndex,
+    paginatedData,
+  } = useDataTable({
+    data: holidaysWithMeta,
+    searchFields: (h) => [h.name, h.holidayType, h.description, h.startDate, h.endDate],
+    defaultSortField: "startDate",
+    defaultSortOrder: "asc",
+  });
+
+  useEffect(() => {
+    if (globalSearch) {
+      setSearch(globalSearch);
+    }
+  }, [globalSearch, setSearch]);
+
   if (!user) return null;
   const isAdmin = user.role === "admin";
-
-  let visibleHolidays = db.holidays || [];
-  if (globalSearch) {
-    visibleHolidays = visibleHolidays.filter((h) => 
-      h.name?.toLowerCase().includes(globalSearch) ||
-      h.holidayType.toLowerCase().includes(globalSearch) ||
-      h.description?.toLowerCase().includes(globalSearch)
-    );
-  }
 
   const handleDelete = async (id: string) => {
     if (confirm("Are you sure you want to delete this holiday? It may affect leave and attendance reports.")) {
@@ -71,12 +107,6 @@ export default function HolidaysPage() {
   };
 
   const isMultiDay = (start: string, end: string) => start !== end;
-  
-  const getDays = (start: string, end: string) => {
-    const s = new Date(start);
-    const e = new Date(end);
-    return Math.max(1, Math.round((e.getTime() - s.getTime()) / (1000 * 60 * 60 * 24)) + 1);
-  };
 
   return (
     <div className="space-y-6">
@@ -102,28 +132,50 @@ export default function HolidaysPage() {
       </div>
 
       <div className="bg-card border rounded-xl shadow-sm overflow-hidden">
+        <div className="p-4 border-b">
+          <div className="relative max-w-sm">
+            <Search className="h-4 w-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              placeholder="Search holidays..."
+              className="pl-9"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+          </div>
+        </div>
+
         <div className="overflow-x-auto">
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Holiday Name</TableHead>
-                <TableHead>Type</TableHead>
-                <TableHead>Date(s)</TableHead>
-                <TableHead>Total Days</TableHead>
-                <TableHead>Status</TableHead>
+                <SortableHeader field="name" currentSortField={sortField} currentSortOrder={sortOrder} onSort={toggleSort}>
+                  Holiday Name
+                </SortableHeader>
+                <SortableHeader field="holidayType" currentSortField={sortField} currentSortOrder={sortOrder} onSort={toggleSort}>
+                  Type
+                </SortableHeader>
+                <SortableHeader field="startDate" currentSortField={sortField} currentSortOrder={sortOrder} onSort={toggleSort}>
+                  Date(s)
+                </SortableHeader>
+                <SortableHeader field="totalDays" currentSortField={sortField} currentSortOrder={sortOrder} onSort={toggleSort}>
+                  Total Days
+                </SortableHeader>
+                <SortableHeader field="isActive" currentSortField={sortField} currentSortOrder={sortOrder} onSort={toggleSort}>
+                  Status
+                </SortableHeader>
                 {isAdmin && <TableHead className="w-[200px]">Actions</TableHead>}
               </TableRow>
             </TableHeader>
             <TableBody>
-              {visibleHolidays.length === 0 && (
+              {paginatedData.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
+                  <TableCell colSpan={isAdmin ? 6 : 5} className="text-center py-8 text-muted-foreground">
                     No holidays found.
                   </TableCell>
                 </TableRow>
               )}
-              {visibleHolidays.map((holiday) => {
-                const days = getDays(holiday.startDate, holiday.endDate);
+              {paginatedData.map((holiday) => {
+                const days = holiday.totalDays;
                 return (
                   <TableRow key={holiday.id} className={!holiday.isActive ? "opacity-60" : ""}>
                     <TableCell>
@@ -174,6 +226,17 @@ export default function HolidaysPage() {
             </TableBody>
           </Table>
         </div>
+
+        <DataTablePagination
+          page={page}
+          pageSize={pageSize}
+          totalPages={totalPages}
+          totalItems={totalItems}
+          startIndex={startIndex}
+          endIndex={endIndex}
+          onPageChange={setPage}
+          onPageSizeChange={setPageSize}
+        />
       </div>
     </div>
   );
