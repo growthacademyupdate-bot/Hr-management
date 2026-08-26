@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useAuth, useDB, api, useGlobalSearch } from "@/lib/store";
 import { PageHeader } from "@/components/PageHeader";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -14,6 +14,10 @@ import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { StatusBadge } from "../dashboard/page";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Search } from "lucide-react";
+import { useDataTable } from "@/hooks/useDataTable";
+import { SortableHeader } from "@/components/SortableHeader";
+import { DataTablePagination } from "@/components/DataTablePagination";
 
 export default function TasksPage() {
   const user = useAuth();
@@ -25,25 +29,49 @@ export default function TasksPage() {
   const [selectedTask, setSelectedTask] = useState<any>(null);
   const [viewTask, setViewTask] = useState<any>(null);
   const [editTask, setEditTask] = useState<any>(null);
-  const globalSearch = useGlobalSearch().toLowerCase();
+  const globalSearch = useGlobalSearch();
+
+  const roleFilteredTasks = useMemo(() => {
+    if (!user) return [];
+    let tasks = db.tasks || [];
+    if (user.role === "employee") {
+      tasks = tasks.filter((t) => t.assignedTo === user.employeeId || t.assignedTo === user.id);
+    }
+    return tasks.map((t) => ({
+      ...t,
+      employeeName: db.employees.find((e) => e.id === t.assignedTo)?.name || "Unknown",
+    }));
+  }, [db.tasks, db.employees, user]);
+
+  const {
+    search,
+    setSearch,
+    sortField,
+    sortOrder,
+    toggleSort,
+    page,
+    setPage,
+    pageSize,
+    setPageSize,
+    totalPages,
+    totalItems,
+    startIndex,
+    endIndex,
+    paginatedData,
+  } = useDataTable({
+    data: roleFilteredTasks,
+    searchFields: (t) => [t.title, t.description, t.priority, t.status, t.employeeName, t.assignDate, t.dueDate],
+    defaultSortField: "dueDate",
+    defaultSortOrder: "asc",
+  });
+
+  useEffect(() => {
+    if (globalSearch) {
+      setSearch(globalSearch);
+    }
+  }, [globalSearch, setSearch]);
 
   if (!user) return null;
-
-  // Filter tasks based on role
-  let visibleTasks = db.tasks;
-  if (user.role === "employee") {
-    visibleTasks = db.tasks.filter((t) => t.assignedTo === user.employeeId || t.assignedTo === user.id);
-  }
-
-  if (globalSearch) {
-    visibleTasks = visibleTasks.filter((t) => 
-      t.title.toLowerCase().includes(globalSearch) || 
-      t.description.toLowerCase().includes(globalSearch) ||
-      t.priority.toLowerCase().includes(globalSearch) ||
-      t.status.toLowerCase().includes(globalSearch) ||
-      db.employees.find((e) => e.id === t.assignedTo)?.name?.toLowerCase().includes(globalSearch)
-    );
-  }
 
   // Common overdue check
   const checkOverdue = (task: any) => {
@@ -72,27 +100,51 @@ export default function TasksPage() {
       </div>
 
       <div className="bg-card border rounded-xl shadow-sm overflow-hidden">
+        <div className="p-4 border-b">
+          <div className="relative max-w-sm">
+            <Search className="h-4 w-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              placeholder="Search tasks, title, employee..."
+              className="pl-9"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+          </div>
+        </div>
+
         <div className="overflow-x-auto">
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Task</TableHead>
-                {user.role !== "employee" && <TableHead>Employee</TableHead>}
-                <TableHead>Priority</TableHead>
-                <TableHead>Dates</TableHead>
-                <TableHead>Status</TableHead>
+                <SortableHeader field="title" currentSortField={sortField} currentSortOrder={sortOrder} onSort={toggleSort}>
+                  Task
+                </SortableHeader>
+                {user.role !== "employee" && (
+                  <SortableHeader field="employeeName" currentSortField={sortField} currentSortOrder={sortOrder} onSort={toggleSort}>
+                    Employee
+                  </SortableHeader>
+                )}
+                <SortableHeader field="priority" currentSortField={sortField} currentSortOrder={sortOrder} onSort={toggleSort}>
+                  Priority
+                </SortableHeader>
+                <SortableHeader field="dueDate" currentSortField={sortField} currentSortOrder={sortOrder} onSort={toggleSort}>
+                  Dates
+                </SortableHeader>
+                <SortableHeader field="status" currentSortField={sortField} currentSortOrder={sortOrder} onSort={toggleSort}>
+                  Status
+                </SortableHeader>
                 <TableHead className="w-[150px]">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {visibleTasks.length === 0 && (
+              {paginatedData.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
+                  <TableCell colSpan={user.role !== "employee" ? 6 : 5} className="text-center py-8 text-muted-foreground">
                     No tasks found.
                   </TableCell>
                 </TableRow>
               )}
-              {visibleTasks.map((task) => {
+              {paginatedData.map((task) => {
                 const isOverdue = checkOverdue(task);
                 const assignedEmp = db.employees.find((e) => e.id === task.assignedTo);
                 
@@ -184,6 +236,17 @@ export default function TasksPage() {
             </TableBody>
           </Table>
         </div>
+
+        <DataTablePagination
+          page={page}
+          pageSize={pageSize}
+          totalPages={totalPages}
+          totalItems={totalItems}
+          startIndex={startIndex}
+          endIndex={endIndex}
+          onPageChange={setPage}
+          onPageSizeChange={setPageSize}
+        />
       </div>
 
       {/* View Task Dialog */}

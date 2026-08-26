@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useAuth, useDB, api } from "@/lib/store";
 import type { Employee } from "@/lib/store";
 import { PageHeader } from "@/components/PageHeader";
@@ -16,13 +16,15 @@ import { Label } from "@/components/ui/label";
 import { Search, Plus, Eye, EyeOff, Pencil, Trash2 } from "lucide-react";
 import { StatusBadge } from "../dashboard/page";
 import { toast } from "sonner";
+import { useDataTable } from "@/hooks/useDataTable";
+import { SortableHeader } from "@/components/SortableHeader";
+import { DataTablePagination } from "@/components/DataTablePagination";
 
 const DEPARTMENTS = ["Design", "Marketing", "Sales", "HR", "Web", "Finance", "Operations", "Mobile App"];
 
 export default function EmployeesPage() {
   const user = useAuth();
   const db = useDB();
-  const [q, setQ] = useState("");
   const [dept, setDept] = useState("all");
   const [status, setStatus] = useState("all");
   const [open, setOpen] = useState(false);
@@ -30,11 +32,34 @@ export default function EmployeesPage() {
   const [editingEmp, setEditingEmp] = useState<Employee | null>(null);
   const canManage = user?.role === "admin" || user?.role === "hr";
 
-  const list = db.employees.filter((e) => {
-    if (q && !`${e.name} ${e.id} ${e.email}`.toLowerCase().includes(q.toLowerCase())) return false;
-    if (dept !== "all" && e.department !== dept) return false;
-    if (status !== "all" && e.status !== status) return false;
-    return true;
+  const baseFilteredEmployees = useMemo(() => {
+    return db.employees.filter((e) => {
+      if (dept !== "all" && e.department !== dept) return false;
+      if (status !== "all" && e.status !== status) return false;
+      return true;
+    });
+  }, [db.employees, dept, status]);
+
+  const {
+    search,
+    setSearch,
+    sortField,
+    sortOrder,
+    toggleSort,
+    page,
+    setPage,
+    pageSize,
+    setPageSize,
+    totalPages,
+    totalItems,
+    startIndex,
+    endIndex,
+    paginatedData,
+  } = useDataTable({
+    data: baseFilteredEmployees,
+    searchFields: (e) => [e.name, e.id, e.email, e.department, e.designation, e.mobile],
+    defaultSortField: "name",
+    defaultSortOrder: "asc",
   });
 
   return (
@@ -50,12 +75,12 @@ export default function EmployeesPage() {
         ) : null}
       />
 
-      <Card className="border-0 shadow-sm">
+      <Card className="border-0 shadow-sm overflow-hidden">
         <CardContent className="p-4 md:p-6">
           <div className="flex flex-col md:flex-row gap-3 mb-4">
             <div className="relative flex-1">
               <Search className="h-4 w-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-              <Input placeholder="Search employees…" className="pl-9" value={q} onChange={(e) => setQ(e.target.value)} />
+              <Input placeholder="Search employees…" className="pl-9" value={search} onChange={(e) => setSearch(e.target.value)} />
             </div>
             <Select value={dept} onValueChange={setDept}>
               <SelectTrigger className="w-full md:w-48"><SelectValue /></SelectTrigger>
@@ -75,21 +100,33 @@ export default function EmployeesPage() {
             </Select>
           </div>
 
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto rounded-md border">
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Employee</TableHead>
-                  <TableHead>Department</TableHead>
-                  <TableHead>Designation</TableHead>
-                  <TableHead>Mobile</TableHead>
-                  <TableHead>Joining Date</TableHead>
-                  <TableHead>Status</TableHead>
+                  <SortableHeader field="name" currentSortField={sortField} currentSortOrder={sortOrder} onSort={toggleSort}>
+                    Employee
+                  </SortableHeader>
+                  <SortableHeader field="department" currentSortField={sortField} currentSortOrder={sortOrder} onSort={toggleSort}>
+                    Department
+                  </SortableHeader>
+                  <SortableHeader field="designation" currentSortField={sortField} currentSortOrder={sortOrder} onSort={toggleSort}>
+                    Designation
+                  </SortableHeader>
+                  <SortableHeader field="mobile" currentSortField={sortField} currentSortOrder={sortOrder} onSort={toggleSort}>
+                    Mobile
+                  </SortableHeader>
+                  <SortableHeader field="joiningDate" currentSortField={sortField} currentSortOrder={sortOrder} onSort={toggleSort}>
+                    Joining Date
+                  </SortableHeader>
+                  <SortableHeader field="status" currentSortField={sortField} currentSortOrder={sortOrder} onSort={toggleSort}>
+                    Status
+                  </SortableHeader>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {list.map((e) => (
+                {paginatedData.map((e) => (
                   <TableRow key={e.id}>
                     <TableCell>
                       <div className="flex items-center gap-3">
@@ -116,12 +153,23 @@ export default function EmployeesPage() {
                     </TableCell>
                   </TableRow>
                 ))}
-                {list.length === 0 && (
+                {paginatedData.length === 0 && (
                   <TableRow><TableCell colSpan={7} className="text-center py-10 text-muted-foreground">No employees match your filters.</TableCell></TableRow>
                 )}
               </TableBody>
             </Table>
           </div>
+
+          <DataTablePagination
+            page={page}
+            pageSize={pageSize}
+            totalPages={totalPages}
+            totalItems={totalItems}
+            startIndex={startIndex}
+            endIndex={endIndex}
+            onPageChange={setPage}
+            onPageSizeChange={setPageSize}
+          />
         </CardContent>
       </Card>
       {editingEmp && <EditEmployeeDialog employee={editingEmp} open={editOpen} onClose={() => { setEditOpen(false); setEditingEmp(null); }} />}
