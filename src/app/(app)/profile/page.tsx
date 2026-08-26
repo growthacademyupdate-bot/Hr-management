@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useAuth, useDB, api } from "@/lib/store";
+import { uploadImageToCloudinary } from "@/app/actions";
 import { PageHeader } from "@/components/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -122,11 +123,21 @@ export default function ProfilePage() {
     reader.onloadend = async () => {
       try {
         const base64 = reader.result as string;
-        if (user.role === "admin") await api.updateSystemSetting("admin_avatar", base64);
-        else if (user.role === "hr") await api.updateSystemSetting("hr_avatar", base64);
-        else if (user.employeeId) await api.updateEmployee(user.employeeId, { avatar: base64 });
 
-        const updatedUser = { ...user, avatar: base64 };
+        // Upload to Cloudinary
+        const uploadResult = await uploadImageToCloudinary(base64);
+        if (!uploadResult.success) {
+          toast.error(uploadResult.error || "Failed to upload image");
+          return;
+        }
+        
+        const avatarUrl = uploadResult.url as string;
+
+        if (user.role === "admin") await api.updateSystemSetting("admin_avatar", avatarUrl);
+        else if (user.role === "hr") await api.updateSystemSetting("hr_avatar", avatarUrl);
+        else if (user.employeeId) await api.updateEmployee(user.employeeId, { avatar: avatarUrl });
+
+        const updatedUser = { ...user, avatar: avatarUrl };
         localStorage.setItem("ems_auth_v1", JSON.stringify(updatedUser));
         window.dispatchEvent(new Event("ems_auth_change"));
         toast.success("Profile photo updated!");

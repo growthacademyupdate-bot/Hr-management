@@ -208,12 +208,22 @@ export async function addEmployee(data: any) {
     if (!isNaN(num) && num > max) max = num;
   }
   const id = `EMP${String(max + 1).padStart(3, "0")}`;
+  
+  if (data.avatar && typeof data.avatar === 'string' && data.avatar.startsWith("data:image")) {
+    const result = await uploadImageToCloudinary(data.avatar);
+    if (result.success) data.avatar = result.url;
+  }
+  
   const emp = await Employee.create({ ...data, id, avatar: data.avatar || "" });
   return serialize(emp);
 }
 
 export async function updateEmployee(id: string, data: any) {
   await connectDB();
+  if (data.avatar && typeof data.avatar === 'string' && data.avatar.startsWith("data:image")) {
+    const result = await uploadImageToCloudinary(data.avatar);
+    if (result.success) data.avatar = result.url;
+  }
   const emp = await Employee.findOneAndUpdate({ id }, data, { new: true }).lean();
   return serialize(emp);
 }
@@ -776,4 +786,24 @@ export async function deleteHoliday(id: string, adminId: string, userRole: strin
   });
 
   return { success: true };
+}
+
+import { v2 as cloudinary } from "cloudinary";
+
+cloudinary.config({
+  cloud_name: process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
+});
+
+export async function uploadImageToCloudinary(base64Image: string) {
+  try {
+    const result = await cloudinary.uploader.upload(base64Image, {
+      folder: "ems_avatars",
+    });
+    return { success: true, url: result.secure_url };
+  } catch (error: any) {
+    console.error("Cloudinary upload error:", error);
+    return { success: false, error: "Failed to upload to Cloudinary" };
+  }
 }
