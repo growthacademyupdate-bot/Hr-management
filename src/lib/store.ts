@@ -6,6 +6,7 @@ import {
   getLeaves, addLeave, cancelLeave, hrReviewLeave, adminReviewLeave,
   getAttendance, getActivities, logLogoutActivity, deleteAttendance, updateSystemSetting, getSystemSettings, updateSystemSettings,
   getHolidays, createHoliday, updateHoliday, deleteHoliday,
+  getExpenses, addExpense, cancelExpense, hrReviewExpense, adminReviewExpense, markExpenseReimbursed, deleteExpense,
   getNotifications, markNotificationAsRead, markAllNotificationsAsRead, broadcastNotification, editBroadcastNotification, deleteBroadcastNotification
 } from "@/app/actions";
 
@@ -30,6 +31,9 @@ export interface Task {
 export interface Leave {
   id: string; employeeId: string; type: "Casual Leave" | "Sick Leave" | "Earned Leave" | "Emergency Leave" | "Other"; startDate: string; endDate: string; numberOfDays: number; reason: string; status: "pending" | "hr_approved" | "hr_rejected" | "admin_approved" | "admin_rejected" | "cancelled"; appliedAt: string; hrReviewedBy?: string | null; hrReviewedAt?: string | null; hrReviewComment?: string | null; adminReviewedBy?: string | null; adminReviewedAt?: string | null; adminReviewComment?: string | null; cancelledBy?: string | null; cancelledAt?: string | null;
 }
+export interface Expense {
+  id: string; employeeId: string; title: string; category: "Travel" | "Office Supplies" | "Client Meeting" | "Food & Dining" | "Equipment" | "Other"; amount: number; expenseDate: string; description: string; receiptUrl?: string | null; status: "pending" | "hr_approved" | "hr_rejected" | "admin_approved" | "admin_rejected" | "reimbursed" | "cancelled"; appliedAt: string; hrReviewedBy?: string | null; hrReviewedAt?: string | null; hrReviewComment?: string | null; adminReviewedBy?: string | null; adminReviewedAt?: string | null; adminReviewComment?: string | null; reimbursedBy?: string | null; reimbursedAt?: string | null; cancelledBy?: string | null; cancelledAt?: string | null;
+}
 export interface Activity {
   id: string; employeeId: string; time: string; label: string; type: string;
   actorId?: string; actorRole?: string; module?: string; referenceId?: string; metadata?: any;
@@ -43,11 +47,11 @@ export interface Notification {
 }
 
 interface DB {
-  employees: Employee[]; attendance: AttendanceRecord[]; tasks: Task[]; leaves: Leave[]; activities: Activity[]; holidays: Holiday[]; notifications: Notification[];
+  employees: Employee[]; attendance: AttendanceRecord[]; tasks: Task[]; leaves: Leave[]; expenses: Expense[]; activities: Activity[]; holidays: Holiday[]; notifications: Notification[];
 }
 
 const AUTH_KEY = "ems_auth_v1";
-let currentDB: DB = { employees: [], attendance: [], tasks: [], leaves: [], activities: [], holidays: [], notifications: [] };
+let currentDB: DB = { employees: [], attendance: [], tasks: [], leaves: [], expenses: [], activities: [], holidays: [], notifications: [] };
 let globalSearch = "";
 const listeners = new Set<() => void>();
 
@@ -66,11 +70,11 @@ export function useDB() {
     // Fetch real data on mount
     Promise.all([
       getEmployees(), getAttendance(), getTasks(user?.role, userId), 
-      getLeaves(user?.role, userId), getActivities(), getHolidays(),
+      getLeaves(user?.role, userId), getExpenses(user?.role, userId), getActivities(), getHolidays(),
       userId ? getNotifications(userId) : Promise.resolve([])
     ])
-      .then(([emps, atts, ts, lvs, acts, hols, notifs]) => {
-        currentDB = { employees: emps, attendance: atts, tasks: ts, leaves: lvs, activities: acts, holidays: hols, notifications: notifs };
+      .then(([emps, atts, ts, lvs, exps, acts, hols, notifs]) => {
+        currentDB = { employees: emps, attendance: atts, tasks: ts, leaves: lvs, expenses: exps, activities: acts, holidays: hols, notifications: notifs };
         notify();
       })
       .catch(console.error);
@@ -120,6 +124,13 @@ export const api = {
   async cancelLeave(leaveId: string) { const user = getCurrentUser(); if(!user) return; const l = await cancelLeave(leaveId, user.employeeId || user.id); currentDB.leaves = currentDB.leaves.map(x => x.id === leaveId ? l : x); notify(); },
   async hrReviewLeave(leaveId: string, action: "approve" | "reject", comment: string) { const user = getCurrentUser(); if(!user) return; const l = await hrReviewLeave(leaveId, action, comment, user.employeeId || user.id, user.role); currentDB.leaves = currentDB.leaves.map(x => x.id === leaveId ? l : x); notify(); },
   async adminReviewLeave(leaveId: string, action: "approve" | "reject", comment: string) { const user = getCurrentUser(); if(!user) return; const l = await adminReviewLeave(leaveId, action, comment, user.employeeId || user.id, user.role); currentDB.leaves = currentDB.leaves.map(x => x.id === leaveId ? l : x); notify(); },
+
+  async addExpense(expense: any) { const user = getCurrentUser(); if(!user) return; const e = await addExpense(expense, user.employeeId || user.id); currentDB.expenses = [e, ...currentDB.expenses]; notify(); return e; },
+  async cancelExpense(expenseId: string) { const user = getCurrentUser(); if(!user) return; const e = await cancelExpense(expenseId, user.employeeId || user.id); currentDB.expenses = currentDB.expenses.map(x => x.id === expenseId ? e : x); notify(); },
+  async hrReviewExpense(expenseId: string, action: "approve" | "reject", comment: string) { const user = getCurrentUser(); if(!user) return; const e = await hrReviewExpense(expenseId, action, comment, user.employeeId || user.id, user.role); currentDB.expenses = currentDB.expenses.map(x => x.id === expenseId ? e : x); notify(); },
+  async adminReviewExpense(expenseId: string, action: "approve" | "reject", comment: string) { const user = getCurrentUser(); if(!user) return; const e = await adminReviewExpense(expenseId, action, comment, user.employeeId || user.id, user.role); currentDB.expenses = currentDB.expenses.map(x => x.id === expenseId ? e : x); notify(); },
+  async markExpenseReimbursed(expenseId: string) { const user = getCurrentUser(); if(!user) return; const e = await markExpenseReimbursed(expenseId, user.employeeId || user.id, user.role); currentDB.expenses = currentDB.expenses.map(x => x.id === expenseId ? e : x); notify(); },
+  async deleteExpense(id: string) { const user = getCurrentUser(); if(!user) return; await deleteExpense(id, user.role); currentDB.expenses = currentDB.expenses.filter(x => x.id !== id); notify(); },
 
   async deleteAttendance(id: string) { const user = getCurrentUser(); if(!user) return; await deleteAttendance(id, user.role); currentDB.attendance = currentDB.attendance.filter(x => x.id !== id); notify(); },
   async updateSystemSetting(key: string, value: string) { await updateSystemSetting(key, value); },
@@ -187,6 +198,7 @@ export const ROLE_MENUS: Record<Role, { label: string; to: string; icon: string 
     { label: "Attendance", to: "/attendance", icon: "CalendarCheck" },
     { label: "Tasks", to: "/tasks", icon: "ListTodo" },
     { label: "Leaves", to: "/leaves", icon: "CalendarOff" },
+    { label: "Expenses", to: "/expenses", icon: "Receipt" },
     { label: "Holidays", to: "/holidays", icon: "CalendarDays" },
     { label: "Reports", to: "/reports", icon: "BarChart3" },
     { label: "Notifications", to: "/notifications", icon: "Bell" },
@@ -198,6 +210,7 @@ export const ROLE_MENUS: Record<Role, { label: string; to: string; icon: string 
     { label: "Employees", to: "/employees", icon: "Users" },
     { label: "Tasks", to: "/tasks", icon: "ListTodo" },
     { label: "Leaves", to: "/leaves", icon: "CalendarOff" },
+    { label: "Expenses", to: "/expenses", icon: "Receipt" },
     { label: "Holidays", to: "/holidays", icon: "CalendarDays" },
     { label: "Reports", to: "/reports", icon: "BarChart3" },
     { label: "Notifications", to: "/notifications", icon: "Bell" },
@@ -209,8 +222,10 @@ export const ROLE_MENUS: Record<Role, { label: string; to: string; icon: string 
     { label: "Attendance", to: "/attendance", icon: "CalendarCheck" },
     { label: "Activity", to: "/activity", icon: "Activity" },
     { label: "Leaves", to: "/leaves", icon: "CalendarOff" },
+    { label: "Expenses", to: "/expenses", icon: "Receipt" },
     { label: "Holidays", to: "/holidays", icon: "CalendarDays" },
     { label: "Notifications", to: "/notifications", icon: "Bell" },
     { label: "Profile", to: "/profile", icon: "User" },
   ],
 };
+

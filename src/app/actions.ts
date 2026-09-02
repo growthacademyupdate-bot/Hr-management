@@ -9,6 +9,7 @@ import { Activity } from "@/models/Activity";
 import { Setting } from "@/models/Setting";
 import { Holiday } from "@/models/Holiday";
 import { Notification } from "@/models/Notification";
+import { Expense } from "@/models/Expense";
 
 // Helper to serialize Mongoose documents
 function serialize(doc: any) {
@@ -817,3 +818,208 @@ export async function uploadImageToCloudinary(base64Image: string) {
     return { success: false, error: "Failed to upload to Cloudinary" };
   }
 }
+
+// ---------------- Expenses ----------------
+
+export async function getExpenses(userRole?: string, userId?: string) {
+  await connectDB();
+  if (userRole === "employee" && userId) {
+    const expenses = await Expense.find({ employeeId: userId }).sort({ createdAt: -1 }).lean();
+    return serialize(expenses);
+  }
+  const expenses = await Expense.find({}).sort({ createdAt: -1 }).lean();
+  return serialize(expenses);
+}
+
+export async function addExpense(data: any, userId: string) {
+  await connectDB();
+  const all = await Expense.find({}, { id: 1 }).lean();
+  let max = 0;
+  for (const doc of all) {
+    const num = parseInt((doc as any).id.replace("EXP", ""), 10);
+    if (!isNaN(num) && num > max) max = num;
+  }
+  const id = `EXP${String(max + 1).padStart(3, "0")}`;
+
+  let receiptUrl = data.receiptUrl || null;
+  if (receiptUrl && typeof receiptUrl === "string" && receiptUrl.startsWith("data:image")) {
+    const uploadRes = await uploadImageToCloudinary(receiptUrl);
+    if (uploadRes.success) receiptUrl = uploadRes.url;
+  }
+
+  const expense = await Expense.create({
+    ...data,
+    id,
+    employeeId: userId,
+    receiptUrl,
+    amount: Number(data.amount),
+    appliedAt: new Date().toISOString(),
+    status: "pending"
+  });
+
+  await createActivity({
+    employeeId: userId, actorId: userId, actorRole: "employee",
+    activityType: "EXPENSE_SUBMITTED", module: "EXPENSE", referenceId: id,
+    message: `Expense claim submitted for ₹${data.amount} (${data.category}).`
+  });
+
+  await createNotification({
+    recipientId: "u_hr",
+    senderId: userId,
+    senderRole: "employee",
+    title: "New Expense Claim",
+    message: `Expense claim of ₹${data.amount} submitted by employee for ${data.category}.`,
+    type: "EXPENSE_SUBMITTED",
+    module: "EXPENSE",
+    referenceId: id,
+    actionUrl: `/expenses`,
+  });
+
+  return serialize(expense);
+}
+
+export async function cancelExpense(expenseId: string, userId: string) {
+  await connectDB();
+  const expense = await Expense.findOne({ id: expenseId });
+  if (!expense) throw new Error("Expense claim not found");
+  if (expense.employeeId !== userId) throw new Error("Unauthorized");
+  if (expense.status !== "pending") throw new Error("Can only cancel pending expense claims");
+
+  expense.status = "cancelled";
+  expense.cancelledBy = userId;
+  expense.cancelledAt = new Date().toISOString();
+  await expense.save();
+
+  await createActivity({
+    employeeId: userId, actorId: userId, actorRole: "employee",
+    activityType: "EXPENSE_CANCELLED", module: "EXPENSE", referenceId: expenseId,
+    message: `You cancelled your expense claim for ₹${expense.amount}.`
+  });
+
+  return serialize(expense);
+}
+
+export async function hrReviewExpense(expenseId: string, action: "approve" | "reject", comment: string, hrId: string, userRole: string) {
+  await connectDB();
+  if (userRole !== "hr" && userRole !== "admin") throw new Error("Unauthorized");
+  const expense = await Expense.findOne({ id: expenseId });
+  if (!expense) throw new Error("Expense claim not found");
+  if (expense.status !== "pending") throw new Error("Expense claim is not pending HR review");
+
+  expense.status = action === "approve" ? "hr_approved" : "hr_rejected";
+  expense.hrReviewedBy = hrId;
+  expense.hrReviewedAt = new Date().toISOString();
+  expense.hrReviewComment = comment || null;
+  await expense.save();
+
+  await createActivity({
+    employeeId: expense.employeeId, actorId: hrId, actorRole: userRole,
+    activityType: action === "approve" ? "EXPENSE_HR_APPROVED" : "EXPENSE_HR_REJECTED", module: "EXPENSE", referenceId: expenseId,
+    message: `Your expense claim of ₹${expense.amount} has been ${action === "approve" ? "approved" : "rejected"} by HR.`,
+    metadata: { reason: comment }
+  });
+
+  await createNotification({
+    recipientId: expense.employeeId,
+    senderId: hrId,
+    senderRole: userRole,
+    title: `Expense Claim ${action === "approve" ? "Approved" : "Rejected"} by HR`,
+    message: `Your expense claim for ₹${expense.amount} was ${action === "approve" ? "approved" : "rejected"} by HR.`,
+    type: action === "approve" ? "EXPENSE_HR_APPROVED" : "EXPENSE_HR_REJECTED",
+    module: "EXPENSE",
+    referenceId: expenseId,
+    actionUrl: `/expenses`,
+  });
+
+  if (action === "approve") {
+    await createNotification({
+      recipientId: "u_admin",
+      senderId: hrId,
+      senderRole: userRole,
+      title: "Expense Requires Final Approval",
+      message: `HR approved an expense claim of ₹${expense.amount}. Final Admin approval required.`,
+      type: "EXPENSE_HR_APPROVED",
+      module: "EXPENSE",
+      referenceId: expenseId,
+      actionUrl: `/expenses`,
+    });
+  }
+
+  return serialize(expense);
+}
+
+export async function adminReviewExpense(expenseId: string, action: "approve" | "reject", comment: string, adminId: string, userRole: string) {
+  await connectDB();
+  if (userRole !== "admin") throw new Error("Unauthorized");
+  const expense = await Expense.findOne({ id: expenseId });
+  if (!expense) throw new Error("Expense claim not found");
+  if (expense.status !== "hr_approved" && expense.status !== "pending") throw new Error("Invalid expense review state");
+
+  expense.status = action === "approve" ? "admin_approved" : "admin_rejected";
+  expense.adminReviewedBy = adminId;
+  expense.adminReviewedAt = new Date().toISOString();
+  expense.adminReviewComment = comment || null;
+  await expense.save();
+
+  await createActivity({
+    employeeId: expense.employeeId, actorId: adminId, actorRole: userRole,
+    activityType: action === "approve" ? "EXPENSE_ADMIN_APPROVED" : "EXPENSE_ADMIN_REJECTED", module: "EXPENSE", referenceId: expenseId,
+    message: `Your expense claim of ₹${expense.amount} has been finally ${action === "approve" ? "approved" : "rejected"} by Admin.`,
+    metadata: { reason: comment }
+  });
+
+  await createNotification({
+    recipientId: expense.employeeId,
+    senderId: adminId,
+    senderRole: userRole,
+    title: `Expense Claim ${action === "approve" ? "Approved" : "Rejected"} by Admin`,
+    message: `Your expense claim for ₹${expense.amount} was ${action === "approve" ? "approved" : "rejected"} by Admin.`,
+    type: action === "approve" ? "EXPENSE_ADMIN_APPROVED" : "EXPENSE_ADMIN_REJECTED",
+    module: "EXPENSE",
+    referenceId: expenseId,
+    actionUrl: `/expenses`,
+  });
+
+  return serialize(expense);
+}
+
+export async function markExpenseReimbursed(expenseId: string, reviewerId: string, userRole: string) {
+  await connectDB();
+  if (userRole !== "admin" && userRole !== "hr") throw new Error("Unauthorized");
+  const expense = await Expense.findOne({ id: expenseId });
+  if (!expense) throw new Error("Expense claim not found");
+  if (expense.status !== "admin_approved" && expense.status !== "hr_approved") throw new Error("Only approved expenses can be marked as reimbursed");
+
+  expense.status = "reimbursed";
+  expense.reimbursedBy = reviewerId;
+  expense.reimbursedAt = new Date().toISOString();
+  await expense.save();
+
+  await createActivity({
+    employeeId: expense.employeeId, actorId: reviewerId, actorRole: userRole,
+    activityType: "EXPENSE_REIMBURSED", module: "EXPENSE", referenceId: expenseId,
+    message: `Your expense claim of ₹${expense.amount} has been marked as Reimbursed (Paid).`
+  });
+
+  await createNotification({
+    recipientId: expense.employeeId,
+    senderId: reviewerId,
+    senderRole: userRole,
+    title: "Expense Reimbursed",
+    message: `Your expense claim of ₹${expense.amount} (${expense.category}) has been reimbursed.`,
+    type: "EXPENSE_REIMBURSED",
+    module: "EXPENSE",
+    referenceId: expenseId,
+    actionUrl: `/expenses`,
+  });
+
+  return serialize(expense);
+}
+
+export async function deleteExpense(id: string, userRole: string) {
+  await connectDB();
+  if (userRole !== "admin") throw new Error("Only Admin can delete expense records");
+  await Expense.findOneAndDelete({ id });
+  return { success: true };
+}
+
