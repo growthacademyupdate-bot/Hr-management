@@ -449,28 +449,36 @@ function LeavesReport({ filterByDate, isEmployee, isAdmin }: any) {
 function SalaryReport({ onExportCSV }: { onExportCSV: () => void }) {
   const db = useDB();
 
-  const data = useMemo(() => {
-    const deptMap: Record<string, { count: number; total: number; employees: any[] }> = {};
-    db.employees.forEach((emp) => {
-      if (!deptMap[emp.department]) deptMap[emp.department] = { count: 0, total: 0, employees: [] };
-      deptMap[emp.department].count++;
-      deptMap[emp.department].total += emp.salary || 0;
-      deptMap[emp.department].employees.push(emp);
-    });
+  const employeeSalaryDetails = useMemo(() => {
+    return db.employees.map((emp) => {
+      const approvedExpenses = db.expenses
+        .filter((exp) => exp.employeeId === emp.id && (exp.status === "admin_approved" || exp.status === "hr_approved"))
+        .reduce((sum, exp) => sum + exp.amount, 0);
 
-    return Object.entries(deptMap).map(([dept, d]) => ({
-      dept,
-      count: d.count,
-      total: d.total,
-      avg: d.count ? Math.round(d.total / d.count) : 0,
-      highest: Math.max(...d.employees.map((e) => e.salary || 0)),
-    }));
-  }, [db.employees]);
+      const reimbursedExpenses = db.expenses
+        .filter((exp) => exp.employeeId === emp.id && exp.status === "reimbursed")
+        .reduce((sum, exp) => sum + exp.amount, 0);
+
+      return {
+        ...emp,
+        approvedExpenses,
+        reimbursedExpenses,
+        totalSalaryPayout: (emp.salary || 0) + approvedExpenses,
+      };
+    });
+  }, [db.employees, db.expenses]);
+
+  const totalBasePayroll = useMemo(() => db.employees.reduce((s, e) => s + (e.salary || 0), 0), [db.employees]);
+  const totalApprovedExpenses = useMemo(() => {
+    return db.expenses
+      .filter((exp) => exp.status === "admin_approved" || exp.status === "hr_approved")
+      .reduce((s, e) => s + e.amount, 0);
+  }, [db.expenses]);
 
   const { search, setSearch, sortField, sortOrder, toggleSort, page, setPage, pageSize, setPageSize, totalPages, totalItems, startIndex, endIndex, paginatedData } = useDataTable({
-    data,
-    searchFields: (d) => [d.dept],
-    defaultSortField: "total",
+    data: employeeSalaryDetails,
+    searchFields: (e) => [e.id, e.name, e.department, e.designation],
+    defaultSortField: "totalSalaryPayout",
     defaultSortOrder: "desc",
   });
 
@@ -478,12 +486,12 @@ function SalaryReport({ onExportCSV }: { onExportCSV: () => void }) {
     <Card className="border-0 shadow-sm overflow-hidden">
       <CardHeader className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
-          <CardTitle>Salary Report — Department Breakdown</CardTitle>
+          <CardTitle>Salary & Expense Reimbursement Report</CardTitle>
         </div>
         <div className="flex items-center gap-3">
           <div className="relative w-48 sm:w-64">
             <Search className="h-4 w-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-            <Input placeholder="Search department..." className="pl-9 text-xs" value={search} onChange={(e) => setSearch(e.target.value)} />
+            <Input placeholder="Search employee, dept..." className="pl-9 text-xs" value={search} onChange={(e) => setSearch(e.target.value)} />
           </div>
           <Button size="sm" variant="outline" onClick={onExportCSV}>
             ⬇ Export CSV
@@ -491,41 +499,49 @@ function SalaryReport({ onExportCSV }: { onExportCSV: () => void }) {
         </div>
       </CardHeader>
       <CardContent className="p-0">
-        <div className="p-4 grid grid-cols-1 md:grid-cols-3 gap-4 border-b">
+        <div className="p-4 grid grid-cols-1 md:grid-cols-4 gap-4 border-b">
           <div className="p-4 rounded-lg bg-muted/40 border">
             <div className="text-sm text-muted-foreground">Total Employees</div>
             <div className="text-2xl font-bold mt-1">{db.employees.length}</div>
           </div>
           <div className="p-4 rounded-lg bg-muted/40 border">
-            <div className="text-sm text-muted-foreground">Total Monthly Payroll</div>
-            <div className="text-2xl font-bold mt-1">₹{db.employees.reduce((s, e) => s + (e.salary || 0), 0).toLocaleString()}</div>
+            <div className="text-sm text-muted-foreground">Base Monthly Payroll</div>
+            <div className="text-2xl font-bold mt-1">₹{totalBasePayroll.toLocaleString()}</div>
           </div>
-          <div className="p-4 rounded-lg bg-muted/40 border">
-            <div className="text-sm text-muted-foreground">Avg. Salary</div>
-            <div className="text-2xl font-bold mt-1">₹{db.employees.length ? Math.round(db.employees.reduce((s, e) => s + (e.salary || 0), 0) / db.employees.length).toLocaleString() : 0}</div>
+          <div className="p-4 rounded-lg bg-amber-500/10 border border-amber-500/20">
+            <div className="text-sm text-amber-700 font-medium">Pending Expense Payouts</div>
+            <div className="text-2xl font-bold text-amber-900 mt-1">₹{totalApprovedExpenses.toLocaleString()}</div>
+          </div>
+          <div className="p-4 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
+            <div className="text-sm text-emerald-700 font-medium">Net Salary Day Total</div>
+            <div className="text-2xl font-bold text-emerald-900 mt-1">₹{(totalBasePayroll + totalApprovedExpenses).toLocaleString()}</div>
           </div>
         </div>
 
         <Table>
           <TableHeader>
             <TableRow>
-              <SortableHeader field="dept" currentSortField={sortField} currentSortOrder={sortOrder} onSort={toggleSort}>Department</SortableHeader>
-              <SortableHeader field="count" currentSortField={sortField} currentSortOrder={sortOrder} onSort={toggleSort}>Employees</SortableHeader>
-              <SortableHeader field="total" currentSortField={sortField} currentSortOrder={sortOrder} onSort={toggleSort}>Total Payroll</SortableHeader>
-              <SortableHeader field="avg" currentSortField={sortField} currentSortOrder={sortOrder} onSort={toggleSort}>Avg. Salary</SortableHeader>
-              <SortableHeader field="highest" currentSortField={sortField} currentSortOrder={sortOrder} onSort={toggleSort}>Highest Salary</SortableHeader>
+              <SortableHeader field="id" currentSortField={sortField} currentSortOrder={sortOrder} onSort={toggleSort}>Emp ID</SortableHeader>
+              <SortableHeader field="name" currentSortField={sortField} currentSortOrder={sortOrder} onSort={toggleSort}>Employee Name</SortableHeader>
+              <SortableHeader field="department" currentSortField={sortField} currentSortOrder={sortOrder} onSort={toggleSort}>Department</SortableHeader>
+              <SortableHeader field="salary" currentSortField={sortField} currentSortOrder={sortOrder} onSort={toggleSort}>Base Salary (₹)</SortableHeader>
+              <SortableHeader field="approvedExpenses" currentSortField={sortField} currentSortOrder={sortOrder} onSort={toggleSort}>Approved Reimbursements (₹)</SortableHeader>
+              <SortableHeader field="totalSalaryPayout" currentSortField={sortField} currentSortOrder={sortOrder} onSort={toggleSort}>Total Salary Day Payout (₹)</SortableHeader>
             </TableRow>
           </TableHeader>
           <TableBody>
             {paginatedData.length === 0 ? (
-              <TableRow><TableCell colSpan={5} className="text-center py-8 text-muted-foreground">No salary data found.</TableCell></TableRow>
-            ) : paginatedData.map((d) => (
-              <TableRow key={d.dept}>
-                <TableCell className="font-medium">{d.dept}</TableCell>
-                <TableCell>{d.count}</TableCell>
-                <TableCell>₹{d.total.toLocaleString()}</TableCell>
-                <TableCell>₹{d.avg.toLocaleString()}</TableCell>
-                <TableCell>₹{d.highest.toLocaleString()}</TableCell>
+              <TableRow><TableCell colSpan={6} className="text-center py-8 text-muted-foreground">No employee salary records found.</TableCell></TableRow>
+            ) : paginatedData.map((emp) => (
+              <TableRow key={emp.id}>
+                <TableCell className="font-mono text-xs font-semibold">{emp.id}</TableCell>
+                <TableCell className="font-medium">{emp.name}</TableCell>
+                <TableCell>{emp.department}</TableCell>
+                <TableCell>₹{(emp.salary || 0).toLocaleString()}</TableCell>
+                <TableCell className="text-amber-600 font-medium">
+                  {emp.approvedExpenses > 0 ? `+₹${emp.approvedExpenses.toLocaleString()}` : "—"}
+                </TableCell>
+                <TableCell className="font-bold text-emerald-700">₹{emp.totalSalaryPayout.toLocaleString()}</TableCell>
               </TableRow>
             ))}
           </TableBody>
