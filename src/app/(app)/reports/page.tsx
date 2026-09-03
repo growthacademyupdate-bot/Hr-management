@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useMemo } from "react";
-import { useAuth, useDB } from "@/lib/store";
+import { useState, useMemo, useEffect } from "react";
+import { useAuth, useDB, api, useGlobalSearch } from "@/lib/store";
 import { PageHeader } from "@/components/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -193,6 +193,7 @@ export default function ReportsPage() {
 
 function HrActivityReport({ filterByDate }: { filterByDate: (d: string) => boolean }) {
   const db = useDB();
+  const globalSearch = useGlobalSearch();
 
   const data = useMemo(() => {
     return db.activities
@@ -210,13 +211,25 @@ function HrActivityReport({ filterByDate }: { filterByDate: (d: string) => boole
     defaultSortOrder: "desc",
   });
 
+  useEffect(() => {
+    setSearch(globalSearch);
+  }, [globalSearch, setSearch]);
+
   return (
     <Card className="border-0 shadow-sm overflow-hidden">
       <CardHeader className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <CardTitle>HR Audit Log</CardTitle>
         <div className="relative w-full sm:w-64">
           <Search className="h-4 w-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-          <Input placeholder="Search audit log..." className="pl-9 text-xs" value={search} onChange={(e) => setSearch(e.target.value)} />
+          <Input 
+            placeholder="Search audit log..." 
+            className="pl-9 text-xs" 
+            value={search} 
+            onChange={(e) => {
+              setSearch(e.target.value);
+              api.setGlobalSearch(e.target.value);
+            }} 
+          />
         </div>
       </CardHeader>
       <CardContent className="p-0">
@@ -251,6 +264,7 @@ function HrActivityReport({ filterByDate }: { filterByDate: (d: string) => boole
 function PerformanceReport({ filterByDate, isEmployee, isAdmin, isHR }: any) {
   const db = useDB();
   const user = useAuth();
+  const globalSearch = useGlobalSearch();
 
   const data = useMemo(() => {
     let emps = isAdmin || isHR ? db.employees : db.employees.filter((e) => e.id === (user?.employeeId || user?.id));
@@ -284,13 +298,25 @@ function PerformanceReport({ filterByDate, isEmployee, isAdmin, isHR }: any) {
     defaultSortOrder: "asc",
   });
 
+  useEffect(() => {
+    setSearch(globalSearch);
+  }, [globalSearch, setSearch]);
+
   return (
     <Card className="border-0 shadow-sm overflow-hidden">
       <CardHeader className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <CardTitle>{isEmployee ? "My Performance Metrics" : "Employee Performance"}</CardTitle>
         <div className="relative w-full sm:w-64">
           <Search className="h-4 w-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-          <Input placeholder="Search performance..." className="pl-9 text-xs" value={search} onChange={(e) => setSearch(e.target.value)} />
+          <Input 
+            placeholder="Search performance..." 
+            className="pl-9 text-xs" 
+            value={search} 
+            onChange={(e) => {
+              setSearch(e.target.value);
+              api.setGlobalSearch(e.target.value);
+            }} 
+          />
         </div>
       </CardHeader>
       <CardContent className="p-0">

@@ -315,9 +315,12 @@ export async function updateTaskStatus(taskId: string, status: string, userId: s
       activityType: "TASK_STARTED", module: "TASK", referenceId: taskId,
       message: `You started working on the task: ${task.title}`
     });
-    } else if (status === "completed" && task.status === "working_progress") {
+  } else if (status === "completed" && (task.status === "working_progress" || task.status === "assigned")) {
     task.status = "completed";
     task.completedAt = new Date().toISOString();
+    if (!task.startedAt) {
+      task.startedAt = new Date().toISOString();
+    }
     await createActivity({
       employeeId: task.assignedTo, actorId: userId, actorRole: userRole,
       activityType: "TASK_COMPLETED", module: "TASK", referenceId: taskId,
@@ -410,14 +413,30 @@ export async function getLeaves(userRole?: string, userId?: string) {
 
 export async function addLeave(data: any, userId: string) {
   await connectDB();
-  const existingLeaves = await Leave.find({ employeeId: userId, status: { $in: ["pending", "hr_approved", "admin_approved"] } }).lean();
-  const newStart = new Date(data.startDate).getTime();
-  const newEnd = new Date(data.endDate).getTime();
+  
+  const normalizeDateStr = (d: string) => {
+    if (!d) return "";
+    if (d.includes("T")) return d.split("T")[0];
+    return d.slice(0, 10);
+  };
+
+  const reqStart = normalizeDateStr(data.startDate);
+  const reqEnd = normalizeDateStr(data.endDate);
+
+  if (!reqStart || !reqEnd) throw new Error("Please select valid Start and End dates.");
+  if (reqEnd < reqStart) throw new Error("End date cannot be before start date.");
+
+  const existingLeaves = await Leave.find({ 
+    employeeId: userId, 
+    status: { $in: ["pending", "hr_approved", "admin_approved"] } 
+  }).lean();
   
   for (const l of existingLeaves) {
-    const exStart = new Date((l as any).startDate).getTime();
-    const exEnd = new Date((l as any).endDate).getTime();
-    if (newStart <= exEnd && newEnd >= exStart) throw new Error("Overlapping leave request.");
+    const exStart = normalizeDateStr((l as any).startDate);
+    const exEnd = normalizeDateStr((l as any).endDate);
+    if (reqStart <= exEnd && reqEnd >= exStart) {
+      throw new Error(`You already have an active leave request from ${exStart} to ${exEnd}.`);
+    }
   }
 
   const all = await Leave.find({}, { id: 1 }).lean();
@@ -428,31 +447,38 @@ export async function addLeave(data: any, userId: string) {
   }
   const id = `LV${String(max + 1).padStart(3, "0")}`;
   
-  let days = Math.round((newEnd - newStart) / (1000 * 60 * 60 * 24)) + 1;
+  const sDate = new Date(reqStart);
+  const eDate = new Date(reqEnd);
+  let days = Math.round((eDate.getTime() - sDate.getTime()) / (1000 * 60 * 60 * 24)) + 1;
   
   // Find overlapping company holidays and subtract them
   const holidays = await Holiday.find({
     isActive: true,
     holidayType: "COMPANY_HOLIDAY",
     $or: [
-      { startDate: { $lte: data.endDate }, endDate: { $gte: data.startDate } }
+      { startDate: { $lte: reqEnd }, endDate: { $gte: reqStart } }
     ]
   }).lean();
 
   let holidayDates = new Set<string>();
   for (const h of holidays) {
-    let curr = new Date((h as any).startDate);
-    const endHol = new Date((h as any).endDate);
+    let curr = new Date(normalizeDateStr((h as any).startDate));
+    const endHol = new Date(normalizeDateStr((h as any).endDate));
     while (curr <= endHol) {
-      if (curr.getTime() >= newStart && curr.getTime() <= newEnd) {
-        holidayDates.add(curr.toISOString().slice(0, 10));
+      const currStr = curr.toISOString().slice(0, 10);
+      if (currStr >= reqStart && currStr <= reqEnd) {
+        holidayDates.add(currStr);
       }
       curr.setDate(curr.getDate() + 1);
     }
   }
   
   days = Math.max(0, days - holidayDates.size);
-  if (days === 0) throw new Error("Leave duration is 0 after excluding company holidays.");
+  if (days <= 0) throw new Error("Selected date range consists entirely of company holidays.");
+
+  const empDoc = await Employee.findOne({ id: userId }, { name: 1 }).lean();
+  const empName = (empDoc as any)?.name || "An employee";
+  const notifMsg = `${empName} requested ${days} day(s) of leave (${data.type || "Leave"}).`;
 
   const leave = await Leave.create({ ...data, id, employeeId: userId, numberOfDays: days, appliedAt: new Date().toISOString(), status: "pending" });
   
@@ -462,12 +488,26 @@ export async function addLeave(data: any, userId: string) {
     message: `Leave request submitted for ${days} day(s).`
   });
 
+  // Notify HR
   await createNotification({
-    recipientId: "u_hr", // Using HR system account as recipient
+    recipientId: "u_hr",
     senderId: userId,
     senderRole: "employee",
     title: "New Leave Request",
-    message: `New leave request submitted by employee for ${days} day(s).`,
+    message: notifMsg,
+    type: "LEAVE_APPLIED",
+    module: "LEAVE",
+    referenceId: id,
+    actionUrl: `/leaves`,
+  });
+
+  // Notify Admin
+  await createNotification({
+    recipientId: "u_admin",
+    senderId: userId,
+    senderRole: "employee",
+    title: "New Leave Request",
+    message: notifMsg,
     type: "LEAVE_APPLIED",
     module: "LEAVE",
     referenceId: id,
@@ -489,10 +529,24 @@ export async function cancelLeave(leaveId: string, userId: string) {
   leave.cancelledAt = new Date().toISOString();
   await leave.save();
   
+  const empDoc = await Employee.findOne({ id: userId }, { name: 1 }).lean();
+  const empName = (empDoc as any)?.name || "An employee";
+
   await createActivity({
     employeeId: userId, actorId: userId, actorRole: "employee",
     activityType: "LEAVE_CANCELLED", module: "LEAVE", referenceId: leaveId,
     message: `You cancelled your leave request.`
+  });
+
+  // Notify managers about cancellation
+  const cancelMsg = `${empName} cancelled their leave request.`;
+  await createNotification({
+    recipientId: "u_hr", senderId: userId, senderRole: "employee",
+    title: "Leave Request Cancelled", message: cancelMsg, type: "LEAVE_CANCELLED", module: "LEAVE", referenceId: leaveId, actionUrl: `/leaves`
+  });
+  await createNotification({
+    recipientId: "u_admin", senderId: userId, senderRole: "employee",
+    title: "Leave Request Cancelled", message: cancelMsg, type: "LEAVE_CANCELLED", module: "LEAVE", referenceId: leaveId, actionUrl: `/leaves`
   });
 
   return serialize(leave);
@@ -863,12 +917,28 @@ export async function addExpense(data: any, userId: string) {
     message: `Expense claim submitted for ₹${data.amount} (${data.category}).`
   });
 
+  const empDoc = await Employee.findOne({ id: userId }, { name: 1 }).lean();
+  const empName = (empDoc as any)?.name || "An employee";
+  const expMsg = `${empName} submitted an expense claim of ₹${data.amount} (${data.category}).`;
+
   await createNotification({
     recipientId: "u_hr",
     senderId: userId,
     senderRole: "employee",
     title: "New Expense Claim",
-    message: `Expense claim of ₹${data.amount} submitted by employee for ${data.category}.`,
+    message: expMsg,
+    type: "EXPENSE_SUBMITTED",
+    module: "EXPENSE",
+    referenceId: id,
+    actionUrl: `/expenses`,
+  });
+
+  await createNotification({
+    recipientId: "u_admin",
+    senderId: userId,
+    senderRole: "employee",
+    title: "New Expense Claim",
+    message: expMsg,
     type: "EXPENSE_SUBMITTED",
     module: "EXPENSE",
     referenceId: id,

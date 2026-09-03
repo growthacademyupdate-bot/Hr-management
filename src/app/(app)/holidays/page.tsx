@@ -78,9 +78,7 @@ export default function HolidaysPage() {
   });
 
   useEffect(() => {
-    if (globalSearch) {
-      setSearch(globalSearch);
-    }
+    setSearch(globalSearch);
   }, [globalSearch, setSearch]);
 
   if (!user) return null;
@@ -139,7 +137,10 @@ export default function HolidaysPage() {
               placeholder="Search holidays..."
               className="pl-9"
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              onChange={(e) => {
+                setSearch(e.target.value);
+                api.setGlobalSearch(e.target.value);
+              }}
             />
           </div>
         </div>

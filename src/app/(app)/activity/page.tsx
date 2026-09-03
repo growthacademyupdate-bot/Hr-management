@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { useAuth, useDB } from "@/lib/store";
+import { useMemo, useState, useEffect } from "react";
+import { useAuth, useDB, api, useGlobalSearch } from "@/lib/store";
 import { PageHeader } from "@/components/PageHeader";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -14,6 +14,7 @@ import { DataTablePagination } from "@/components/DataTablePagination";
 export default function ActivityPage() {
   const user = useAuth();
   const db = useDB();
+  const globalSearch = useGlobalSearch();
 
   const myActivities = useMemo(() => {
     if (!user) return [];
@@ -47,6 +48,10 @@ export default function ActivityPage() {
     defaultSortOrder: "desc",
   });
 
+  useEffect(() => {
+    setSearch(globalSearch);
+  }, [globalSearch, setSearch]);
+
   if (!user) return null;
 
   return (
@@ -63,7 +68,10 @@ export default function ActivityPage() {
             placeholder="Search activity timeline..."
             className="pl-9 bg-card"
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={(e) => {
+              setSearch(e.target.value);
+              api.setGlobalSearch(e.target.value);
+            }}
           />
         </div>
 

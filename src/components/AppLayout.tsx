@@ -5,9 +5,9 @@ import { usePathname, useRouter } from "next/navigation";
 import { useAuth, logout, ROLE_MENUS, useGlobalSearch, api, useDB } from "@/lib/store";
 import {
   LayoutDashboard, Users, CalendarCheck, ListTodo, CalendarOff, BarChart3, Settings, Activity, User as UserIcon,
-  Bell, LogOut, Menu, Search, Sun, CalendarDays, Receipt
+  Bell, LogOut, Menu, Search, Sun, CalendarDays, Receipt, X
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger,
@@ -30,12 +30,79 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   const notifications = db.notifications || [];
   const unreadCount = notifications.filter(n => !n.isRead).length;
 
+  const [searchFocused, setSearchFocused] = useState(false);
+
+  const searchResults = useMemo(() => {
+    const q = globalSearch.trim().toLowerCase();
+    if (!q) return null;
+
+    const employees = (db.employees || []).filter(e => 
+      e.name?.toLowerCase().includes(q) ||
+      e.email?.toLowerCase().includes(q) ||
+      e.department?.toLowerCase().includes(q) ||
+      e.designation?.toLowerCase().includes(q) ||
+      e.id?.toLowerCase().includes(q)
+    ).slice(0, 3);
+
+    const tasks = (db.tasks || []).filter(t => 
+      t.title?.toLowerCase().includes(q) ||
+      t.description?.toLowerCase().includes(q) ||
+      t.status?.toLowerCase().includes(q) ||
+      t.priority?.toLowerCase().includes(q)
+    ).slice(0, 3);
+
+    const attendance = (db.attendance || []).filter(a => {
+      const emp = db.employees?.find(e => e.id === a.employeeId);
+      return a.date?.toLowerCase().includes(q) ||
+        a.status?.toLowerCase().includes(q) ||
+        emp?.name?.toLowerCase().includes(q);
+    }).slice(0, 3);
+
+    const leaves = (db.leaves || []).filter(l => {
+      const emp = db.employees?.find(e => e.id === l.employeeId);
+      return l.type?.toLowerCase().includes(q) ||
+        l.reason?.toLowerCase().includes(q) ||
+        l.status?.toLowerCase().includes(q) ||
+        emp?.name?.toLowerCase().includes(q);
+    }).slice(0, 3);
+
+    const expenses = (db.expenses || []).filter(ex => {
+      const emp = db.employees?.find(e => e.id === ex.employeeId);
+      return ex.title?.toLowerCase().includes(q) ||
+        ex.category?.toLowerCase().includes(q) ||
+        ex.status?.toLowerCase().includes(q) ||
+        emp?.name?.toLowerCase().includes(q);
+    }).slice(0, 3);
+
+    const holidays = (db.holidays || []).filter(h =>
+      h.name?.toLowerCase().includes(q) ||
+      h.holidayType?.toLowerCase().includes(q) ||
+      h.startDate?.toLowerCase().includes(q)
+    ).slice(0, 3);
+
+    const totalCount = employees.length + tasks.length + attendance.length + leaves.length + expenses.length + holidays.length;
+
+    return { employees, tasks, attendance, leaves, expenses, holidays, totalCount };
+  }, [globalSearch, db]);
+
   useEffect(() => {
     if (user === null) router.push("/login");
   }, [user, router]);
 
   if (!user) return null;
   const menu = ROLE_MENUS[user.role];
+
+  const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter" && searchResults) {
+      if (searchResults.employees.length > 0) router.push("/employees");
+      else if (searchResults.tasks.length > 0) router.push("/tasks");
+      else if (searchResults.attendance.length > 0) router.push("/attendance");
+      else if (searchResults.leaves.length > 0) router.push("/leaves");
+      else if (searchResults.expenses.length > 0) router.push("/expenses");
+      else if (searchResults.holidays.length > 0) router.push("/holidays");
+      setSearchFocused(false);
+    }
+  };
 
   return (
     <div className="min-h-screen flex w-full bg-background">
@@ -133,13 +200,164 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
 
           {/* 2. Search Bar Second */}
           <div className="relative hidden md:block flex-1 max-w-md">
-            <Search className="h-4 w-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+            <Search className="h-4 w-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground z-10" />
             <Input 
-              placeholder="Search employees, tasks…" 
-              className="pl-9 bg-muted/40 border-0" 
+              placeholder="Search employees, tasks, attendance..." 
+              className="pl-9 pr-9 bg-muted/40 border-0" 
               value={globalSearch}
               onChange={(e) => api.setGlobalSearch(e.target.value)}
+              onFocus={() => setSearchFocused(true)}
+              onBlur={() => setTimeout(() => setSearchFocused(false), 200)}
+              onKeyDown={handleSearchKeyDown}
             />
+            {globalSearch && (
+              <button 
+                onClick={() => api.setGlobalSearch("")} 
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground z-10"
+                title="Clear search"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            )}
+
+            {/* Live Search Popup Dropdown */}
+            {searchFocused && searchResults && (
+              <div className="absolute top-full left-0 right-0 mt-2 bg-card border rounded-xl shadow-2xl z-50 overflow-hidden max-h-[420px] overflow-y-auto p-2 divide-y divide-border">
+                {searchResults.totalCount === 0 ? (
+                  <div className="p-4 text-center text-sm text-muted-foreground">
+                    No matches found for &quot;<span className="font-semibold">{globalSearch}</span>&quot;
+                  </div>
+                ) : (
+                  <>
+                    {/* Employees */}
+                    {searchResults.employees.length > 0 && (
+                      <div className="py-2">
+                        <div className="px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-muted-foreground flex justify-between items-center">
+                          <span>Employees ({searchResults.employees.length})</span>
+                          <button onClick={() => router.push("/employees")} className="text-primary hover:underline text-[10px]">View All</button>
+                        </div>
+                        {searchResults.employees.map(e => (
+                          <div 
+                            key={e.id}
+                            onClick={() => { router.push("/employees"); setSearchFocused(false); }}
+                            className="px-3 py-2 text-sm hover:bg-muted/60 rounded-lg cursor-pointer flex justify-between items-center"
+                          >
+                            <span className="font-medium text-foreground">{e.name}</span>
+                            <span className="text-xs text-muted-foreground">{e.department} • {e.designation}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Tasks */}
+                    {searchResults.tasks.length > 0 && (
+                      <div className="py-2">
+                        <div className="px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-muted-foreground flex justify-between items-center">
+                          <span>Tasks ({searchResults.tasks.length})</span>
+                          <button onClick={() => router.push("/tasks")} className="text-primary hover:underline text-[10px]">View All</button>
+                        </div>
+                        {searchResults.tasks.map(t => (
+                          <div 
+                            key={t.id}
+                            onClick={() => { router.push("/tasks"); setSearchFocused(false); }}
+                            className="px-3 py-2 text-sm hover:bg-muted/60 rounded-lg cursor-pointer flex justify-between items-center"
+                          >
+                            <span className="font-medium truncate max-w-[200px]">{t.title}</span>
+                            <Badge variant="outline" className="capitalize text-[10px]">{t.status.replace("_", " ")}</Badge>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Attendance */}
+                    {searchResults.attendance.length > 0 && (
+                      <div className="py-2">
+                        <div className="px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-muted-foreground flex justify-between items-center">
+                          <span>Attendance ({searchResults.attendance.length})</span>
+                          <button onClick={() => router.push("/attendance")} className="text-primary hover:underline text-[10px]">View All</button>
+                        </div>
+                        {searchResults.attendance.map(a => {
+                          const emp = db.employees?.find(e => e.id === a.employeeId);
+                          return (
+                            <div 
+                              key={a.id}
+                              onClick={() => { router.push("/attendance"); setSearchFocused(false); }}
+                              className="px-3 py-2 text-sm hover:bg-muted/60 rounded-lg cursor-pointer flex justify-between items-center"
+                            >
+                              <span className="font-medium">{emp?.name || "Attendance Record"}</span>
+                              <span className="text-xs text-muted-foreground">{a.date} • {a.status}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    {/* Leaves */}
+                    {searchResults.leaves.length > 0 && (
+                      <div className="py-2">
+                        <div className="px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-muted-foreground flex justify-between items-center">
+                          <span>Leaves ({searchResults.leaves.length})</span>
+                          <button onClick={() => router.push("/leaves")} className="text-primary hover:underline text-[10px]">View All</button>
+                        </div>
+                        {searchResults.leaves.map(l => {
+                          const emp = db.employees?.find(e => e.id === l.employeeId);
+                          return (
+                            <div 
+                              key={l.id}
+                              onClick={() => { router.push("/leaves"); setSearchFocused(false); }}
+                              className="px-3 py-2 text-sm hover:bg-muted/60 rounded-lg cursor-pointer flex justify-between items-center"
+                            >
+                              <span className="font-medium">{emp?.name || l.type}</span>
+                              <Badge variant="outline" className="capitalize text-[10px]">{l.status}</Badge>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    {/* Expenses */}
+                    {searchResults.expenses.length > 0 && (
+                      <div className="py-2">
+                        <div className="px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-muted-foreground flex justify-between items-center">
+                          <span>Expenses ({searchResults.expenses.length})</span>
+                          <button onClick={() => router.push("/expenses")} className="text-primary hover:underline text-[10px]">View All</button>
+                        </div>
+                        {searchResults.expenses.map(ex => (
+                          <div 
+                            key={ex.id}
+                            onClick={() => { router.push("/expenses"); setSearchFocused(false); }}
+                            className="px-3 py-2 text-sm hover:bg-muted/60 rounded-lg cursor-pointer flex justify-between items-center"
+                          >
+                            <span className="font-medium">{ex.title}</span>
+                            <span className="text-xs font-semibold text-emerald-600">₹{ex.amount}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Holidays */}
+                    {searchResults.holidays.length > 0 && (
+                      <div className="py-2">
+                        <div className="px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-muted-foreground flex justify-between items-center">
+                          <span>Holidays ({searchResults.holidays.length})</span>
+                          <button onClick={() => router.push("/holidays")} className="text-primary hover:underline text-[10px]">View All</button>
+                        </div>
+                        {searchResults.holidays.map(h => (
+                          <div 
+                            key={h.id}
+                            onClick={() => { router.push("/holidays"); setSearchFocused(false); }}
+                            className="px-3 py-2 text-sm hover:bg-muted/60 rounded-lg cursor-pointer flex justify-between items-center"
+                          >
+                            <span className="font-medium">{h.name}</span>
+                            <span className="text-xs text-muted-foreground">{h.startDate}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+            )}
           </div>
           <div className="flex-1 md:hidden" />
 

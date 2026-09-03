@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useMemo } from "react";
-import { useAuth, useDB, api, Expense, Role } from "@/lib/store";
+import { useState, useMemo, useEffect } from "react";
+import { useAuth, useDB, api, Expense, Role, useGlobalSearch } from "@/lib/store";
 import { PageHeader } from "@/components/PageHeader";
 import { StatCard } from "@/components/StatCard";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -26,6 +26,7 @@ const CATEGORIES = ["Travel", "Office Supplies", "Client Meeting", "Food & Dinin
 export default function ExpensesPage() {
   const user = useAuth();
   const db = useDB();
+  const globalSearch = useGlobalSearch();
 
   // Dialog States
   const [openAddModal, setOpenAddModal] = useState(false);
@@ -103,6 +104,10 @@ export default function ExpensesPage() {
     defaultSortField: "appliedAt",
     defaultSortOrder: "desc",
   });
+
+  useEffect(() => {
+    setSearch(globalSearch);
+  }, [globalSearch, setSearch]);
 
   // Calculate Metrics
   const metrics = useMemo(() => {

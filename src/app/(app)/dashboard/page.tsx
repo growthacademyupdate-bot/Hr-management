@@ -1,10 +1,12 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { useAuth, useDB } from "@/lib/store";
+import { useAuth, useDB, api } from "@/lib/store";
 import { PageHeader } from "@/components/PageHeader";
 import { StatCard } from "@/components/StatCard";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { toast } from "sonner";
 import { Users, UserCheck, UserX, Activity, ListChecks, CheckCircle2, Clock, TrendingUp, Search } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -310,6 +312,8 @@ function EmployeeDashboard() {
   const myActivities = db.activities.filter((a) => a.employeeId === empId && employeeIds.has(a.employeeId)).slice(0, 10);
   const upcomingHolidays = db.holidays?.filter(h => h.isActive && h.startDate >= today).sort((a,b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime()).slice(0, 3) || [];
 
+  const activeTasks = myTasks.filter((t) => t.status === "assigned" || t.status === "working_progress");
+
   return (
     <div className="space-y-6">
       <PageHeader title={`Hi ${user.name.split(" ")[0]} 👋`} description="Here's your work summary for today." />
@@ -324,6 +328,46 @@ function EmployeeDashboard() {
         <StatCard label="Pending" value={myTasks.filter(t => t.status === "assigned").length} icon={Clock} tone="warning" />
         <StatCard label="In Progress" value={myTasks.filter(t => t.status === "working_progress").length} icon={Activity} tone="info" />
       </div>
+
+      {activeTasks.length > 0 && (
+        <Card className="border-0 shadow-sm overflow-hidden">
+          <CardHeader className="flex flex-row items-center justify-between pb-3">
+            <CardTitle className="text-base font-semibold">My Active Tasks</CardTitle>
+            <Badge variant="outline" className="text-xs">{activeTasks.length} pending</Badge>
+          </CardHeader>
+          <CardContent className="space-y-3 pt-0">
+            {activeTasks.map((t) => (
+              <div key={t.id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 bg-muted/30 border rounded-lg">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <span className="font-medium text-sm">{t.title}</span>
+                    <Badge variant="outline" className="capitalize text-[11px] py-0">{t.priority}</Badge>
+                    <StatusBadge status={t.status} />
+                  </div>
+                  <p className="text-xs text-muted-foreground line-clamp-1">{t.description}</p>
+                  <div className="text-[11px] text-muted-foreground">Due: {t.dueDate}</div>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  {t.status === "assigned" && (
+                    <Button size="sm" variant="outline" className="text-xs h-8" onClick={async () => {
+                      await api.updateTaskStatus(t.id, "working_progress");
+                      toast.success("Task marked as Working Progress");
+                    }}>
+                      Working Progress
+                    </Button>
+                  )}
+                  <Button size="sm" className="bg-indigo-600 hover:bg-indigo-700 text-white font-medium text-xs h-8" onClick={async () => {
+                    await api.updateTaskStatus(t.id, "completed");
+                    toast.success("Task marked as Completed!");
+                  }}>
+                    Completed
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
 
       <div className="grid lg:grid-cols-3 gap-4">
         <Card className="border-0 shadow-sm">
