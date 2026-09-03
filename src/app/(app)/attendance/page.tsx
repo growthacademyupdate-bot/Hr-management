@@ -73,15 +73,39 @@ export default function AttendancePage() {
     paginatedData,
   } = useDataTable({
     data: rawRecords,
-    searchFields: (r) => [r.employeeName, r.employeeIdCode, r.date, r.status],
+    searchFields: (r) => {
+      let formattedDate1 = "";
+      let formattedDate2 = "";
+      try {
+        if (r.date) {
+          const parsed = parseISO(r.date);
+          formattedDate1 = format(parsed, "dd MMM, yyyy");
+          formattedDate2 = format(parsed, "MMM dd, yyyy");
+        }
+      } catch (e) {}
+
+      const firstLoginStr = r.firstLoginAt ? format(new Date(r.firstLoginAt), "hh:mm a") : (r.loginTime || "");
+      const lastLogoutStr = r.lastLogoutAt ? format(new Date(r.lastLogoutAt), "hh:mm a") : (r.logoutTime || "");
+      const totalHoursStr = r.totalWorkingSeconds ? formatDuration(r.totalWorkingSeconds) : `${r.workingHours || 0}h`;
+
+      return [
+        r.employeeName,
+        r.employeeIdCode,
+        r.date,
+        formattedDate1,
+        formattedDate2,
+        r.status,
+        firstLoginStr,
+        lastLogoutStr,
+        totalHoursStr,
+      ];
+    },
     defaultSortField: "date",
     defaultSortOrder: "desc",
   });
 
   useEffect(() => {
-    if (globalSearch) {
-      setSearch(globalSearch);
-    }
+    setSearch(globalSearch);
   }, [globalSearch, setSearch]);
 
   if (!user) return null;
@@ -109,7 +133,10 @@ export default function AttendancePage() {
           <Input 
             placeholder="Search attendance..." 
             value={search} 
-            onChange={(e) => setSearch(e.target.value)} 
+            onChange={(e) => {
+              setSearch(e.target.value);
+              api.setGlobalSearch(e.target.value);
+            }} 
             className="pl-9 bg-card"
           />
         </div>

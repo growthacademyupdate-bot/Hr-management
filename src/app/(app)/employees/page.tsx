@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useState, useMemo } from "react";
-import { useAuth, useDB, api } from "@/lib/store";
+import { useState, useMemo, useEffect } from "react";
+import { useAuth, useDB, api, useGlobalSearch } from "@/lib/store";
 import type { Employee } from "@/lib/store";
 import { PageHeader } from "@/components/PageHeader";
 import { Card, CardContent } from "@/components/ui/card";
@@ -25,6 +25,7 @@ const DEPARTMENTS = ["Design", "Marketing", "Sales", "HR", "Web", "Finance", "Op
 export default function EmployeesPage() {
   const user = useAuth();
   const db = useDB();
+  const globalSearch = useGlobalSearch();
   const [dept, setDept] = useState("all");
   const [status, setStatus] = useState("all");
   const [open, setOpen] = useState(false);
@@ -57,10 +58,14 @@ export default function EmployeesPage() {
     paginatedData,
   } = useDataTable({
     data: baseFilteredEmployees,
-    searchFields: (e) => [e.name, e.id, e.email, e.department, e.designation, e.mobile],
+    searchFields: (e) => [e.name, e.id, e.email, e.department, e.designation, e.mobile, e.status],
     defaultSortField: "name",
     defaultSortOrder: "asc",
   });
+
+  useEffect(() => {
+    setSearch(globalSearch);
+  }, [globalSearch, setSearch]);
 
   return (
     <div>
@@ -80,7 +85,15 @@ export default function EmployeesPage() {
           <div className="flex flex-col md:flex-row gap-3 mb-4">
             <div className="relative flex-1">
               <Search className="h-4 w-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-              <Input placeholder="Search employees…" className="pl-9" value={search} onChange={(e) => setSearch(e.target.value)} />
+              <Input 
+                placeholder="Search employees…" 
+                className="pl-9" 
+                value={search} 
+                onChange={(e) => {
+                  setSearch(e.target.value);
+                  api.setGlobalSearch(e.target.value);
+                }} 
+              />
             </div>
             <Select value={dept} onValueChange={setDept}>
               <SelectTrigger className="w-full md:w-48"><SelectValue /></SelectTrigger>

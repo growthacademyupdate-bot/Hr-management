@@ -66,9 +66,7 @@ export default function TasksPage() {
   });
 
   useEffect(() => {
-    if (globalSearch) {
-      setSearch(globalSearch);
-    }
+    setSearch(globalSearch);
   }, [globalSearch, setSearch]);
 
   if (!user) return null;
@@ -107,7 +105,10 @@ export default function TasksPage() {
               placeholder="Search tasks, title, employee..."
               className="pl-9"
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              onChange={(e) => {
+                setSearch(e.target.value);
+                api.setGlobalSearch(e.target.value);
+              }}
             />
           </div>
         </div>
@@ -205,12 +206,18 @@ export default function TasksPage() {
                         
                         {/* Employee Actions */}
                         {user.role === "employee" && task.status === "assigned" && (
-                          <Button size="sm" variant="outline" onClick={() => api.updateTaskStatus(task.id, "working_progress")}>
+                          <Button size="sm" variant="outline" onClick={async () => {
+                            await api.updateTaskStatus(task.id, "working_progress");
+                            toast.success("Task marked as Working Progress");
+                          }}>
                             Working Progress
                           </Button>
                         )}
-                        {user.role === "employee" && task.status === "working_progress" && (
-                          <Button size="sm" variant="default" onClick={() => api.updateTaskStatus(task.id, "completed")}>
+                        {user.role === "employee" && (task.status === "assigned" || task.status === "working_progress") && (
+                          <Button size="sm" variant="default" className="bg-indigo-600 hover:bg-indigo-700 text-white font-medium shadow-sm" onClick={async () => {
+                            await api.updateTaskStatus(task.id, "completed");
+                            toast.success("Task marked as Completed!");
+                          }}>
                             Completed
                           </Button>
                         )}
@@ -283,6 +290,27 @@ export default function TasksPage() {
                   <div className="text-sm mt-1">{viewTask.dueDate}</div>
                 </div>
               </div>
+
+              {user.role === "employee" && (viewTask.status === "assigned" || viewTask.status === "working_progress") && (
+                <div className="pt-4 border-t flex flex-wrap items-center justify-end gap-2">
+                  {viewTask.status === "assigned" && (
+                    <Button size="sm" variant="outline" onClick={async () => {
+                      await api.updateTaskStatus(viewTask.id, "working_progress");
+                      setViewTask({ ...viewTask, status: "working_progress" });
+                      toast.success("Task marked as Working Progress");
+                    }}>
+                      Working Progress
+                    </Button>
+                  )}
+                  <Button size="sm" className="bg-indigo-600 hover:bg-indigo-700 text-white font-medium" onClick={async () => {
+                    await api.updateTaskStatus(viewTask.id, "completed");
+                    setViewTask({ ...viewTask, status: "completed" });
+                    toast.success("Task marked as Completed!");
+                  }}>
+                    Completed
+                  </Button>
+                </div>
+              )}
             </div>
           )}
         </DialogContent>

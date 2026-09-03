@@ -78,9 +78,7 @@ export default function LeavesPage() {
 
   // Sync global search with table search
   useEffect(() => {
-    if (globalSearch) {
-      setSearch(globalSearch);
-    }
+    setSearch(globalSearch);
   }, [globalSearch, setSearch]);
 
   if (!user) return null;
@@ -113,7 +111,10 @@ export default function LeavesPage() {
               placeholder="Search leaves, employees, reason..."
               className="pl-9"
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              onChange={(e) => {
+                setSearch(e.target.value);
+                api.setGlobalSearch(e.target.value);
+              }}
             />
           </div>
         </div>

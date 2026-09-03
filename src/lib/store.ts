@@ -87,7 +87,7 @@ export function useDB() {
           currentDB.notifications = notifs;
           notify();
         }).catch(console.error);
-      }, 30000); // 30 seconds
+      }, 5000); // 5 seconds
     }
 
     return () => {
@@ -120,12 +120,12 @@ export const api = {
   async updateTaskStatus(taskId: string, status: string) { const user = getCurrentUser(); if(!user) return; const t = await updateTaskStatus(taskId, status, user.employeeId || user.id, user.role); currentDB.tasks = currentDB.tasks.map(x => x.id === taskId ? t : x); notify(); },
   async reviewTask(taskId: string, review: { hrRating: string; hrReview: string }) { const user = getCurrentUser(); if(!user) return; const t = await reviewTask(taskId, review, user.employeeId || user.id, user.role); currentDB.tasks = currentDB.tasks.map(x => x.id === taskId ? t : x); notify(); },
   
-  async addLeave(leave: any) { const user = getCurrentUser(); if(!user) return; const l = await addLeave(leave, user.employeeId || user.id); currentDB.leaves = [l, ...currentDB.leaves]; notify(); return l; },
+  async addLeave(leave: any) { const user = getCurrentUser(); if(!user) return; const l = await addLeave(leave, user.employeeId || user.id); currentDB.leaves = [l, ...currentDB.leaves]; getNotifications(user.employeeId || user.id).then(n => { currentDB.notifications = n; notify(); }).catch(console.error); notify(); return l; },
   async cancelLeave(leaveId: string) { const user = getCurrentUser(); if(!user) return; const l = await cancelLeave(leaveId, user.employeeId || user.id); currentDB.leaves = currentDB.leaves.map(x => x.id === leaveId ? l : x); notify(); },
   async hrReviewLeave(leaveId: string, action: "approve" | "reject", comment: string) { const user = getCurrentUser(); if(!user) return; const l = await hrReviewLeave(leaveId, action, comment, user.employeeId || user.id, user.role); currentDB.leaves = currentDB.leaves.map(x => x.id === leaveId ? l : x); notify(); },
   async adminReviewLeave(leaveId: string, action: "approve" | "reject", comment: string) { const user = getCurrentUser(); if(!user) return; const l = await adminReviewLeave(leaveId, action, comment, user.employeeId || user.id, user.role); currentDB.leaves = currentDB.leaves.map(x => x.id === leaveId ? l : x); notify(); },
 
-  async addExpense(expense: any) { const user = getCurrentUser(); if(!user) return; const e = await addExpense(expense, user.employeeId || user.id); currentDB.expenses = [e, ...currentDB.expenses]; notify(); return e; },
+  async addExpense(expense: any) { const user = getCurrentUser(); if(!user) return; const e = await addExpense(expense, user.employeeId || user.id); currentDB.expenses = [e, ...currentDB.expenses]; getNotifications(user.employeeId || user.id).then(n => { currentDB.notifications = n; notify(); }).catch(console.error); notify(); return e; },
   async cancelExpense(expenseId: string) { const user = getCurrentUser(); if(!user) return; const e = await cancelExpense(expenseId, user.employeeId || user.id); currentDB.expenses = currentDB.expenses.map(x => x.id === expenseId ? e : x); notify(); },
   async hrReviewExpense(expenseId: string, action: "approve" | "reject", comment: string) { const user = getCurrentUser(); if(!user) return; const e = await hrReviewExpense(expenseId, action, comment, user.employeeId || user.id, user.role); currentDB.expenses = currentDB.expenses.map(x => x.id === expenseId ? e : x); notify(); },
   async adminReviewExpense(expenseId: string, action: "approve" | "reject", comment: string) { const user = getCurrentUser(); if(!user) return; const e = await adminReviewExpense(expenseId, action, comment, user.employeeId || user.id, user.role); currentDB.expenses = currentDB.expenses.map(x => x.id === expenseId ? e : x); notify(); },
