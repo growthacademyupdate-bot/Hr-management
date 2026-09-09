@@ -13,7 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Search } from "lucide-react";
+import { Search, Trash2 } from "lucide-react";
 import { useDataTable } from "@/hooks/useDataTable";
 import { SortableHeader } from "@/components/SortableHeader";
 import { DataTablePagination } from "@/components/DataTablePagination";
@@ -97,7 +97,7 @@ export default function LeavesPage() {
               <DialogHeader>
                 <DialogTitle>Apply for Leave</DialogTitle>
               </DialogHeader>
-              <ApplyLeaveForm onSuccess={() => setIsApplyOpen(false)} />
+              <ApplyLeaveForm user={user} onSuccess={() => setIsApplyOpen(false)} />
             </DialogContent>
           </Dialog>
         )}
@@ -243,6 +243,23 @@ export default function LeavesPage() {
                             Final Review
                           </Button>
                         )}
+
+                        {(user.role === "admin" || user.role === "hr" || (user.role === "employee" && leave.employeeId === (user.employeeId || user.id))) && (
+                          <Button size="sm" variant="ghost" className="text-destructive hover:text-destructive hover:bg-destructive/10" onClick={async () => {
+                            if (confirm("Are you sure you want to delete this leave record? This action cannot be undone.")) {
+                              try {
+                                console.log("Attempting to delete leave:", leave.id, "User role:", user.role, "User ID:", user.id, "Employee ID:", user.employeeId);
+                                await api.deleteLeave(leave.id);
+                                toast.success("Leave deleted successfully");
+                              } catch (error: any) {
+                                console.error("Delete leave error:", error);
+                                toast.error(error.message || "Failed to delete leave");
+                              }
+                            }
+                          }}>
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        )}
                       </div>
                     </TableCell>
                   </TableRow>
@@ -277,7 +294,7 @@ export default function LeavesPage() {
   );
 }
 
-function ApplyLeaveForm({ onSuccess }: { onSuccess: () => void }) {
+function ApplyLeaveForm({ user, onSuccess }: { user: any; onSuccess: () => void }) {
   const [type, setType] = useState("Casual Leave");
   const [startDate, setStartDate] = useState(new Date().toISOString().slice(0, 10));
   const [endDate, setEndDate] = useState(new Date().toISOString().slice(0, 10));
@@ -299,7 +316,7 @@ function ApplyLeaveForm({ onSuccess }: { onSuccess: () => void }) {
         startDate,
         endDate,
         reason,
-      });
+      }, user.employeeId || user.id);
       toast.success("Leave request submitted successfully");
       onSuccess();
     } catch (err: any) {

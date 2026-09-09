@@ -153,6 +153,18 @@ export async function markAllNotificationsAsRead(userId: string) {
   return { success: true };
 }
 
+export async function deleteNotification(notificationId: string, userId: string, userRole: string) {
+  await connectDB();
+  console.log("deleteNotification called with:", { notificationId, userId, userRole });
+  const notification = await Notification.findOne({ id: notificationId });
+  if (!notification) throw new Error("Notification not found");
+  if (userRole === "employee" && notification.recipientId !== userId) throw new Error("Unauthorized");
+  // Admin and HR can delete any notification
+  
+  await Notification.findOneAndDelete({ id: notificationId });
+  return { success: true };
+}
+
 export async function loginAction(usernameOrId: string, password: string) {
   try {
     await connectDB();
@@ -638,6 +650,25 @@ export async function adminReviewLeave(leaveId: string, action: "approve" | "rej
   return serialize(leave);
 }
 
+export async function deleteLeave(leaveId: string, userId: string, userRole: string) {
+  await connectDB();
+  console.log("deleteLeave called with:", { leaveId, userId, userRole });
+  const leave = await Leave.findOne({ id: leaveId });
+  if (!leave) throw new Error("Leave not found");
+  if (userRole === "employee" && leave.employeeId !== userId) throw new Error("Unauthorized");
+  // Admin and HR can delete any leave (no additional checks needed)
+  
+  await Leave.findOneAndDelete({ id: leaveId });
+
+  await createActivity({
+    employeeId: leave.employeeId, actorId: userId, actorRole: userRole,
+    activityType: "LEAVE_DELETED", module: "LEAVE", referenceId: leaveId,
+    message: `Leave request was deleted.`
+  });
+
+  return { success: true };
+}
+
 // ---------------- Attendance & Activity ----------------
 export async function getAttendance() {
   await connectDB();
@@ -649,6 +680,13 @@ export async function getActivities() {
   await connectDB();
   const acts = await Activity.find({}).sort({ time: -1 }).lean();
   return serialize(acts);
+}
+
+export async function deleteActivity(activityId: string, userRole: string) {
+  await connectDB();
+  if (userRole !== "admin") throw new Error("Only Admin can delete activity records");
+  await Activity.findOneAndDelete({ id: activityId });
+  return { success: true };
 }
 
 async function logLoginActivity(employeeId: string) {

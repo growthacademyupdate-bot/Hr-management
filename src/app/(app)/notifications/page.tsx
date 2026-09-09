@@ -5,6 +5,7 @@ import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { toast } from "sonner";
 import { Bell, CheckCheck, Clock, ExternalLink, Send, Edit, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
@@ -81,6 +82,16 @@ export default function NotificationsPage() {
     await api.deleteBroadcastNotification(broadcastId);
     const updated = await getSentBroadcasts(user.employeeId || user.id);
     setSentBroadcasts(updated);
+  };
+
+  const handleDeleteNotification = async (notificationId: string) => {
+    if (!confirm("Are you sure you want to delete this notification?")) return;
+    try {
+      await api.deleteNotification(notificationId);
+      toast.success("Notification deleted successfully");
+    } catch (error: any) {
+      toast.error(error.message || "Failed to delete notification");
+    }
   };
 
   return (
@@ -224,6 +235,14 @@ export default function NotificationsPage() {
                       {n.isRead && (
                         <span className="text-xs text-muted-foreground">Read</span>
                       )}
+                      <Button 
+                        variant="ghost" 
+                        size="sm"
+                        className="h-auto p-1 text-xs gap-1 text-destructive hover:text-destructive hover:bg-destructive/10 ml-auto"
+                        onClick={() => handleDeleteNotification(n.id)}
+                      >
+                        <Trash2 className="h-3 w-3" /> Delete
+                      </Button>
                     </div>
                   </div>
                 </div>
