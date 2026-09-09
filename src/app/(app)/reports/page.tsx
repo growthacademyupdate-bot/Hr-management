@@ -10,7 +10,8 @@ import { Button } from "@/components/ui/button";
 import { StatusBadge } from "../dashboard/page";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
-import { Search } from "lucide-react";
+import { Search, Trash2 } from "lucide-react";
+import { toast } from "sonner";
 import { useDataTable } from "@/hooks/useDataTable";
 import { SortableHeader } from "@/components/SortableHeader";
 import { DataTablePagination } from "@/components/DataTablePagination";
@@ -193,6 +194,7 @@ export default function ReportsPage() {
 
 function HrActivityReport({ filterByDate }: { filterByDate: (d: string) => boolean }) {
   const db = useDB();
+  const user = useAuth();
   const globalSearch = useGlobalSearch();
 
   const data = useMemo(() => {
@@ -210,6 +212,16 @@ function HrActivityReport({ filterByDate }: { filterByDate: (d: string) => boole
     defaultSortField: "time",
     defaultSortOrder: "desc",
   });
+
+  const handleDeleteActivity = async (activityId: string) => {
+    if (!confirm("Are you sure you want to delete this activity record? This action cannot be undone.")) return;
+    try {
+      await api.deleteActivity(activityId);
+      toast.success("Activity deleted successfully");
+    } catch (error: any) {
+      toast.error(error.message || "Failed to delete activity");
+    }
+  };
 
   useEffect(() => {
     setSearch(globalSearch);
@@ -240,17 +252,25 @@ function HrActivityReport({ filterByDate }: { filterByDate: (d: string) => boole
               <SortableHeader field="hrName" currentSortField={sortField} currentSortOrder={sortOrder} onSort={toggleSort}>HR User</SortableHeader>
               <SortableHeader field="type" currentSortField={sortField} currentSortOrder={sortOrder} onSort={toggleSort}>Type</SortableHeader>
               <SortableHeader field="label" currentSortField={sortField} currentSortOrder={sortOrder} onSort={toggleSort}>Details</SortableHeader>
+              <TableHead className="w-[80px]">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {paginatedData.length === 0 ? (
-              <TableRow><TableCell colSpan={4} className="text-center py-8 text-muted-foreground">No HR activity records found.</TableCell></TableRow>
+              <TableRow><TableCell colSpan={5} className="text-center py-8 text-muted-foreground">No HR activity records found.</TableCell></TableRow>
             ) : paginatedData.map((act) => (
               <TableRow key={act.id}>
                 <TableCell className="whitespace-nowrap">{new Date(act.time).toLocaleString()}</TableCell>
                 <TableCell className="font-medium">{act.hrName}</TableCell>
                 <TableCell><Badge variant="outline">{act.type.replace("_", " ")}</Badge></TableCell>
                 <TableCell>{act.label}</TableCell>
+                <TableCell>
+                  {user?.role === "admin" && (
+                    <Button size="sm" variant="ghost" className="text-destructive hover:text-destructive hover:bg-destructive/10" onClick={() => handleDeleteActivity(act.id)}>
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  )}
+                </TableCell>
               </TableRow>
             ))}
           </TableBody>
@@ -298,6 +318,16 @@ function PerformanceReport({ filterByDate, isEmployee, isAdmin, isHR }: any) {
     defaultSortOrder: "asc",
   });
 
+  const handleDeleteTask = async (taskId: string) => {
+    if (!confirm("Are you sure you want to delete this task? This action cannot be undone.")) return;
+    try {
+      await api.deleteTask(taskId);
+      toast.success("Task deleted successfully");
+    } catch (error: any) {
+      toast.error(error.message || "Failed to delete task");
+    }
+  };
+
   useEffect(() => {
     setSearch(globalSearch);
   }, [globalSearch, setSearch]);
@@ -328,11 +358,12 @@ function PerformanceReport({ filterByDate, isEmployee, isAdmin, isHR }: any) {
               <SortableHeader field="completed" currentSortField={sortField} currentSortOrder={sortOrder} onSort={toggleSort}>Completed</SortableHeader>
               <SortableHeader field="rate" currentSortField={sortField} currentSortOrder={sortOrder} onSort={toggleSort}>Completion Rate</SortableHeader>
               <SortableHeader field="numericRating" currentSortField={sortField} currentSortOrder={sortOrder} onSort={toggleSort}>Avg HR Rating</SortableHeader>
+              <TableHead className="w-[80px]">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {paginatedData.length === 0 ? (
-              <TableRow><TableCell colSpan={5} className="text-center py-8 text-muted-foreground">No performance data found.</TableCell></TableRow>
+              <TableRow><TableCell colSpan={isAdmin || isHR ? 6 : 5} className="text-center py-8 text-muted-foreground">No performance data found.</TableCell></TableRow>
             ) : paginatedData.map((p) => (
               <TableRow key={p.id}>
                 {!isEmployee && <TableCell className="font-medium">{p.empName}</TableCell>}
@@ -341,6 +372,13 @@ function PerformanceReport({ filterByDate, isEmployee, isAdmin, isHR }: any) {
                 <TableCell>{p.rate}%</TableCell>
                 <TableCell>
                   <Badge variant={p.avgRating === "N/A" ? "secondary" : "default"}>{p.avgRating}</Badge>
+                </TableCell>
+                <TableCell>
+                  {(isAdmin || isHR) && (
+                    <Button size="sm" variant="ghost" className="text-destructive hover:text-destructive hover:bg-destructive/10" onClick={() => handleDeleteTask(p.id)}>
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  )}
                 </TableCell>
               </TableRow>
             ))}
@@ -372,6 +410,16 @@ function TasksReport({ filterByDate, isEmployee }: any) {
     defaultSortOrder: "asc",
   });
 
+  const handleDeleteTask = async (taskId: string) => {
+    if (!confirm("Are you sure you want to delete this task? This action cannot be undone.")) return;
+    try {
+      await api.deleteTask(taskId);
+      toast.success("Task deleted successfully");
+    } catch (error: any) {
+      toast.error(error.message || "Failed to delete task");
+    }
+  };
+
   return (
     <Card className="border-0 shadow-sm overflow-hidden">
       <CardHeader className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -390,11 +438,12 @@ function TasksReport({ filterByDate, isEmployee }: any) {
               <SortableHeader field="status" currentSortField={sortField} currentSortOrder={sortOrder} onSort={toggleSort}>Status</SortableHeader>
               <SortableHeader field="hrRating" currentSortField={sortField} currentSortOrder={sortOrder} onSort={toggleSort}>HR Rating</SortableHeader>
               <SortableHeader field="hrReview" currentSortField={sortField} currentSortOrder={sortOrder} onSort={toggleSort}>HR Review</SortableHeader>
+              <TableHead className="w-[80px]">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {paginatedData.length === 0 ? (
-              <TableRow><TableCell colSpan={5} className="text-center py-8 text-muted-foreground">No task records found.</TableCell></TableRow>
+              <TableRow><TableCell colSpan={6} className="text-center py-8 text-muted-foreground">No task records found.</TableCell></TableRow>
             ) : paginatedData.map((t) => (
               <TableRow key={t.id}>
                 <TableCell className="font-medium">{t.title}</TableCell>
@@ -402,6 +451,13 @@ function TasksReport({ filterByDate, isEmployee }: any) {
                 <TableCell><StatusBadge status={t.status} /></TableCell>
                 <TableCell>{t.hrRating || "—"}</TableCell>
                 <TableCell className="max-w-[200px] truncate">{t.hrReview || "—"}</TableCell>
+                <TableCell>
+                  {(user?.role === "admin" || user?.role === "hr" || (isEmployee && t.assignedTo === (user?.employeeId || user?.id))) && (
+                    <Button size="sm" variant="ghost" className="text-destructive hover:text-destructive hover:bg-destructive/10" onClick={() => handleDeleteTask(t.id)}>
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  )}
+                </TableCell>
               </TableRow>
             ))}
           </TableBody>
@@ -432,6 +488,16 @@ function LeavesReport({ filterByDate, isEmployee, isAdmin }: any) {
     defaultSortOrder: "desc",
   });
 
+  const handleDeleteLeave = async (leaveId: string) => {
+    if (!confirm("Are you sure you want to delete this leave record? This action cannot be undone.")) return;
+    try {
+      await api.deleteLeave(leaveId);
+      toast.success("Leave deleted successfully");
+    } catch (error: any) {
+      toast.error(error.message || "Failed to delete leave");
+    }
+  };
+
   return (
     <Card className="border-0 shadow-sm overflow-hidden">
       <CardHeader className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -450,11 +516,12 @@ function LeavesReport({ filterByDate, isEmployee, isAdmin }: any) {
               <SortableHeader field="startDate" currentSortField={sortField} currentSortOrder={sortOrder} onSort={toggleSort}>Dates</SortableHeader>
               <SortableHeader field="status" currentSortField={sortField} currentSortOrder={sortOrder} onSort={toggleSort}>Final Status</SortableHeader>
               {isAdmin && <SortableHeader field="hrReviewComment" currentSortField={sortField} currentSortOrder={sortOrder} onSort={toggleSort}>HR Comment</SortableHeader>}
+              <TableHead className="w-[80px]">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {paginatedData.length === 0 ? (
-              <TableRow><TableCell colSpan={5} className="text-center py-8 text-muted-foreground">No leave records found.</TableCell></TableRow>
+              <TableRow><TableCell colSpan={isAdmin ? 6 : 5} className="text-center py-8 text-muted-foreground">No leave records found.</TableCell></TableRow>
             ) : paginatedData.map((l) => (
               <TableRow key={l.id}>
                 {!isEmployee && <TableCell className="font-medium">{l.empName}</TableCell>}
@@ -462,6 +529,13 @@ function LeavesReport({ filterByDate, isEmployee, isAdmin }: any) {
                 <TableCell>{new Date(l.startDate).toLocaleDateString()} to {new Date(l.endDate).toLocaleDateString()}</TableCell>
                 <TableCell><StatusBadge status={l.status} /></TableCell>
                 {isAdmin && <TableCell className="max-w-[150px] truncate">{l.hrReviewComment || "—"}</TableCell>}
+                <TableCell>
+                  {(user?.role === "admin" || user?.role === "hr" || (isEmployee && l.employeeId === (user?.employeeId || user?.id))) && (
+                    <Button size="sm" variant="ghost" className="text-destructive hover:text-destructive hover:bg-destructive/10" onClick={() => handleDeleteLeave(l.id)}>
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  )}
+                </TableCell>
               </TableRow>
             ))}
           </TableBody>
@@ -474,6 +548,7 @@ function LeavesReport({ filterByDate, isEmployee, isAdmin }: any) {
 
 function SalaryReport({ onExportCSV }: { onExportCSV: () => void }) {
   const db = useDB();
+  const user = useAuth();
 
   const employeeSalaryDetails = useMemo(() => {
     return db.employees.map((emp) => {
@@ -553,11 +628,12 @@ function SalaryReport({ onExportCSV }: { onExportCSV: () => void }) {
               <SortableHeader field="salary" currentSortField={sortField} currentSortOrder={sortOrder} onSort={toggleSort}>Base Salary (₹)</SortableHeader>
               <SortableHeader field="approvedExpenses" currentSortField={sortField} currentSortOrder={sortOrder} onSort={toggleSort}>Approved Reimbursements (₹)</SortableHeader>
               <SortableHeader field="totalSalaryPayout" currentSortField={sortField} currentSortOrder={sortOrder} onSort={toggleSort}>Total Salary Day Payout (₹)</SortableHeader>
+              <TableHead className="w-[80px]">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {paginatedData.length === 0 ? (
-              <TableRow><TableCell colSpan={6} className="text-center py-8 text-muted-foreground">No employee salary records found.</TableCell></TableRow>
+              <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground">No employee salary records found.</TableCell></TableRow>
             ) : paginatedData.map((emp) => (
               <TableRow key={emp.id}>
                 <TableCell className="font-mono text-xs font-semibold">{emp.id}</TableCell>
@@ -568,6 +644,22 @@ function SalaryReport({ onExportCSV }: { onExportCSV: () => void }) {
                   {emp.approvedExpenses > 0 ? `+₹${emp.approvedExpenses.toLocaleString()}` : "—"}
                 </TableCell>
                 <TableCell className="font-bold text-emerald-700">₹{emp.totalSalaryPayout.toLocaleString()}</TableCell>
+                <TableCell>
+                  {user?.role === "admin" && (
+                    <Button size="sm" variant="ghost" className="text-destructive hover:text-destructive hover:bg-destructive/10" onClick={async () => {
+                      if (confirm("Are you sure you want to delete this employee? This will also delete all their associated data. This action cannot be undone.")) {
+                        try {
+                          await api.deleteEmployee(emp.id);
+                          toast.success("Employee deleted successfully");
+                        } catch (error: any) {
+                          toast.error(error.message || "Failed to delete employee");
+                        }
+                      }
+                    }}>
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  )}
+                </TableCell>
               </TableRow>
             ))}
           </TableBody>
@@ -580,6 +672,7 @@ function SalaryReport({ onExportCSV }: { onExportCSV: () => void }) {
 
 function AttendanceExportReport({ filterByDate, onExportCSV }: any) {
   const db = useDB();
+  const user = useAuth();
 
   const data = useMemo(() => {
     return db.attendance
@@ -596,6 +689,16 @@ function AttendanceExportReport({ filterByDate, onExportCSV }: any) {
     defaultSortField: "date",
     defaultSortOrder: "desc",
   });
+
+  const handleDeleteAttendance = async (attendanceId: string) => {
+    if (!confirm("Are you sure you want to delete this attendance record? This action cannot be undone.")) return;
+    try {
+      await api.deleteAttendance(attendanceId);
+      toast.success("Attendance record deleted successfully");
+    } catch (error: any) {
+      toast.error(error.message || "Failed to delete attendance record");
+    }
+  };
 
   return (
     <Card className="border-0 shadow-sm overflow-hidden">
@@ -622,11 +725,12 @@ function AttendanceExportReport({ filterByDate, onExportCSV }: any) {
               <SortableHeader field="workingHours" currentSortField={sortField} currentSortOrder={sortOrder} onSort={toggleSort}>Hours</SortableHeader>
               <SortableHeader field="status" currentSortField={sortField} currentSortOrder={sortOrder} onSort={toggleSort}>Status</SortableHeader>
               <SortableHeader field="productivity" currentSortField={sortField} currentSortOrder={sortOrder} onSort={toggleSort}>Productivity</SortableHeader>
+              <TableHead className="w-[80px]">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {paginatedData.length === 0 ? (
-              <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground">No attendance export records found.</TableCell></TableRow>
+              <TableRow><TableCell colSpan={8} className="text-center py-8 text-muted-foreground">No attendance export records found.</TableCell></TableRow>
             ) : paginatedData.map((a) => (
               <TableRow key={a.id}>
                 <TableCell className="font-medium">{a.empName}</TableCell>
@@ -636,6 +740,13 @@ function AttendanceExportReport({ filterByDate, onExportCSV }: any) {
                 <TableCell>{a.workingHours}h</TableCell>
                 <TableCell><StatusBadge status={a.status} /></TableCell>
                 <TableCell>{a.productivity}%</TableCell>
+                <TableCell>
+                  {user?.role === "admin" && (
+                    <Button size="sm" variant="ghost" className="text-destructive hover:text-destructive hover:bg-destructive/10" onClick={() => handleDeleteAttendance(a.id)}>
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  )}
+                </TableCell>
               </TableRow>
             ))}
           </TableBody>

@@ -3,11 +3,11 @@ import { toast } from "sonner";
 import { 
   getEmployees, addEmployee, updateEmployee, deleteEmployee,
   getTasks, addTask, updateTask, deleteTask, addComment, updateTaskStatus, reviewTask,
-  getLeaves, addLeave, cancelLeave, hrReviewLeave, adminReviewLeave,
-  getAttendance, getActivities, logLogoutActivity, deleteAttendance, updateSystemSetting, getSystemSettings, updateSystemSettings,
+  getLeaves, addLeave, cancelLeave, hrReviewLeave, adminReviewLeave, deleteLeave as deleteLeaveAction,
+  getAttendance, getActivities, logLogoutActivity, deleteAttendance, deleteActivity as deleteActivityAction, updateSystemSetting, getSystemSettings, updateSystemSettings,
   getHolidays, createHoliday, updateHoliday, deleteHoliday,
   getExpenses, addExpense, cancelExpense, hrReviewExpense, adminReviewExpense, markExpenseReimbursed, deleteExpense,
-  getNotifications, markNotificationAsRead, markAllNotificationsAsRead, broadcastNotification, editBroadcastNotification, deleteBroadcastNotification
+  getNotifications, markNotificationAsRead, markAllNotificationsAsRead, deleteNotification as deleteNotificationAction, broadcastNotification, editBroadcastNotification, deleteBroadcastNotification
 } from "@/app/actions";
 
 export type Role = "admin" | "hr" | "employee";
@@ -120,10 +120,11 @@ export const api = {
   async updateTaskStatus(taskId: string, status: string) { const user = getCurrentUser(); if(!user) return; const t = await updateTaskStatus(taskId, status, user.employeeId || user.id, user.role); currentDB.tasks = currentDB.tasks.map(x => x.id === taskId ? t : x); notify(); },
   async reviewTask(taskId: string, review: { hrRating: string; hrReview: string }) { const user = getCurrentUser(); if(!user) return; const t = await reviewTask(taskId, review, user.employeeId || user.id, user.role); currentDB.tasks = currentDB.tasks.map(x => x.id === taskId ? t : x); notify(); },
   
-  async addLeave(leave: any) { const user = getCurrentUser(); if(!user) return; const l = await addLeave(leave, user.employeeId || user.id); currentDB.leaves = [l, ...currentDB.leaves]; getNotifications(user.employeeId || user.id).then(n => { currentDB.notifications = n; notify(); }).catch(console.error); notify(); return l; },
+  async addLeave(leave: any, userId?: string) { const user = getCurrentUser(); if(!user) return; const uid = userId || user.employeeId || user.id; const l = await addLeave(leave, uid); currentDB.leaves = [l, ...currentDB.leaves]; getNotifications(uid).then(n => { currentDB.notifications = n; notify(); }).catch(console.error); notify(); return l; },
   async cancelLeave(leaveId: string) { const user = getCurrentUser(); if(!user) return; const l = await cancelLeave(leaveId, user.employeeId || user.id); currentDB.leaves = currentDB.leaves.map(x => x.id === leaveId ? l : x); notify(); },
   async hrReviewLeave(leaveId: string, action: "approve" | "reject", comment: string) { const user = getCurrentUser(); if(!user) return; const l = await hrReviewLeave(leaveId, action, comment, user.employeeId || user.id, user.role); currentDB.leaves = currentDB.leaves.map(x => x.id === leaveId ? l : x); notify(); },
   async adminReviewLeave(leaveId: string, action: "approve" | "reject", comment: string) { const user = getCurrentUser(); if(!user) return; const l = await adminReviewLeave(leaveId, action, comment, user.employeeId || user.id, user.role); currentDB.leaves = currentDB.leaves.map(x => x.id === leaveId ? l : x); notify(); },
+  async deleteLeave(leaveId: string) { const user = getCurrentUser(); if(!user) return; try { await deleteLeaveAction(leaveId, user.employeeId || user.id, user.role); currentDB.leaves = currentDB.leaves.filter(x => x.id !== leaveId); notify(); } catch (error: any) { console.error("Delete leave error:", error); throw error; } },
 
   async addExpense(expense: any) { const user = getCurrentUser(); if(!user) return; const e = await addExpense(expense, user.employeeId || user.id); currentDB.expenses = [e, ...currentDB.expenses]; getNotifications(user.employeeId || user.id).then(n => { currentDB.notifications = n; notify(); }).catch(console.error); notify(); return e; },
   async cancelExpense(expenseId: string) { const user = getCurrentUser(); if(!user) return; const e = await cancelExpense(expenseId, user.employeeId || user.id); currentDB.expenses = currentDB.expenses.map(x => x.id === expenseId ? e : x); notify(); },
@@ -133,6 +134,7 @@ export const api = {
   async deleteExpense(id: string) { const user = getCurrentUser(); if(!user) return; await deleteExpense(id, user.role); currentDB.expenses = currentDB.expenses.filter(x => x.id !== id); notify(); },
 
   async deleteAttendance(id: string) { const user = getCurrentUser(); if(!user) return; await deleteAttendance(id, user.role); currentDB.attendance = currentDB.attendance.filter(x => x.id !== id); notify(); },
+  async deleteActivity(id: string) { const user = getCurrentUser(); if(!user) return; try { await deleteActivityAction(id, user.role); currentDB.activities = currentDB.activities.filter(x => x.id !== id); notify(); } catch (error: any) { console.error("Delete activity error:", error); throw error; } },
   async updateSystemSetting(key: string, value: string) { await updateSystemSetting(key, value); },
   async getSystemSettings() { return await getSystemSettings(); },
   async updateSystemSettings(settings: Record<string, string>) { return await updateSystemSettings(settings); },
@@ -143,6 +145,7 @@ export const api = {
   
   async markNotificationAsRead(id: string) { const user = getCurrentUser(); if(!user) return; const n = await markNotificationAsRead(id, user.employeeId || user.id); currentDB.notifications = currentDB.notifications.map(x => x.id === id ? n : x); notify(); },
   async markAllNotificationsAsRead() { const user = getCurrentUser(); if(!user) return; await markAllNotificationsAsRead(user.employeeId || user.id); currentDB.notifications = currentDB.notifications.map(x => ({ ...x, isRead: true })); notify(); },
+  async deleteNotification(notificationId: string) { const user = getCurrentUser(); if(!user) return; try { await deleteNotificationAction(notificationId, user.employeeId || user.id, user.role); currentDB.notifications = currentDB.notifications.filter(x => x.id !== notificationId); notify(); } catch (error: any) { console.error("Delete notification error:", error); throw error; } },
   async broadcastNotification(data: { title: string, message: string }) { 
     const user = getCurrentUser(); 
     if(!user) return; 
