@@ -25,12 +25,40 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [maintenanceMode, setMaintenanceMode] = useState(false);
+  const [checkingMaintenance, setCheckingMaintenance] = useState(true);
   const globalSearch = useGlobalSearch();
   const db = useDB();
   const notifications = db.notifications || [];
   const unreadCount = notifications.filter(n => !n.isRead).length;
 
   const [searchFocused, setSearchFocused] = useState(false);
+
+  // Check maintenance mode on mount
+  useEffect(() => {
+    async function checkMaintenance() {
+      try {
+        const response = await fetch('/api/maintenance');
+        const data = await response.json();
+        setMaintenanceMode(data.maintenanceMode);
+        
+        // If maintenance mode is active and user is not admin, redirect to maintenance page
+        if (data.maintenanceMode && user?.role !== 'admin' && pathname !== '/maintenance') {
+          router.push('/maintenance');
+        }
+      } catch (error) {
+        console.error('Failed to check maintenance mode:', error);
+      } finally {
+        setCheckingMaintenance(false);
+      }
+    }
+    
+    if (user) {
+      checkMaintenance();
+    } else {
+      setCheckingMaintenance(false);
+    }
+  }, [user, router, pathname]);
 
   const searchResults = useMemo(() => {
     const q = globalSearch.trim().toLowerCase();
@@ -88,6 +116,18 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (user === null) router.push("/login");
   }, [user, router]);
+
+  // Show loading state while checking maintenance
+  if (checkingMaintenance) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
+          <p className="text-sm text-muted-foreground">Loading...</p>
+        </div>
+      </div>
+    );
+  }
 
   if (!user) return null;
   const menu = ROLE_MENUS[user.role];

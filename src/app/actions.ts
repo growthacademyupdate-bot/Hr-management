@@ -169,6 +169,10 @@ export async function loginAction(usernameOrId: string, password: string) {
   try {
     await connectDB();
     
+    // Check maintenance mode
+    const maintenanceSetting = await Setting.findOne({ key: "maintenance_mode" });
+    const isMaintenanceMode = maintenanceSetting?.value === "true";
+    
     // Check against env admin credentials
     if (usernameOrId === process.env.ADMIN_USERNAME && password === process.env.ADMIN_PASSWORD) {
       const avatarSetting = await Setting.findOne({ key: "admin_avatar" });
