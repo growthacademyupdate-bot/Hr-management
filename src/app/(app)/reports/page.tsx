@@ -318,13 +318,13 @@ function PerformanceReport({ filterByDate, isEmployee, isAdmin, isHR }: any) {
     defaultSortOrder: "asc",
   });
 
-  const handleDeleteTask = async (taskId: string) => {
-    if (!confirm("Are you sure you want to delete this task? This action cannot be undone.")) return;
+  const handleDeleteEmployee = async (employeeId: string) => {
+    if (!confirm("Are you sure you want to delete this employee? This will also delete all their associated data. This action cannot be undone.")) return;
     try {
-      await api.deleteTask(taskId);
-      toast.success("Task deleted successfully");
+      await api.deleteEmployee(employeeId);
+      toast.success("Employee deleted successfully");
     } catch (error: any) {
-      toast.error(error.message || "Failed to delete task");
+      toast.error(error.message || "Failed to delete employee");
     }
   };
 
@@ -375,7 +375,7 @@ function PerformanceReport({ filterByDate, isEmployee, isAdmin, isHR }: any) {
                 </TableCell>
                 <TableCell>
                   {(isAdmin || isHR) && (
-                    <Button size="sm" variant="ghost" className="text-destructive hover:text-destructive hover:bg-destructive/10" onClick={() => handleDeleteTask(p.id)}>
+                    <Button size="sm" variant="ghost" className="text-destructive hover:text-destructive hover:bg-destructive/10" onClick={() => handleDeleteEmployee(p.id)}>
                       <Trash2 className="h-4 w-4" />
                     </Button>
                   )}
@@ -741,7 +741,7 @@ function AttendanceExportReport({ filterByDate, onExportCSV }: any) {
                 <TableCell><StatusBadge status={a.status} /></TableCell>
                 <TableCell>{a.productivity}%</TableCell>
                 <TableCell>
-                  {user?.role === "admin" && (
+                  {(user?.role === "admin" || user?.role === "hr") && (
                     <Button size="sm" variant="ghost" className="text-destructive hover:text-destructive hover:bg-destructive/10" onClick={() => handleDeleteAttendance(a.id)}>
                       <Trash2 className="h-4 w-4" />
                     </Button>
