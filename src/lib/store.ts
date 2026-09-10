@@ -112,7 +112,15 @@ export const api = {
   setGlobalSearch(q: string) { globalSearch = q; notify(); },
   async addEmployee(emp: any) { const e = await addEmployee(emp); currentDB.employees = [e, ...currentDB.employees]; notify(); return e; },
   async updateEmployee(id: string, patch: any) { const e = await updateEmployee(id, patch); currentDB.employees = currentDB.employees.map(x => x.id === id ? e : x); notify(); },
-  async deleteEmployee(id: string) { await deleteEmployee(id); currentDB.employees = currentDB.employees.filter(x => x.id !== id); notify(); },
+  async deleteEmployee(id: string) {
+    await deleteEmployee(id);
+    currentDB.employees = currentDB.employees.filter(x => x.id !== id);
+    currentDB.tasks = currentDB.tasks.filter(x => x.assignedTo !== id);
+    currentDB.leaves = currentDB.leaves.filter(x => x.employeeId !== id);
+    currentDB.attendance = currentDB.attendance.filter(x => x.employeeId !== id);
+    currentDB.expenses = currentDB.expenses.filter(x => x.employeeId !== id);
+    notify();
+  },
   
   async addTask(task: any) { const user = getCurrentUser(); if(!user) return; const t = await addTask(task, user.role, user.employeeId || user.id); currentDB.tasks = [t, ...currentDB.tasks]; notify(); return t; },
   async updateTask(id: string, patch: any) { const user = getCurrentUser(); if(!user) return; const t = await updateTask(id, patch, user.employeeId || user.id, user.role); currentDB.tasks = currentDB.tasks.map(x => x.id === id ? t : x); notify(); },

@@ -1,5 +1,6 @@
 "use server";
 
+import mongoose from "mongoose";
 import connectDB from "@/lib/mongoose";
 import { Employee } from "@/models/Employee";
 import { Task } from "@/models/Task";
@@ -257,7 +258,12 @@ export async function updateEmployee(id: string, data: any) {
 
 export async function deleteEmployee(id: string) {
   await connectDB();
-  await Employee.findOneAndDelete({ id });
+  const query = mongoose.isValidObjectId(id) ? { $or: [{ id }, { _id: id }] } : { id };
+  await Employee.findOneAndDelete(query);
+  await Task.deleteMany({ assignedTo: id });
+  await Leave.deleteMany({ employeeId: id });
+  await Attendance.deleteMany({ employeeId: id });
+  await Expense.deleteMany({ employeeId: id });
   return { success: true };
 }
 
@@ -401,10 +407,11 @@ export async function reviewTask(taskId: string, review: { hrRating: string; hrR
 
 export async function deleteTask(id: string, userId: string, userRole: string) {
   await connectDB();
-  const task = await Task.findOne({ id });
+  const query = mongoose.isValidObjectId(id) ? { $or: [{ id }, { _id: id }] } : { id };
+  const task = await Task.findOne(query);
   if (!task) throw new Error("Task not found");
   if (userRole === "employee" && task.assignedTo !== userId) throw new Error("Unauthorized");
-  await Task.findOneAndDelete({ id });
+  await Task.findOneAndDelete(query);
   return { success: true };
 }
 
@@ -657,12 +664,13 @@ export async function adminReviewLeave(leaveId: string, action: "approve" | "rej
 export async function deleteLeave(leaveId: string, userId: string, userRole: string) {
   await connectDB();
   console.log("deleteLeave called with:", { leaveId, userId, userRole });
-  const leave = await Leave.findOne({ id: leaveId });
+  const query = mongoose.isValidObjectId(leaveId) ? { $or: [{ id: leaveId }, { _id: leaveId }] } : { id: leaveId };
+  const leave = await Leave.findOne(query);
   if (!leave) throw new Error("Leave not found");
   if (userRole === "employee" && leave.employeeId !== userId) throw new Error("Unauthorized");
   // Admin and HR can delete any leave (no additional checks needed)
   
-  await Leave.findOneAndDelete({ id: leaveId });
+  await Leave.findOneAndDelete(query);
 
   await createActivity({
     employeeId: leave.employeeId, actorId: userId, actorRole: userRole,
@@ -755,8 +763,9 @@ export async function logLogoutActivity(employeeId: string) {
 
 export async function deleteAttendance(id: string, userRole: string) {
   await connectDB();
-  if (userRole !== "admin") throw new Error("Only Admin can delete attendance records");
-  await Attendance.findOneAndDelete({ id });
+  if (userRole !== "admin" && userRole !== "hr") throw new Error("Only Admin and HR can delete attendance records");
+  const query = mongoose.isValidObjectId(id) ? { $or: [{ id }, { _id: id }] } : { id };
+  await Attendance.findOneAndDelete(query);
   return { success: true };
 }
 
