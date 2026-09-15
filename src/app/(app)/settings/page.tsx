@@ -21,10 +21,11 @@ import {
   MapPin,
   Coffee,
   HelpCircle
+  ,Calculator
 } from "lucide-react";
 
 export default function SettingsPage() {
-  const [activeTab, setActiveTab] = useState<"company" | "attendance" | "leaves" | "system">("company");
+  const [activeTab, setActiveTab] = useState<"company" | "attendance" | "leaves" | "payroll" | "system">("company");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   
@@ -42,6 +43,20 @@ export default function SettingsPage() {
     auto_approve_leaves: "false",
     maintenance_mode: "false",
     email_alerts: "true",
+    payroll_pf_enabled: "false",
+    payroll_pf_employee_percentage: "12",
+    payroll_pf_employer_percentage: "12",
+    payroll_pf_wage_ceiling: "0",
+    payroll_esi_enabled: "false",
+    payroll_esi_employee_percentage: "0.75",
+    payroll_esi_employer_percentage: "3.25",
+    payroll_hra_percentage: "40",
+    payroll_professional_tax_enabled: "false",
+    payroll_professional_tax: "0",
+    payroll_tds_enabled: "false",
+    payroll_company_website: "",
+    payroll_authorized_person: "HR / Authorized Person",
+    payroll_authorized_designation: "Authorized Signatory",
   });
 
   useEffect(() => {
@@ -85,7 +100,7 @@ export default function SettingsPage() {
 
   if (loading) {
     return (
-      <div className="flex h-[400px] items-center justify-center">
+      <div className="flex h-100 items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
       </div>
     );
@@ -95,6 +110,7 @@ export default function SettingsPage() {
     { id: "company", name: "Company Profile", icon: Building },
     { id: "attendance", name: "Attendance Rules", icon: Clock },
     { id: "leaves", name: "Leave Policies", icon: CalendarRange },
+    { id: "payroll", name: "Payroll", icon: Calculator },
     { id: "system", name: "System Settings", icon: Settings2 },
   ] as const;
 
@@ -309,6 +325,35 @@ export default function SettingsPage() {
                         onCheckedChange={(checked) => updateKey("auto_approve_leaves", checked ? "true" : "false")} 
                       />
                     </div>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {activeTab === "payroll" && (
+              <Card className="border-0 shadow-sm">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2"><Calculator className="h-5 w-5 text-primary" />Payroll defaults</CardTitle>
+                  <CardDescription>Configure defaults used when HR generates a salary slip. Values can be overridden per slip.</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-5">
+                  <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+                    <div className="flex items-center justify-between rounded-lg border p-3"><Label>PF enabled</Label><Switch checked={settings.payroll_pf_enabled === "true"} onCheckedChange={(checked) => updateKey("payroll_pf_enabled", checked ? "true" : "false")} /></div>
+                    <div className="space-y-1.5"><Label>PF employee contribution %</Label><Input type="number" min="0" step="0.01" value={settings.payroll_pf_employee_percentage} onChange={(e) => updateKey("payroll_pf_employee_percentage", e.target.value)} /></div>
+                    <div className="space-y-1.5"><Label>PF employer contribution %</Label><Input type="number" min="0" step="0.01" value={settings.payroll_pf_employer_percentage} onChange={(e) => updateKey("payroll_pf_employer_percentage", e.target.value)} /></div>
+                    <div className="space-y-1.5"><Label>PF wage ceiling</Label><Input type="number" min="0" step="0.01" value={settings.payroll_pf_wage_ceiling} onChange={(e) => updateKey("payroll_pf_wage_ceiling", e.target.value)} /></div>
+                    <div className="flex items-center justify-between rounded-lg border p-3"><Label>ESI enabled</Label><Switch checked={settings.payroll_esi_enabled === "true"} onCheckedChange={(checked) => updateKey("payroll_esi_enabled", checked ? "true" : "false")} /></div>
+                    <div className="space-y-1.5"><Label>ESI employee contribution %</Label><Input type="number" min="0" step="0.01" value={settings.payroll_esi_employee_percentage} onChange={(e) => updateKey("payroll_esi_employee_percentage", e.target.value)} /></div>
+                    <div className="space-y-1.5"><Label>ESI employer contribution %</Label><Input type="number" min="0" step="0.01" value={settings.payroll_esi_employer_percentage} onChange={(e) => updateKey("payroll_esi_employer_percentage", e.target.value)} /></div>
+                    <div className="space-y-1.5"><Label>Default HRA %</Label><Input type="number" min="0" step="0.01" value={settings.payroll_hra_percentage} onChange={(e) => updateKey("payroll_hra_percentage", e.target.value)} /></div>
+                    <div className="flex items-center justify-between rounded-lg border p-3"><Label>Professional tax enabled</Label><Switch checked={settings.payroll_professional_tax_enabled === "true"} onCheckedChange={(checked) => updateKey("payroll_professional_tax_enabled", checked ? "true" : "false")} /></div>
+                    <div className="space-y-1.5"><Label>Default professional tax</Label><Input type="number" min="0" step="0.01" value={settings.payroll_professional_tax} onChange={(e) => updateKey("payroll_professional_tax", e.target.value)} /></div>
+                    <div className="flex items-center justify-between rounded-lg border p-3"><Label>TDS enabled</Label><Switch checked={settings.payroll_tds_enabled === "true"} onCheckedChange={(checked) => updateKey("payroll_tds_enabled", checked ? "true" : "false")} /></div>
+                  </div>
+                  <div className="grid grid-cols-1 gap-4 border-t pt-5 md:grid-cols-2">
+                    <div className="space-y-1.5"><Label>Company website</Label><Input value={settings.payroll_company_website} onChange={(e) => updateKey("payroll_company_website", e.target.value)} /></div>
+                    <div className="space-y-1.5"><Label>Authorized person</Label><Input value={settings.payroll_authorized_person} onChange={(e) => updateKey("payroll_authorized_person", e.target.value)} /></div>
+                    <div className="space-y-1.5"><Label>Authorized designation</Label><Input value={settings.payroll_authorized_designation} onChange={(e) => updateKey("payroll_authorized_designation", e.target.value)} /></div>
                   </div>
                 </CardContent>
               </Card>
