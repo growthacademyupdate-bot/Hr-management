@@ -1,0 +1,64 @@
+import mongoose from "mongoose";
+
+const MoneyItemSchema = new mongoose.Schema({
+  name: { type: String, required: true, trim: true, maxlength: 120 },
+  amount: { type: Number, required: true, min: 0 },
+  type: { type: String, enum: ["earning", "deduction"], required: true },
+}, { _id: false });
+
+const EmployeeSnapshotSchema = new mongoose.Schema({
+  name: String,
+  id: String,
+  email: String,
+  department: String,
+  designation: String,
+  joiningDate: String,
+  mobile: String,
+  pan: String,
+  uan: String,
+  pfAccountNumber: String,
+  bankAccount: String,
+  bankName: String,
+}, { _id: false });
+
+const SalarySlipSchema = new mongoose.Schema({
+  id: { type: String, required: true, unique: true },
+  employeeId: { type: String, required: true, index: true },
+  salaryMonth: { type: Number, required: true, min: 1, max: 12 },
+  salaryYear: { type: Number, required: true, min: 2000, max: 2200 },
+  annualCTC: { type: Number, required: true, min: 0 },
+  monthlyCTC: { type: Number, required: true, min: 0 },
+  annualGross: { type: Number, required: true, min: 0 },
+  basicSalary: { type: Number, required: true, min: 0 },
+  hra: { type: Number, required: true, min: 0 },
+  conveyance: { type: Number, required: true, min: 0 },
+  medicalAllowance: { type: Number, required: true, min: 0 },
+  specialAllowance: { type: Number, required: true, min: 0 },
+  grossSalary: { type: Number, required: true, min: 0 },
+  earnings: { type: [MoneyItemSchema], default: [] },
+  deductions: { type: [MoneyItemSchema], default: [] },
+  pfEnabled: { type: Boolean, default: false },
+  pfEmployeeContribution: { type: Number, default: 0, min: 0 },
+  pfEmployerContribution: { type: Number, default: 0, min: 0 },
+  esiEnabled: { type: Boolean, default: false },
+  esiEmployeeContribution: { type: Number, default: 0, min: 0 },
+  esiEmployerContribution: { type: Number, default: 0, min: 0 },
+  professionalTax: { type: Number, default: 0, min: 0 },
+  tds: { type: Number, default: 0, min: 0 },
+  lwpDays: { type: Number, default: 0, min: 0 },
+  lwpDeduction: { type: Number, default: 0, min: 0 },
+  totalEarnings: { type: Number, required: true, min: 0 },
+  totalDeductions: { type: Number, required: true, min: 0 },
+  netSalary: { type: Number, required: true, min: 0 },
+  amountInWords: { type: String, required: true },
+  workingDays: { type: Number, default: 30, min: 1 },
+  paidDays: { type: Number, default: 30, min: 0 },
+  employeeSnapshot: { type: EmployeeSnapshotSchema, required: true },
+  companySnapshot: { type: mongoose.Schema.Types.Mixed, default: {} },
+  generatedBy: { type: String, required: true },
+  updatedBy: { type: String },
+}, { timestamps: true });
+
+SalarySlipSchema.index({ employeeId: 1, salaryMonth: 1, salaryYear: 1 }, { unique: true });
+
+export const SalarySlip = mongoose.models.SalarySlip || mongoose.model("SalarySlip", SalarySlipSchema);
