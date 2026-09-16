@@ -5,7 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useAuth, logout, ROLE_MENUS, useGlobalSearch, api, useDB } from "@/lib/store";
 import {
   LayoutDashboard, Users, CalendarCheck, ListTodo, CalendarOff, BarChart3, Settings, Activity, User as UserIcon,
-  Bell, LogOut, Menu, Search, Sun, CalendarDays, Receipt, WalletCards, X
+  Bell, LogOut, Menu, Search, Sun, CalendarDays, Receipt, WalletCards, X, ClipboardList
 } from "lucide-react";
 import { useEffect, useState, useMemo } from "react";
 import { Button } from "@/components/ui/button";
