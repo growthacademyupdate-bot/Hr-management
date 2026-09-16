@@ -7,7 +7,8 @@ import {
   getAttendance, getActivities, logLogoutActivity, deleteAttendance, deleteActivity as deleteActivityAction, updateSystemSetting, getSystemSettings, updateSystemSettings,
   getHolidays, createHoliday, updateHoliday, deleteHoliday,
   getExpenses, addExpense, cancelExpense, hrReviewExpense, adminReviewExpense, markExpenseReimbursed, deleteExpense,
-  getNotifications, markNotificationAsRead, markAllNotificationsAsRead, deleteNotification as deleteNotificationAction, broadcastNotification, editBroadcastNotification, deleteBroadcastNotification
+  getNotifications, markNotificationAsRead, markAllNotificationsAsRead, deleteNotification as deleteNotificationAction, broadcastNotification, editBroadcastNotification, deleteBroadcastNotification,
+  getDailyReports, addDailyReport, deleteDailyReport
 } from "@/app/actions";
 
 export type Role = "admin" | "hr" | "employee";
@@ -46,12 +47,31 @@ export interface Notification {
   id: string; recipientId: string; recipientRole?: string; senderId?: string; senderRole?: string; title: string; message: string; type: string; module: string; referenceId?: string; actionUrl?: string; isRead: boolean; readAt?: string; metadata?: any; createdAt: string;
 }
 
+export interface DailyReport {
+  id: string;
+  employeeId: string;
+  employeeName: string;
+  designation: string;
+  reportDate: string;
+  reportDay: string;
+  attendance: string;
+  reportSlot1: string;
+  reportSlot2: string;
+  reportSlot3: string;
+  reportSlot4: string;
+  directorCallTiming: string;
+  internalMeeting: string;
+  submittedAt: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 interface DB {
-  employees: Employee[]; attendance: AttendanceRecord[]; tasks: Task[]; leaves: Leave[]; expenses: Expense[]; activities: Activity[]; holidays: Holiday[]; notifications: Notification[];
+  employees: Employee[]; attendance: AttendanceRecord[]; tasks: Task[]; leaves: Leave[]; expenses: Expense[]; activities: Activity[]; holidays: Holiday[]; notifications: Notification[]; dailyReports: DailyReport[];
 }
 
 const AUTH_KEY = "ems_auth_v1";
-let currentDB: DB = { employees: [], attendance: [], tasks: [], leaves: [], expenses: [], activities: [], holidays: [], notifications: [] };
+let currentDB: DB = { employees: [], attendance: [], tasks: [], leaves: [], expenses: [], activities: [], holidays: [], notifications: [], dailyReports: [] };
 let globalSearch = "";
 const listeners = new Set<() => void>();
 
@@ -71,10 +91,11 @@ export function useDB() {
     Promise.all([
       getEmployees(), getAttendance(), getTasks(user?.role, userId), 
       getLeaves(user?.role, userId), getExpenses(user?.role, userId), getActivities(), getHolidays(),
-      userId ? getNotifications(userId) : Promise.resolve([])
+      userId ? getNotifications(userId) : Promise.resolve([]),
+      getDailyReports(user?.role, userId)
     ])
-      .then(([emps, atts, ts, lvs, exps, acts, hols, notifs]) => {
-        currentDB = { employees: emps, attendance: atts, tasks: ts, leaves: lvs, expenses: exps, activities: acts, holidays: hols, notifications: notifs };
+      .then(([emps, atts, ts, lvs, exps, acts, hols, notifs, dReports]) => {
+        currentDB = { employees: emps, attendance: atts, tasks: ts, leaves: lvs, expenses: exps, activities: acts, holidays: hols, notifications: notifs, dailyReports: dReports || [] };
         notify();
       })
       .catch(console.error);
@@ -167,6 +188,22 @@ export const api = {
   async deleteBroadcastNotification(broadcastId: string) {
     await deleteBroadcastNotification(broadcastId);
     toast.success("Broadcast deleted successfully!");
+  },
+
+  async addDailyReport(data: any) {
+    const user = getCurrentUser();
+    if (!user) return;
+    const report = await addDailyReport(data, user.employeeId || user.id, user.role);
+    currentDB.dailyReports = [report, ...currentDB.dailyReports];
+    notify();
+    return report;
+  },
+  async deleteDailyReport(reportId: string) {
+    const user = getCurrentUser();
+    if (!user) return;
+    await deleteDailyReport(reportId, user.employeeId || user.id, user.role);
+    currentDB.dailyReports = currentDB.dailyReports.filter(r => r.id !== reportId);
+    notify();
   }
 };
 
@@ -207,6 +244,7 @@ export const ROLE_MENUS: Record<Role, { label: string; to: string; icon: string 
     { label: "Dashboard", to: "/dashboard", icon: "LayoutDashboard" },
     { label: "Employees", to: "/employees", icon: "Users" },
     { label: "Attendance", to: "/attendance", icon: "CalendarCheck" },
+    { label: "Daily Reports", to: "/daily-report", icon: "ClipboardList" },
     { label: "Tasks", to: "/tasks", icon: "ListTodo" },
     { label: "Leaves", to: "/leaves", icon: "CalendarOff" },
     { label: "Expenses", to: "/expenses", icon: "Receipt" },
@@ -220,6 +258,7 @@ export const ROLE_MENUS: Record<Role, { label: string; to: string; icon: string 
   hr: [
     { label: "Dashboard", to: "/dashboard", icon: "LayoutDashboard" },
     { label: "Employees", to: "/employees", icon: "Users" },
+    { label: "Daily Reports", to: "/daily-report", icon: "ClipboardList" },
     { label: "Tasks", to: "/tasks", icon: "ListTodo" },
     { label: "Leaves", to: "/leaves", icon: "CalendarOff" },
     { label: "Expenses", to: "/expenses", icon: "Receipt" },
@@ -231,6 +270,7 @@ export const ROLE_MENUS: Record<Role, { label: string; to: string; icon: string 
   ],
   employee: [
     { label: "Dashboard", to: "/dashboard", icon: "LayoutDashboard" },
+    { label: "Daily Task Report", to: "/daily-report", icon: "ClipboardList" },
     { label: "My Tasks", to: "/tasks", icon: "ListTodo" },
     { label: "Attendance", to: "/attendance", icon: "CalendarCheck" },
     { label: "Activity", to: "/activity", icon: "Activity" },

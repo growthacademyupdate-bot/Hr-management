@@ -192,7 +192,7 @@ export default function EmployeesPage() {
 
 function AddEmployeeDialog({ onClose }: { onClose: () => void }) {
   const [form, setForm] = useState({
-    name: "", email: "", mobile: "", department: "Design", designation: "", joiningDate: new Date().toISOString().slice(0,10), salary: 60000, password: "tushar123", avatar: "",
+    customId: "", name: "", email: "", mobile: "", department: "Design", designation: "", joiningDate: new Date().toISOString().slice(0,10), salary: 60000, password: "tushar123", avatar: "",
   });
   const [showPw, setShowPw] = useState(false);
   async function submit() {
@@ -200,9 +200,13 @@ function AddEmployeeDialog({ onClose }: { onClose: () => void }) {
       toast.error("Please fill in all required fields (Name, Email, Mobile, Designation, Password)"); 
       return; 
     }
-    const newEmp = await api.addEmployee({ ...form, status: "Active" });
-    toast.success(`Employee added! ID: ${newEmp.id}`);
-    onClose();
+    try {
+      const newEmp = await api.addEmployee({ ...form, status: "Active" });
+      toast.success(`Employee added! ID: ${newEmp.id}`);
+      onClose();
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to add employee.");
+    }
   }
   return (
     <DialogContent className="max-w-lg">
@@ -251,6 +255,20 @@ function AddEmployeeDialog({ onClose }: { onClose: () => void }) {
         </div>
 
         <div className="col-span-2 space-y-1"><Label>Full Name</Label><Input value={form.name} onChange={(e) => setForm({...form, name: e.target.value})} /></div>
+        {/* Employee ID field */}
+        <div className="col-span-2 space-y-1">
+          <Label className="flex items-center gap-1.5">
+            Employee ID
+            <span className="text-[11px] text-muted-foreground font-normal">(leave blank to auto-generate)</span>
+          </Label>
+          <Input
+            value={form.customId}
+            onChange={(e) => setForm({...form, customId: e.target.value.toUpperCase()})}
+            placeholder="e.g. EMP013 — auto-assigned if empty"
+            className="font-mono"
+            maxLength={20}
+          />
+        </div>
         <div className="space-y-1"><Label>Email</Label><Input value={form.email} onChange={(e) => setForm({...form, email: e.target.value})} /></div>
         <div className="space-y-1"><Label>Mobile</Label><Input value={form.mobile} onChange={(e) => setForm({...form, mobile: e.target.value})} /></div>
         <div className="space-y-1">
