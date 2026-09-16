@@ -123,7 +123,8 @@ export default function DailyReportPage() {
         ...prev,
         employeeId: emp?.id || empId,
         employeeName: emp?.name || user.name || "",
-        designation: emp?.designation || "",
+        // Only update designation if emp is found; don't overwrite with "" while employees are still loading
+        designation: emp?.designation || prev.designation || "",
         reportDate: prev.reportDate || todayDate,
         reportDay: prev.reportDay || todayDay,
       }));
@@ -298,11 +299,64 @@ export default function DailyReportPage() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="space-y-2">
                   <Label className="text-sm font-semibold flex items-center gap-2"><User className="h-4 w-4 text-primary" />Employee ID</Label>
-                  <Input value={form.employeeId} readOnly className="bg-muted/40 font-mono text-sm cursor-not-allowed border-border/80" />
+                  {isEmployee ? (
+                    <Select value={form.employeeId} onValueChange={(val) => {
+                      const emp = db.employees.find(e => e.id === val);
+                      if (emp) setForm(prev => ({ ...prev, employeeId: emp.id, employeeName: emp.name, designation: emp.designation || prev.designation }));
+                    }} disabled>
+                      <SelectTrigger className="bg-muted/40 font-mono text-sm border-border/80 cursor-not-allowed">
+                        <SelectValue placeholder="Select Employee ID" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {db.employees.map(e => (
+                          <SelectItem key={e.id} value={e.id}>{e.id}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <Select value={form.employeeId} onValueChange={(val) => {
+                      const emp = db.employees.find(e => e.id === val);
+                      if (emp) setForm(prev => ({ ...prev, employeeId: emp.id, employeeName: emp.name, designation: emp.designation || "" }));
+                    }}>
+                      <SelectTrigger className="bg-background font-mono text-sm border-border/80">
+                        <SelectValue placeholder="Select Employee ID" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {db.employees.map(e => (
+                          <SelectItem key={e.id} value={e.id}>{e.id}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
                 </div>
                 <div className="space-y-2">
                   <Label className="text-sm font-semibold flex items-center gap-2"><User className="h-4 w-4 text-primary" />Employee Name</Label>
-                  <Input value={form.employeeName} readOnly className="bg-muted/40 text-sm font-medium cursor-not-allowed border-border/80" />
+                  {isEmployee ? (
+                    <Select value={form.employeeName} disabled>
+                      <SelectTrigger className="bg-muted/40 text-sm font-medium border-border/80 cursor-not-allowed">
+                        <SelectValue placeholder="Employee Name" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {db.employees.map(e => (
+                          <SelectItem key={e.id} value={e.name}>{e.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <Select value={form.employeeName} onValueChange={(val) => {
+                      const emp = db.employees.find(e => e.name === val);
+                      if (emp) setForm(prev => ({ ...prev, employeeId: emp.id, employeeName: emp.name, designation: emp.designation || "" }));
+                    }}>
+                      <SelectTrigger className="bg-background text-sm font-medium border-border/80">
+                        <SelectValue placeholder="Select Employee Name" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {db.employees.map(e => (
+                          <SelectItem key={e.id} value={e.name}>{e.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
                 </div>
               </div>
 
@@ -310,7 +364,29 @@ export default function DailyReportPage() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="space-y-2">
                   <Label className="text-sm font-semibold flex items-center gap-2"><Briefcase className="h-4 w-4 text-primary" />Designation</Label>
-                  <Input value={form.designation} readOnly className="bg-muted/40 text-sm cursor-not-allowed border-border/80" />
+                  {isEmployee ? (
+                    <Select value={form.designation} disabled>
+                      <SelectTrigger className="bg-muted/40 text-sm border-border/80 cursor-not-allowed">
+                        <SelectValue placeholder="Designation" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {Array.from(new Set(db.employees.map(e => e.designation).filter(Boolean))).map(d => (
+                          <SelectItem key={d} value={d}>{d}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <Select value={form.designation} onValueChange={(val) => setForm(prev => ({ ...prev, designation: val }))}>
+                      <SelectTrigger className="bg-background text-sm border-border/80">
+                        <SelectValue placeholder="Select Designation" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {Array.from(new Set(db.employees.map(e => e.designation).filter(Boolean))).map(d => (
+                          <SelectItem key={d} value={d}>{d}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
                 </div>
                 <div className="space-y-2">
                   <Label className="text-sm font-semibold flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-emerald-500" />Attendance</Label>

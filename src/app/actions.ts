@@ -226,13 +226,23 @@ export async function addEmployee(data: any) {
     const num = parseInt((doc as any).id.replace("EMP", ""), 10);
     if (!isNaN(num) && num > max) max = num;
   }
-  const id = `EMP${String(max + 1).padStart(3, "0")}`;
-  
+  const autoId = `EMP${String(max + 1).padStart(3, "0")}`;
+
+  // Use custom ID if provided, else fall back to auto-generated
+  let finalId = autoId;
+  if (data.customId && data.customId.trim()) {
+    const customId = data.customId.trim().toUpperCase();
+    const existing = all.find((doc: any) => doc.id === customId);
+    if (existing) throw new Error(`Employee ID "${customId}" is already taken.`);
+    finalId = customId;
+  }
+
   if (data.avatar && typeof data.avatar === 'string' && data.avatar.startsWith("data:image")) {
     const result = await uploadImageToCloudinary(data.avatar);
     if (result.success) data.avatar = result.url;
   }
-  
+
+  const { customId: _removed, ...rest } = data;
   const emp = await Employee.create({ 
     designation: "Staff",
     mobile: "Not Provided",
@@ -240,8 +250,8 @@ export async function addEmployee(data: any) {
     joiningDate: new Date().toISOString().slice(0, 10),
     salary: 0,
     password: "password123",
-    ...data, 
-    id, 
+    ...rest, 
+    id: finalId, 
     avatar: data.avatar || "" 
   });
   return serialize(emp);
