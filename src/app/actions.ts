@@ -11,6 +11,7 @@ import { Setting } from "@/models/Setting";
 import { Holiday } from "@/models/Holiday";
 import { Notification } from "@/models/Notification";
 import { Expense } from "@/models/Expense";
+import { DailyReport } from "@/models/DailyReport";
 
 // Helper to serialize Mongoose documents
 function serialize(doc: any) {
@@ -1141,6 +1142,98 @@ export async function deleteExpense(id: string, userRole: string) {
   await connectDB();
   if (userRole !== "admin") throw new Error("Only Admin can delete expense records");
   await Expense.findOneAndDelete({ id });
+  return { success: true };
+}
+
+export async function getDailyReports(role?: string, employeeId?: string) {
+  await connectDB();
+  let filter: any = {};
+  if (role === "employee" && employeeId) {
+    filter = { employeeId };
+  }
+  const reports = await DailyReport.find(filter).sort({ reportDate: -1, createdAt: -1 }).lean();
+  return serialize(reports);
+}
+
+export async function addDailyReport(
+  data: {
+    employeeId: string;
+    employeeName: string;
+    designation: string;
+    reportDate: string;
+    reportDay: string;
+    attendance?: string;
+    reportSlot1?: string;
+    reportSlot2?: string;
+    reportSlot3?: string;
+    reportSlot4?: string;
+    directorCallTiming?: string;
+    internalMeeting?: string;
+  },
+  submitterId: string,
+  submitterRole: string
+) {
+  await connectDB();
+  const id = `DTR${Date.now()}${Math.floor(Math.random() * 1000)}`;
+
+  const report = await DailyReport.create({
+    id,
+    employeeId: data.employeeId,
+    employeeName: data.employeeName,
+    designation: data.designation,
+    reportDate: data.reportDate,
+    reportDay: data.reportDay,
+    attendance: data.attendance || "Present",
+    reportSlot1: data.reportSlot1 || "",
+    reportSlot2: data.reportSlot2 || "",
+    reportSlot3: data.reportSlot3 || "",
+    reportSlot4: data.reportSlot4 || "",
+    directorCallTiming: data.directorCallTiming || "",
+    internalMeeting: data.internalMeeting || "",
+    submittedAt: new Date().toISOString(),
+  });
+
+  // Log activity
+  await createActivity({
+    employeeId: data.employeeId,
+    actorId: submitterId,
+    actorRole: submitterRole,
+    activityType: "DAILY_REPORT_SUBMITTED",
+    module: "DAILY_REPORT",
+    referenceId: id,
+    message: `${data.employeeName} submitted daily task report for ${data.reportDate} (${data.reportDay}).`,
+    metadata: { reportDate: data.reportDate, reportDay: data.reportDay },
+  });
+
+  // Notify HR and Admin
+  const hrAndAdminRecipients = ["u_admin", "u_hr"];
+  for (const rId of hrAndAdminRecipients) {
+    if (rId !== submitterId) {
+      await createNotification({
+        recipientId: rId,
+        senderId: submitterId,
+        senderRole: submitterRole,
+        title: "Daily Task Report Submitted",
+        message: `${data.employeeName} has submitted a daily task report for ${data.reportDate}.`,
+        type: "DAILY_REPORT",
+        module: "DAILY_REPORT",
+        referenceId: id,
+        actionUrl: `/daily-report`,
+      });
+    }
+  }
+
+  return serialize(report);
+}
+
+export async function deleteDailyReport(reportId: string, employeeId: string, userRole: string) {
+  await connectDB();
+  const report = await DailyReport.findOne({ id: reportId });
+  if (!report) throw new Error("Daily task report not found");
+  if (userRole !== "admin" && userRole !== "hr" && report.employeeId !== employeeId) {
+    throw new Error("Unauthorized to delete this report");
+  }
+  await DailyReport.findOneAndDelete({ id: reportId });
   return { success: true };
 }
 
