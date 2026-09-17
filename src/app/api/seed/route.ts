@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import bcrypt from "bcryptjs";
 import connectDB from "@/lib/mongoose";
 import { Employee } from "@/models/Employee";
 import { Task } from "@/models/Task";
@@ -40,7 +41,7 @@ export async function GET() {
         salary: 60000,
         status: "Active",
         avatar: "",
-        password: "emp123" // Explicitly setting this password so demo login works
+        password: bcrypt.hashSync("emp123", 10) // Explicitly setting this password so demo login works
       });
       emps.push(emp);
     }

@@ -22,6 +22,8 @@ import {
   Clock, CalendarOff, Activity, TrendingUp, Star, Award,
   Building2, Hash, UserCheck, Maximize2,
 } from "lucide-react";
+import Image from "next/image";
+import { format } from "date-fns";
 import { toast } from "sonner";
 import { StatusBadge } from "../dashboard/page";
 
@@ -375,9 +377,11 @@ export default function ProfilePage() {
 
           <div className="my-4 flex items-center justify-center w-full max-h-[60vh] overflow-hidden rounded-xl bg-muted/40 p-2 border">
             {user.avatar ? (
-              <img
+              <Image
                 src={user.avatar}
                 alt={user.name}
+                width={200}
+                height={200}
                 className="max-h-[50vh] max-w-full object-contain rounded-lg shadow-sm"
               />
             ) : (

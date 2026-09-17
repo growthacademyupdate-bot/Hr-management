@@ -25,6 +25,10 @@ const TaskSchema = new mongoose.Schema({
   }],
 }, { timestamps: true });
 
+TaskSchema.index({ assignedTo: 1 });
+TaskSchema.index({ status: 1 });
+TaskSchema.index({ dueDate: 1 });
+
 if (mongoose.models.Task) {
   delete mongoose.models.Task;
 }
