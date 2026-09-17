@@ -68,10 +68,11 @@ export interface DailyReport {
 
 interface DB {
   employees: Employee[]; attendance: AttendanceRecord[]; tasks: Task[]; leaves: Leave[]; expenses: Expense[]; activities: Activity[]; holidays: Holiday[]; notifications: Notification[]; dailyReports: DailyReport[];
+  isLoading: boolean;
 }
 
 const AUTH_KEY = "ems_auth_v1";
-let currentDB: DB = { employees: [], attendance: [], tasks: [], leaves: [], expenses: [], activities: [], holidays: [], notifications: [], dailyReports: [] };
+let currentDB: DB = { employees: [], attendance: [], tasks: [], leaves: [], expenses: [], activities: [], holidays: [], notifications: [], dailyReports: [], isLoading: true };
 let globalSearch = "";
 const listeners = new Set<() => void>();
 
@@ -95,10 +96,14 @@ export function useDB() {
       getDailyReports(user?.role, userId)
     ])
       .then(([emps, atts, ts, lvs, exps, acts, hols, notifs, dReports]) => {
-        currentDB = { employees: emps, attendance: atts, tasks: ts, leaves: lvs, expenses: exps, activities: acts, holidays: hols, notifications: notifs, dailyReports: dReports || [] };
+        currentDB = { employees: emps, attendance: atts, tasks: ts, leaves: lvs, expenses: exps, activities: acts, holidays: hols, notifications: notifs, dailyReports: dReports || [], isLoading: false };
         notify();
       })
-      .catch(console.error);
+      .catch((e) => {
+        console.error(e);
+        currentDB = { ...currentDB, isLoading: false };
+        notify();
+      });
 
     // Polling for notifications
     let pollInterval: NodeJS.Timeout;

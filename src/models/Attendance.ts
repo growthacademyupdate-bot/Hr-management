@@ -28,4 +28,8 @@ const AttendanceSchema = new mongoose.Schema({
   workingHours: { type: Number, default: 0 },
 }, { timestamps: true });
 
+AttendanceSchema.index({ employeeId: 1, date: 1 });
+AttendanceSchema.index({ status: 1 });
+AttendanceSchema.index({ date: 1 });
+
 export const Attendance = mongoose.models.Attendance || mongoose.model("Attendance", AttendanceSchema);

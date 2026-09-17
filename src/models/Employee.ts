@@ -14,4 +14,8 @@ const EmployeeSchema = new mongoose.Schema({
   password: { type: String, required: true }, // Simple plain text for now, could hash in real app
 }, { timestamps: true });
 
+EmployeeSchema.index({ email: 1 });
+EmployeeSchema.index({ department: 1 });
+EmployeeSchema.index({ status: 1 });
+
 export const Employee = mongoose.models.Employee || mongoose.model("Employee", EmployeeSchema);

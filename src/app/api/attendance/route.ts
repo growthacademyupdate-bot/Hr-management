@@ -1,7 +1,17 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
+import { apiSuccess, handleApiError } from "@/lib/api-response";
 import connectDB from "@/lib/mongoose";
 import { Attendance } from "@/models/Attendance";
 import { Employee } from "@/models/Employee";
+
+interface AttendanceQuery {
+  employeeId?: string;
+  status?: string;
+  date?: {
+    $gte?: string;
+    $lte?: string;
+  };
+}
 
 export async function GET(req: NextRequest) {
   try {
@@ -12,7 +22,7 @@ export async function GET(req: NextRequest) {
     const fromDate = searchParams.get("fromDate");
     const toDate = searchParams.get("toDate");
 
-    const query: any = {};
+    const query: AttendanceQuery = {};
     if (employeeId) query.employeeId = employeeId;
     if (status) query.status = status;
     if (fromDate || toDate) {
@@ -22,8 +32,8 @@ export async function GET(req: NextRequest) {
     }
 
     const records = await Attendance.find(query).sort({ createdAt: -1 }).lean();
-    return NextResponse.json({ success: true, data: records });
-  } catch (error: any) {
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+    return apiSuccess(records);
+  } catch (error: unknown) {
+    return handleApiError(error);
   }
 }
