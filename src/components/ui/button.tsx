@@ -37,10 +37,42 @@ export interface ButtonProps
 }
 
 const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
-  ({ className, variant, size, asChild = false, ...props }, ref) => {
+  ({ className, variant, size, asChild = false, onClick, disabled, ...props }, ref) => {
     const Comp = asChild ? Slot : "button";
+    const [isPending, setIsPending] = React.useState(false);
+    const lastClickTime = React.useRef(0);
+
+    const handleClick = async (e: React.MouseEvent<HTMLButtonElement, MouseEvent>) => {
+      const now = Date.now();
+      // Prevent double clicks within 500ms
+      if (now - lastClickTime.current < 500) {
+        e.preventDefault();
+        e.stopPropagation();
+        return;
+      }
+      lastClickTime.current = now;
+
+      if (onClick) {
+        const result = onClick(e) as any;
+        if (result && typeof result.then === 'function') {
+          setIsPending(true);
+          try {
+            await result;
+          } finally {
+            setIsPending(false);
+          }
+        }
+      }
+    };
+
     return (
-      <Comp className={cn(buttonVariants({ variant, size, className }))} ref={ref} {...props} />
+      <Comp 
+        className={cn(buttonVariants({ variant, size, className }))} 
+        ref={ref} 
+        disabled={disabled || isPending}
+        onClick={handleClick}
+        {...props} 
+      />
     );
   },
 );
