@@ -19,6 +19,8 @@ import { DataTablePagination } from "@/components/DataTablePagination";
 import { 
   Receipt, Plus, Search, CheckCircle2, XCircle, Clock, DollarSign, Wallet, FileText, Image as ImageIcon, Check, X, ShieldCheck, Eye, Trash2
 } from "lucide-react";
+import Image from "next/image";
+import { format } from "date-fns";
 import { toast } from "sonner";
 
 const CATEGORIES = ["Travel", "Office Supplies", "Client Meeting", "Food & Dining", "Equipment", "Other"] as const;
@@ -715,9 +717,11 @@ export default function ExpensesPage() {
                   <div className="font-semibold text-xs text-muted-foreground uppercase tracking-wider mb-2">Receipt Attachment</div>
                   {selectedExpense.receiptUrl ? (
                     <div className="border rounded-lg overflow-hidden max-h-[300px] flex justify-center bg-black/5">
-                      <img
+                      <Image
                         src={selectedExpense.receiptUrl}
                         alt="Receipt"
+                        width={400}
+                        height={300}
                         className="object-contain max-h-[300px] w-full"
                       />
                     </div>

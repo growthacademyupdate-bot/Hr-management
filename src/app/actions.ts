@@ -1,5 +1,6 @@
 "use server";
 
+import bcrypt from "bcryptjs";
 import mongoose from "mongoose";
 import connectDB from "@/lib/mongoose";
 import { Employee } from "@/models/Employee";
@@ -194,8 +195,8 @@ export async function loginAction(usernameOrId: string, password: string) {
     }
 
     // Check employees
-    const emp = await Employee.findOne({ email: new RegExp(`^${usernameOrId}$`, "i"), password });
-    if (emp) {
+    const emp = await Employee.findOne({ email: new RegExp(`^${usernameOrId}$`, "i") });
+    if (emp && bcrypt.compareSync(password, emp.password)) {
       await logLoginActivity(emp.id);
       return {
         success: true,
@@ -249,7 +250,7 @@ export async function addEmployee(data: any) {
     department: "General",
     joiningDate: new Date().toISOString().slice(0, 10),
     salary: 0,
-    password: "password123",
+    password: bcrypt.hashSync("password123", 10),
     ...rest, 
     id: finalId, 
     avatar: data.avatar || "" 
@@ -262,6 +263,9 @@ export async function updateEmployee(id: string, data: any) {
   if (data.avatar && typeof data.avatar === 'string' && data.avatar.startsWith("data:image")) {
     const result = await uploadImageToCloudinary(data.avatar);
     if (result.success) data.avatar = result.url;
+  }
+  if (data.password) {
+    data.password = bcrypt.hashSync(data.password, 10);
   }
   const emp = await Employee.findOneAndUpdate({ id }, data, { new: true }).lean();
   return serialize(emp);

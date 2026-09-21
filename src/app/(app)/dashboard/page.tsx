@@ -17,11 +17,30 @@ import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGri
 import { useDataTable } from "@/hooks/useDataTable";
 import { SortableHeader } from "@/components/SortableHeader";
 import { DataTablePagination } from "@/components/DataTablePagination";
+import { Skeleton } from "@/components/ui/skeleton";
 
 export default function Dashboard() {
   const user = useAuth();
   const db = useDB();
   if (!user) return null;
+
+  if (db.isLoading) {
+    return (
+      <div className="space-y-6">
+        <PageHeader title="Dashboard" description="Loading data..." />
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
+          <Skeleton className="h-32 w-full" />
+          <Skeleton className="h-32 w-full" />
+          <Skeleton className="h-32 w-full" />
+          <Skeleton className="h-32 w-full" />
+        </div>
+        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-7">
+          <Skeleton className="col-span-4 h-96 w-full" />
+          <Skeleton className="col-span-3 h-96 w-full" />
+        </div>
+      </div>
+    );
+  }
 
   const today = new Date().toISOString().slice(0, 10);
   const employeeIds = new Set(db.employees.map(e => e.id));
@@ -294,6 +313,21 @@ function EmployeeDashboard() {
   const user = useAuth();
   const db = useDB();
   if (!user?.employeeId) return null;
+
+  if (db.isLoading) {
+    return (
+      <div className="space-y-6">
+        <PageHeader title="My Dashboard" description="Loading data..." />
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
+          <Skeleton className="h-32 w-full" />
+          <Skeleton className="h-32 w-full" />
+          <Skeleton className="h-32 w-full" />
+          <Skeleton className="h-32 w-full" />
+        </div>
+      </div>
+    );
+  }
+
   const empId = user.employeeId;
   const today = new Date().toISOString().slice(0, 10);
   const employeeIds = new Set(db.employees.map(e => e.id));
