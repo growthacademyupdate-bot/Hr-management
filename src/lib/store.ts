@@ -79,12 +79,18 @@ const listeners = new Set<() => void>();
 function notify() { listeners.forEach((l) => l()); }
 
 let isFetching = false;
-let globalPollInterval: NodeJS.Timeout | null = null;
-let activeSubscriberCount = 0;
+let lastFetchTime = 0;
+const MIN_FETCH_INTERVAL = 4000;
+let pollInterval: NodeJS.Timeout | null = null;
+let initialized = false;
 
-export async function refreshDB() {
+export async function refreshDB(force = false) {
+  const now = Date.now();
   if (isFetching) return;
+  if (!force && now - lastFetchTime < MIN_FETCH_INTERVAL) return;
+
   isFetching = true;
+  lastFetchTime = now;
   try {
     const user = getCurrentUser();
     const userId = user?.employeeId || user?.id;
@@ -121,47 +127,74 @@ export async function refreshDB() {
   }
 }
 
+function startPollingIfNeeded() {
+  if (typeof window === "undefined" || pollInterval) return;
+
+  if (!initialized) {
+    initialized = true;
+    refreshDB(true);
+  }
+
+  pollInterval = setInterval(() => {
+    if (typeof document !== "undefined" && document.visibilityState === "visible") {
+      refreshDB(false);
+    }
+  }, 6000);
+
+  window.addEventListener("focus", () => {
+    refreshDB(false);
+  });
+}
+
+function subscribeDB(cb: () => void) {
+  listeners.add(cb);
+  startPollingIfNeeded();
+  return () => {
+    listeners.delete(cb);
+  };
+}
+
+function getDBSnapshot() {
+  return currentDB;
+}
+
 export function useDB() {
   const snap = useSyncExternalStore(
-    (cb) => {
-      listeners.add(cb);
-      activeSubscriberCount++;
-      if (activeSubscriberCount === 1) {
-        refreshDB();
-        globalPollInterval = setInterval(refreshDB, 3500); // Live poll every 3.5 seconds
-      }
-      return () => {
-        listeners.delete(cb);
-        activeSubscriberCount--;
-        if (activeSubscriberCount <= 0) {
-          activeSubscriberCount = 0;
-          if (globalPollInterval) {
-            clearInterval(globalPollInterval);
-            globalPollInterval = null;
-          }
-        }
-      };
-    },
-    () => currentDB,
-    () => currentDB
+    subscribeDB,
+    getDBSnapshot,
+    getDBSnapshot
   );
 
   return snap;
 }
 
+const searchListeners = new Set<() => void>();
+function notifySearch() { searchListeners.forEach((l) => l()); }
+
+function subscribeSearch(cb: () => void) {
+  searchListeners.add(cb);
+  return () => {
+    searchListeners.delete(cb);
+  };
+}
+
+function getSearchSnapshot() {
+  return globalSearch;
+}
+
 export function useGlobalSearch() {
   const snap = useSyncExternalStore(
-    (cb) => { listeners.add(cb); return () => listeners.delete(cb); },
-    () => globalSearch,
-    () => globalSearch
+    subscribeSearch,
+    getSearchSnapshot,
+    getSearchSnapshot
   );
   return snap;
 }
 
 export const api = {
   resetDB() { /* No-op for real DB */ },
-  refreshDB() { return refreshDB(); },
-  setGlobalSearch(q: string) { globalSearch = q; notify(); },
+  refreshDB(force = true) { return refreshDB(force); },
+  setGlobalSearch(q: string) { globalSearch = q; notifySearch(); },
   async addEmployee(emp: any) { const e = await addEmployee(emp); currentDB.employees = [e, ...currentDB.employees]; notify(); return e; },
   async updateEmployee(id: string, patch: any) { const e = await updateEmployee(id, patch); currentDB.employees = currentDB.employees.map(x => x.id === id ? e : x); notify(); },
   async deleteEmployee(id: string) {
