@@ -7,6 +7,7 @@ const LeaveSchema = new mongoose.Schema({
   startDate: { type: String, required: true }, // Mapped to From Date in UI
   endDate: { type: String, required: true },   // Mapped to To Date in UI
   numberOfDays: { type: Number, required: true },
+  isPaid: { type: Boolean, default: true },
   reason: { type: String, required: true },
   status: { type: String, enum: ["pending", "hr_approved", "hr_rejected", "admin_approved", "admin_rejected", "cancelled"], default: "pending" },
   appliedAt: { type: String, required: true },
