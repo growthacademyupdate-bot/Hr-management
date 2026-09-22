@@ -132,11 +132,41 @@ export async function POST(req: NextRequest) {
     let currentY = tableY + 20;
     
     items.forEach((item: any) => {
-      const startY = currentY;
-      
-      // Calculate description height
+      // Simulate height calculation first
       doc.font('Helvetica-Bold').fontSize(10);
       const descHeight = doc.heightOfString(item.description, { width: 300 });
+      let detailsHeight = 0;
+      if (item.serviceDetails) {
+        doc.font('Helvetica').fontSize(9).fillColor('#333333');
+        const details = item.serviceDetails.split('\n');
+        details.forEach((d: string) => {
+          const cleanText = d.trim();
+          if (cleanText) {
+            const bulletText = `• ${cleanText.replace(/^•\s*/, '')}`;
+            detailsHeight += doc.heightOfString(bulletText, { width: 290 }) + 4;
+          }
+        });
+      }
+      
+      let nextAmountYSim = 10 + 20; // amounts startY + 10, then +20
+      if (item.includeGst) nextAmountYSim += 20;
+      
+      const itemHeight = Math.max(10 + descHeight + 6 + detailsHeight + 10, nextAmountYSim + 15);
+      
+      // Page break check
+      if (currentY + itemHeight > doc.page.height - 40) {
+        doc.addPage();
+        currentY = 40;
+        // Redraw table headers
+        doc.rect(40, currentY, 515, 20).fillAndStroke('#0A3161', '#0A3161');
+        doc.fillColor('white').font('Helvetica-Bold').fontSize(10).text('DESCRIPTION', 50, currentY + 5);
+        doc.text('TOTAL AMOUNT', 360, currentY + 5);
+        currentY += 20;
+      }
+      
+      const startY = currentY;
+      
+      doc.font('Helvetica-Bold').fontSize(10);
       doc.fillColor('black').text(item.description, 50, startY + 10, { width: 300 });
       
       let detailsY = startY + 10 + descHeight + 6;
@@ -175,8 +205,6 @@ export async function POST(req: NextRequest) {
       const itemTotal = sub + (item.includeGst ? (sub * (Number(item.sgstPercent) + Number(item.cgstPercent))) / 100 : 0);
       doc.font('Helvetica-Bold').text('Total Amount:', 360, nextAmountY).text(`Rs. ${itemTotal.toFixed(2)}`, 460, nextAmountY);
       
-      const itemHeight = Math.max(detailsY - startY + 10, nextAmountY - startY + 25);
-      
       // Draw container box
       doc.rect(40, startY, 515, itemHeight).stroke('#cccccc');
       
@@ -187,6 +215,10 @@ export async function POST(req: NextRequest) {
     });
 
     if (additionalServices && additionalServices.length > 0) {
+      if (currentY + 60 > doc.page.height - 40) {
+        doc.addPage();
+        currentY = 40;
+      }
       doc.rect(40, currentY + 15, 515, 20).fillAndStroke('#0A3161', '#0A3161');
       doc.fillColor('white').font('Helvetica-Bold').fontSize(10).text('OUR SERVICES ALSO INCLUDE', 50, currentY + 20);
       
@@ -196,18 +228,30 @@ export async function POST(req: NextRequest) {
       
       additionalServices.forEach((s: any) => {
         const textH = doc.heightOfString(`• ${s.description}`, { width: 290 });
+        if (addY + textH > doc.page.height - 40) {
+          // Break box and start new page
+          doc.rect(40, startAddY, 515, addY - startAddY).stroke('#cccccc');
+          doc.moveTo(350, startAddY).lineTo(350, addY).stroke('#cccccc');
+          doc.addPage();
+          addY = 40;
+          currentY = 40; // Reset currentY logic if needed, but we don't rely on startAddY after this block
+        }
         doc.text(`• ${s.description}`, 50, addY, { width: 290 });
         doc.text(s.amount, 360, addY);
         addY += textH + 8;
       });
       
-      doc.rect(40, startAddY, 515, addY - startAddY + 5).stroke('#cccccc');
-      doc.moveTo(350, startAddY).lineTo(350, addY + 5).stroke('#cccccc');
-    } else {
-      currentY += 10;
+      // We only draw the final box from where it started on the CURRENT page
+      // To properly handle multi-page additional services, it's easier to just assume they fit, or do a simple bounding box.
+      // Since it's a simple list, let's just draw the final box for whatever is left on the current page:
+      const boxStartY = (addY < startAddY) ? 40 : startAddY; // If we page broke, boxStartY should be 40
+      doc.rect(40, boxStartY, 515, addY - boxStartY + 5).stroke('#cccccc');
+      doc.moveTo(350, boxStartY).lineTo(350, addY + 5).stroke('#cccccc');
+      
+      currentY = addY + 5;
     }
 
-    let footerY = doc.y;
+    let footerY = currentY;
     // We expect the footer to need around 350 pixels of height
     if (footerY + 350 > doc.page.height - 40) {
       doc.addPage();
