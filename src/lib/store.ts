@@ -78,64 +78,123 @@ const listeners = new Set<() => void>();
 
 function notify() { listeners.forEach((l) => l()); }
 
-export function useDB() {
-  const snap = useSyncExternalStore(
-    (cb) => { listeners.add(cb); return () => listeners.delete(cb); },
-    () => currentDB,
-    () => currentDB
-  );
+let isFetching = false;
+let lastFetchTime = 0;
+const MIN_FETCH_INTERVAL = 4000;
+let pollInterval: NodeJS.Timeout | null = null;
+let initialized = false;
 
-  useEffect(() => {
+export async function refreshDB(force = false) {
+  const now = Date.now();
+  if (isFetching) return;
+  if (!force && now - lastFetchTime < MIN_FETCH_INTERVAL) return;
+
+  isFetching = true;
+  lastFetchTime = now;
+  try {
     const user = getCurrentUser();
     const userId = user?.employeeId || user?.id;
-    // Fetch real data on mount
-    Promise.all([
-      getEmployees(), getAttendance(), getTasks(user?.role, userId), 
-      getLeaves(user?.role, userId), getExpenses(user?.role, userId), getActivities(), getHolidays(),
+    const [emps, atts, ts, lvs, exps, acts, hols, notifs, dReports] = await Promise.all([
+      getEmployees(),
+      getAttendance(),
+      getTasks(user?.role, userId),
+      getLeaves(user?.role, userId),
+      getExpenses(user?.role, userId),
+      getActivities(),
+      getHolidays(),
       userId ? getNotifications(userId) : Promise.resolve([]),
       getDailyReports(user?.role, userId)
-    ])
-      .then(([emps, atts, ts, lvs, exps, acts, hols, notifs, dReports]) => {
-        currentDB = { employees: emps, attendance: atts, tasks: ts, leaves: lvs, expenses: exps, activities: acts, holidays: hols, notifications: notifs, dailyReports: dReports || [], isLoading: false };
-        notify();
-      })
-      .catch((e) => {
-        console.error(e);
-        currentDB = { ...currentDB, isLoading: false };
-        notify();
-      });
-
-    // Polling for notifications
-    let pollInterval: NodeJS.Timeout;
-    if (userId) {
-      pollInterval = setInterval(() => {
-        getNotifications(userId).then(notifs => {
-          currentDB.notifications = notifs;
-          notify();
-        }).catch(console.error);
-      }, 5000); // 5 seconds
-    }
-
-    return () => {
-      if (pollInterval) clearInterval(pollInterval);
+    ]);
+    currentDB = {
+      employees: emps || [],
+      attendance: atts || [],
+      tasks: ts || [],
+      leaves: lvs || [],
+      expenses: exps || [],
+      activities: acts || [],
+      holidays: hols || [],
+      notifications: notifs || [],
+      dailyReports: dReports || [],
+      isLoading: false
     };
-  }, []);
+    notify();
+  } catch (err) {
+    console.error("refreshDB error:", err);
+    currentDB = { ...currentDB, isLoading: false };
+    notify();
+  } finally {
+    isFetching = false;
+  }
+}
+
+function startPollingIfNeeded() {
+  if (typeof window === "undefined" || pollInterval) return;
+
+  if (!initialized) {
+    initialized = true;
+    refreshDB(true);
+  }
+
+  pollInterval = setInterval(() => {
+    if (typeof document !== "undefined" && document.visibilityState === "visible") {
+      refreshDB(false);
+    }
+  }, 6000);
+
+  window.addEventListener("focus", () => {
+    refreshDB(false);
+  });
+}
+
+function subscribeDB(cb: () => void) {
+  listeners.add(cb);
+  startPollingIfNeeded();
+  return () => {
+    listeners.delete(cb);
+  };
+}
+
+function getDBSnapshot() {
+  return currentDB;
+}
+
+export function useDB() {
+  const snap = useSyncExternalStore(
+    subscribeDB,
+    getDBSnapshot,
+    getDBSnapshot
+  );
 
   return snap;
 }
 
+const searchListeners = new Set<() => void>();
+function notifySearch() { searchListeners.forEach((l) => l()); }
+
+function subscribeSearch(cb: () => void) {
+  searchListeners.add(cb);
+  return () => {
+    searchListeners.delete(cb);
+  };
+}
+
+function getSearchSnapshot() {
+  return globalSearch;
+}
+
 export function useGlobalSearch() {
   const snap = useSyncExternalStore(
-    (cb) => { listeners.add(cb); return () => listeners.delete(cb); },
-    () => globalSearch,
-    () => globalSearch
+    subscribeSearch,
+    getSearchSnapshot,
+    getSearchSnapshot
   );
   return snap;
 }
 
 export const api = {
   resetDB() { /* No-op for real DB */ },
-  setGlobalSearch(q: string) { globalSearch = q; notify(); },
+  refreshDB(force = true) { return refreshDB(force); },
+  setGlobalSearch(q: string) { globalSearch = q; notifySearch(); },
   async addEmployee(emp: any) { const e = await addEmployee(emp); currentDB.employees = [e, ...currentDB.employees]; notify(); return e; },
   async updateEmployee(id: string, patch: any) { const e = await updateEmployee(id, patch); currentDB.employees = currentDB.employees.map(x => x.id === id ? e : x); notify(); },
   async deleteEmployee(id: string) {
@@ -259,6 +318,7 @@ export const ROLE_MENUS: Record<Role, { label: string; to: string; icon: string 
     { label: "Notifications", to: "/notifications", icon: "Bell" },
     { label: "Settings", to: "/settings", icon: "Settings" },
     { label: "Profile", to: "/profile", icon: "User" },
+    { label: "Quotations", to: "/quotations", icon: "FileText" },
   ],
   hr: [
     { label: "Dashboard", to: "/dashboard", icon: "LayoutDashboard" },
@@ -272,6 +332,7 @@ export const ROLE_MENUS: Record<Role, { label: string; to: string; icon: string 
     { label: "Reports", to: "/reports", icon: "BarChart3" },
     { label: "Notifications", to: "/notifications", icon: "Bell" },
     { label: "Profile", to: "/profile", icon: "User" },
+    { label: "Quotations", to: "/quotations", icon: "FileText" },
   ],
   employee: [
     { label: "Dashboard", to: "/dashboard", icon: "LayoutDashboard" },
@@ -285,6 +346,7 @@ export const ROLE_MENUS: Record<Role, { label: string; to: string; icon: string 
     { label: "Holidays", to: "/holidays", icon: "CalendarDays" },
     { label: "Notifications", to: "/notifications", icon: "Bell" },
     { label: "Profile", to: "/profile", icon: "User" },
+    { label: "Quotations", to: "/quotations", icon: "FileText" },
   ],
 };
 

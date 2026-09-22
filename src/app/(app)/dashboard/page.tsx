@@ -7,7 +7,7 @@ import { StatCard } from "@/components/StatCard";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
-import { Users, UserCheck, UserX, Activity, ListChecks, CheckCircle2, Clock, TrendingUp, Search } from "lucide-react";
+import { Users, UserCheck, UserX, Activity, ListChecks, CheckCircle2, Clock, TrendingUp, Search, RotateCw } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
@@ -18,10 +18,12 @@ import { useDataTable } from "@/hooks/useDataTable";
 import { SortableHeader } from "@/components/SortableHeader";
 import { DataTablePagination } from "@/components/DataTablePagination";
 import { Skeleton } from "@/components/ui/skeleton";
+import { cn } from "@/lib/utils";
 
 export default function Dashboard() {
   const user = useAuth();
   const db = useDB();
+  const [isRefreshing, setIsRefreshing] = useState(false);
   if (!user) return null;
 
   if (db.isLoading) {
@@ -45,70 +47,193 @@ export default function Dashboard() {
   const today = new Date().toISOString().slice(0, 10);
   const employeeIds = new Set(db.employees.map(e => e.id));
   const isTodayHoliday = db.holidays?.some(h => h.isActive && h.holidayType === "COMPANY_HOLIDAY" && h.startDate <= today && h.endDate >= today);
+  
+  // Today's attendance records for recognized employees
   const todayAtt = db.attendance.filter((a) => a.date === today && employeeIds.has(a.employeeId));
-  const present = todayAtt.filter((a) => a.status === "Present").length;
-  const absent = isTodayHoliday ? 0 : db.employees.length - todayAtt.length + todayAtt.filter((a) => a.status === "Absent").length;
-  const active = db.employees.filter((e) => e.status === "Active").length;
+
+  // Present today: any employee who has logged in today or marked Present/Half Day/Short Day/Incomplete
+  const present = todayAtt.filter((a) => 
+    a.firstLoginAt || 
+    (a.sessions && a.sessions.length > 0) || 
+    ["Present", "Half Day", "Short Day", "Incomplete"].includes(a.status)
+  ).length;
+
+  // Active now: how many employees are logged in RIGHT NOW (active session without logoutAt)
+  const activeNow = todayAtt.filter((a) => a.sessions?.some((s: any) => !s.logoutAt)).length;
+
+  // Approved leave today
+  const onLeaveToday = db.leaves.filter(l => 
+    l.status === "admin_approved" && 
+    l.startDate <= today && 
+    l.endDate >= today && 
+    employeeIds.has(l.employeeId)
+  ).length;
+
+  // Absent count: total registered employees minus those present and minus approved leave
+  const absent = isTodayHoliday ? 0 : Math.max(db.employees.length - present - onLeaveToday, 0);
+
+  // New joiners this month
+  const thisMonth = today.slice(0, 7);
+  const joinedThisMonth = db.employees.filter(e => e.joiningDate && e.joiningDate.slice(0, 7) === thisMonth).length;
+
+  // Tasks calculations
+  const totalTasks = db.tasks.filter((t) => employeeIds.has(t.assignedTo)).length;
   const completed = db.tasks.filter((t) => (t.status === "completed" || t.status === "reviewed") && employeeIds.has(t.assignedTo)).length;
   const pending = db.tasks.filter((t) => (t.status === "assigned" || t.status === "working_progress") && employeeIds.has(t.assignedTo)).length;
-  const overdueTasks = db.tasks.filter(t => new Date() > new Date(t.dueDate) && !["completed", "reviewed"].includes(t.status)).length;
-  const productivity = todayAtt.length ? Math.round(todayAtt.reduce((s, a) => s + a.productivity, 0) / todayAtt.length) : 0;
-  const upcomingHolidays = db.holidays?.filter(h => h.isActive && h.startDate >= today).sort((a,b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime()).slice(0, 3) || [];
+  const overdueTasks = db.tasks.filter(t => new Date() > new Date(t.dueDate) && !["completed", "reviewed"].includes(t.status) && employeeIds.has(t.assignedTo)).length;
+  
+  // Leaves pending admin review
+  const pendingLeaves = db.leaves.filter(l => l.status === (user.role === "admin" ? "hr_approved" : "pending")).length;
+
+  const handleManualRefresh = async () => {
+    setIsRefreshing(true);
+    await api.refreshDB();
+    setTimeout(() => setIsRefreshing(false), 500);
+    toast.success("Dashboard data updated");
+  };
 
   if (user.role === "employee") return <EmployeeDashboard />;
 
   const attendancePie = [
     { name: "Present", value: present, color: "var(--color-success)" },
     { name: "Absent", value: Math.max(absent, 0), color: "var(--color-destructive)" },
-    { name: "Leave", value: todayAtt.filter((a) => a.status === "Leave").length, color: "var(--color-warning)" },
-    ...(isTodayHoliday ? [{ name: "Holiday", value: db.employees.length - present, color: "var(--color-info)" }] : []),
-  ];
+    { name: "Leave", value: onLeaveToday, color: "var(--color-warning)" },
+    ...(isTodayHoliday ? [{ name: "Holiday", value: Math.max(db.employees.length - present, 0), color: "var(--color-info)" }] : []),
+  ].filter(item => item.value > 0);
+
   const taskPie = [
     { name: "Completed/Reviewed", value: completed, color: "var(--color-success)" },
-    { name: "Working Progress", value: db.tasks.filter((t) => t.status === "working_progress").length, color: "var(--color-info)" },
-    { name: "Assigned", value: db.tasks.filter((t) => t.status === "assigned").length, color: "var(--color-warning)" },
-  ];
+    { name: "Working Progress", value: db.tasks.filter((t) => t.status === "working_progress" && employeeIds.has(t.assignedTo)).length, color: "var(--color-info)" },
+    { name: "Assigned", value: db.tasks.filter((t) => t.status === "assigned" && employeeIds.has(t.assignedTo)).length, color: "var(--color-warning)" },
+  ].filter(item => item.value > 0);
 
   // Weekly attendance
   const weekly = Array.from({ length: 7 }).map((_, i) => {
     const d = new Date(); d.setDate(d.getDate() - (6 - i));
     const date = d.toISOString().slice(0, 10);
     const day = d.toLocaleDateString(undefined, { weekday: "short" });
-    const recs = db.attendance.filter((a) => a.date === date);
+    const isHoliday = db.holidays?.some(h => h.isActive && h.holidayType === "COMPANY_HOLIDAY" && h.startDate <= date && h.endDate >= date);
+    const recs = db.attendance.filter((a) => a.date === date && employeeIds.has(a.employeeId));
+    const dayPresent = recs.filter((r) => r.firstLoginAt || (r.sessions && r.sessions.length > 0) || ["Present", "Half Day", "Short Day", "Incomplete"].includes(r.status)).length;
+    const dayLeave = db.leaves.filter(l => l.status === "admin_approved" && l.startDate <= date && l.endDate >= date && employeeIds.has(l.employeeId)).length;
+    const dayAbsent = isHoliday ? 0 : Math.max(db.employees.length - dayPresent - dayLeave, 0);
     return {
       day,
-      Present: recs.filter((r) => r.status === "Present").length,
-      Absent: recs.filter((r) => r.status === "Absent").length,
-      Leave: recs.filter((r) => r.status === "Leave").length,
+      Present: dayPresent,
+      Absent: dayAbsent,
+      Leave: dayLeave,
     };
   });
 
   // Department performance
-  const deptMap = new Map<string, { count: number; total: number }>();
+  const deptMap = new Map<string, { count: number; totalProd: number }>();
   db.employees.forEach((e) => {
-    const m = deptMap.get(e.department) || { count: 0, total: 0 };
-    m.count++; m.total += 80 + Math.random() * 15;
+    const empAtt = todayAtt.find(a => a.employeeId === e.id);
+    const m = deptMap.get(e.department) || { count: 0, totalProd: 0 };
+    m.count++;
+    m.totalProd += (empAtt?.productivity || (empAtt ? 80 : 0));
     deptMap.set(e.department, m);
   });
-  const deptData = Array.from(deptMap.entries()).map(([name, v]) => ({ name, performance: Math.round(v.total / v.count) }));
+  const deptData = Array.from(deptMap.entries()).map(([name, v]) => ({ 
+    name, 
+    performance: v.count > 0 ? Math.round(v.totalProd / v.count) : 0 
+  }));
 
   return (
     <div className="space-y-6">
-      <PageHeader title={`Welcome back, ${user.name.split(" ")[0]}`} description="Here's what's happening across your organization today." />
+      <PageHeader 
+        title={`Welcome back, ${user.name.split(" ")[0]}`} 
+        description="Here's what's happening across your organization today."
+        actions={
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400 text-xs font-semibold">
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+              </span>
+              <span>LIVE</span>
+            </div>
+            <Button 
+              variant="outline" 
+              size="sm" 
+              onClick={handleManualRefresh}
+              disabled={isRefreshing}
+              className="h-8 text-xs gap-1.5 cursor-pointer"
+            >
+              <RotateCw className={cn("h-3.5 w-3.5", isRefreshing && "animate-spin")} />
+              <span>Refresh</span>
+            </Button>
+          </div>
+        }
+      />
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <StatCard label="Total Employees" value={db.employees.length} icon={Users} tone="primary" trend="+2 this month" />
-        <StatCard label="Present Today" value={present} icon={UserCheck} tone="success" trend={`${Math.round((present/Math.max(db.employees.length,1))*100)}% attendance`} />
-        <StatCard label="Absent" value={Math.max(absent, 0)} icon={UserX} tone="destructive" />
-        <StatCard label="Active Now" value={active} icon={Activity} tone="info" />
-        <StatCard label="Total Tasks" value={db.tasks.length} icon={ListChecks} tone="primary" />
-        <StatCard label="Completed" value={completed} icon={CheckCircle2} tone="success" />
+        <StatCard 
+          label="Total Employees" 
+          value={db.employees.length} 
+          icon={Users} 
+          tone="primary" 
+          trend={joinedThisMonth > 0 ? `+${joinedThisMonth} this month` : `${db.employees.filter(e => e.status === "Active").length} active accounts`} 
+        />
+        <StatCard 
+          label="Present Today" 
+          value={present} 
+          icon={UserCheck} 
+          tone="success" 
+          trend={`${Math.round((present / Math.max(db.employees.length, 1)) * 100)}% attendance`} 
+        />
+        <StatCard 
+          label="Absent" 
+          value={Math.max(absent, 0)} 
+          icon={UserX} 
+          tone="destructive" 
+          trend={isTodayHoliday ? "Holiday" : onLeaveToday > 0 ? `${onLeaveToday} on leave` : "Not checked in"}
+        />
+        <StatCard 
+          label="Active Now" 
+          value={activeNow} 
+          icon={Activity} 
+          tone="info" 
+          pulse={activeNow > 0}
+          trend={`${activeNow} of ${db.employees.length} logged in`} 
+        />
+        <StatCard 
+          label="Total Tasks" 
+          value={totalTasks} 
+          icon={ListChecks} 
+          tone="primary" 
+          trend={`${totalTasks > 0 ? Math.round((completed / totalTasks) * 100) : 0}% completed`}
+        />
+        <StatCard 
+          label="Completed" 
+          value={completed} 
+          icon={CheckCircle2} 
+          tone="success" 
+          trend={`${completed} tasks finished`}
+        />
         {user.role === "admin" ? (
-          <StatCard label="Pending" value={pending} icon={Clock} tone="warning" />
+          <StatCard 
+            label="Pending" 
+            value={pending} 
+            icon={Clock} 
+            tone="warning" 
+            trend={overdueTasks > 0 ? `${overdueTasks} overdue` : "In progress"}
+          />
         ) : (
-          <StatCard label="To Review" value={db.tasks.filter((t) => t.status === "completed").length} icon={Clock} tone="warning" />
+          <StatCard 
+            label="To Review" 
+            value={db.tasks.filter((t) => t.status === "completed" && employeeIds.has(t.assignedTo)).length} 
+            icon={Clock} 
+            tone="warning" 
+          />
         )}
-        <StatCard label="Leave Requests" value={db.leaves.filter(l => l.status === (user.role === "admin" ? "hr_approved" : "pending")).length} icon={Clock} tone="warning" trend="Action needed" />
+        <StatCard 
+          label="Leave Requests" 
+          value={pendingLeaves} 
+          icon={Clock} 
+          tone="warning" 
+          trend={pendingLeaves > 0 ? "Action needed" : "All cleared"} 
+        />
       </div>
 
       <div className="grid lg:grid-cols-3 gap-4">
@@ -190,26 +315,45 @@ export default function Dashboard() {
 
 function EmployeeActivityTable({ todayAtt }: { todayAtt: any[] }) {
   const db = useDB();
+  const today = new Date().toISOString().slice(0, 10);
 
   const activityData = useMemo(() => {
     return db.employees.map((emp) => {
       const att = todayAtt.find((a) => a.employeeId === emp.id);
+      const activeSession = att?.sessions?.find((s: any) => !s.logoutAt);
+      const isOnline = Boolean(activeSession);
+      const onLeave = db.leaves.some(l => l.employeeId === emp.id && l.status === "admin_approved" && l.startDate <= today && l.endDate >= today);
+
+      let status = "Absent";
+      if (isOnline) {
+        status = "Active Now";
+      } else if (att) {
+        status = att.status === "Incomplete" ? "Present" : att.status;
+      } else if (onLeave) {
+        status = "Leave";
+      }
+
+      // Calculate elapsed active working duration including live open session
+      const ongoingSeconds = activeSession ? Math.max(0, Math.floor((Date.now() - new Date(activeSession.loginAt).getTime()) / 1000)) : 0;
+      const totalSecs = (att?.totalWorkingSeconds || (att?.workingHours ? att.workingHours * 3600 : 0)) + ongoingSeconds;
+
       return {
         id: emp.id,
         name: emp.name,
         avatar: emp.avatar,
         department: emp.department,
-        status: att?.status || "Absent",
+        status,
+        isOnline,
         firstLoginAt: att?.firstLoginAt,
-        loginTime: att?.firstLoginAt ? new Date(att.firstLoginAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : att?.loginTime || "—",
+        loginTime: att?.firstLoginAt ? new Date(att.firstLoginAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : (att?.loginTime || "—"),
         lastLogoutAt: att?.lastLogoutAt,
-        logoutTime: att?.lastLogoutAt ? new Date(att.lastLogoutAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : att?.logoutTime || "—",
-        workingSeconds: att?.totalWorkingSeconds || (att?.workingHours ? att.workingHours * 3600 : 0),
-        hoursLabel: att?.totalWorkingSeconds ? formatDuration(att.totalWorkingSeconds) : `${att?.workingHours || 0}h`,
+        logoutTime: isOnline ? "Active Now" : (att?.lastLogoutAt ? new Date(att.lastLogoutAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : (att?.logoutTime || "—")),
+        workingSeconds: totalSecs,
+        hoursLabel: totalSecs > 0 ? formatDuration(totalSecs) : "0h 0m",
         productivity: att?.productivity || 0,
       };
     });
-  }, [db.employees, todayAtt]);
+  }, [db.employees, db.leaves, todayAtt, today]);
 
   const { search, setSearch, sortField, sortOrder, toggleSort, page, setPage, pageSize, setPageSize, totalPages, totalItems, startIndex, endIndex, paginatedData } = useDataTable({
     data: activityData,
@@ -249,7 +393,15 @@ function EmployeeActivityTable({ todayAtt }: { todayAtt: any[] }) {
                 <TableRow key={emp.id}>
                   <TableCell>
                     <div className="flex items-center gap-3">
-                      <Avatar className="h-8 w-8"><AvatarImage src={emp.avatar} /><AvatarFallback>{emp.name[0]}</AvatarFallback></Avatar>
+                      <div className="relative">
+                        <Avatar className="h-8 w-8">
+                          <AvatarImage src={emp.avatar} />
+                          <AvatarFallback>{emp.name[0]}</AvatarFallback>
+                        </Avatar>
+                        {emp.isOnline && (
+                          <span className="absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full bg-emerald-500 ring-2 ring-card" title="Online" />
+                        )}
+                      </div>
                       <div>
                         <div className="font-medium">{emp.name}</div>
                         <div className="text-xs text-muted-foreground">{emp.id}</div>
@@ -280,12 +432,13 @@ function EmployeeActivityTable({ todayAtt }: { todayAtt: any[] }) {
 
 export function StatusBadge({ status }: { status: string }) {
   const map: Record<string, string> = {
+    "Active Now": "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 font-medium",
     Present: "bg-success/15 text-success border-success/20",
     Absent: "bg-destructive/15 text-destructive border-destructive/20",
     Leave: "bg-warning/15 text-warning border-warning/20",
     "Half Day": "bg-info/15 text-info border-info/20",
-    "Short Day": "bg-warning/15 text-warning border-warning/20",
-    Incomplete: "bg-muted text-muted-foreground border-border",
+    "Short Day": "bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/20",
+    Incomplete: "bg-blue-500/15 text-blue-600 dark:text-blue-400 border-blue-500/20",
     Pending: "bg-muted text-muted-foreground border-border",
     Active: "bg-success/15 text-success border-success/20",
     Inactive: "bg-muted text-muted-foreground border-border",
@@ -299,7 +452,17 @@ export function StatusBadge({ status }: { status: string }) {
     high: "bg-destructive/15 text-destructive border-destructive/20",
     urgent: "bg-destructive/15 text-destructive border-destructive/20",
   };
-  return <Badge variant="outline" className={map[status] || ""}>{status}</Badge>;
+  return (
+    <Badge variant="outline" className={cn("inline-flex items-center gap-1.5", map[status] || "")}>
+      {status === "Active Now" && (
+        <span className="relative flex h-2 w-2">
+          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+          <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+        </span>
+      )}
+      {status}
+    </Badge>
+  );
 }
 
 function formatDuration(seconds?: number) {
@@ -347,14 +510,17 @@ function EmployeeDashboard() {
   const upcomingHolidays = db.holidays?.filter(h => h.isActive && h.startDate >= today).sort((a,b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime()).slice(0, 3) || [];
 
   const activeTasks = myTasks.filter((t) => t.status === "assigned" || t.status === "working_progress");
+  const activeSession = todayAtt?.sessions?.find((s: any) => !s.logoutAt);
+  const ongoingSeconds = activeSession ? Math.max(0, Math.floor((Date.now() - new Date(activeSession.loginAt).getTime()) / 1000)) : 0;
+  const totalWorkingSecs = (todayAtt?.totalWorkingSeconds || (todayAtt?.workingHours ? todayAtt.workingHours * 3600 : 0)) + ongoingSeconds;
 
   return (
     <div className="space-y-6">
       <PageHeader title={`Hi ${user.name.split(" ")[0]} 👋`} description="Here's your work summary for today." />
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard label="Today's Login" value={todayAtt?.firstLoginAt ? new Date(todayAtt.firstLoginAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : todayAtt?.loginTime || "—"} icon={Clock} tone="info" />
-        <StatCard label="Working Hours" value={todayAtt?.totalWorkingSeconds ? formatDuration(todayAtt.totalWorkingSeconds) : `${todayAtt?.workingHours || 0}h`} icon={Activity} tone="primary" />
+        <StatCard label="Today's Login" value={todayAtt?.firstLoginAt ? new Date(todayAtt.firstLoginAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : todayAtt?.loginTime || "—"} icon={Clock} tone="info" trend={activeSession ? "Currently Active" : (todayAtt ? "Logged Out" : "Not Logged In")} />
+        <StatCard label="Working Hours" value={totalWorkingSecs > 0 ? formatDuration(totalWorkingSecs) : `${todayAtt?.workingHours || 0}h`} icon={Activity} tone="primary" />
         <StatCard label="Assigned Tasks" value={myTasks.length} icon={ListChecks} tone="primary" />
         <StatCard label="Completed" value={completedTasks} icon={CheckCircle2} tone="success" />
         <StatCard label="Leave Requests" value={db.leaves.filter(l => l.employeeId === empId).length} icon={Clock} tone="info" trend={`${db.leaves.filter(l => l.employeeId === empId && l.status === "admin_approved").length} approved`} />
