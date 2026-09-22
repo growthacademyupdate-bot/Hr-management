@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import mongoose from 'mongoose';
 import { Quotation } from '@/models/Quotation';
 import PDFDocument from 'pdfkit';
+import path from 'path';
+import fs from 'fs';
 
 import connectDB from '@/lib/mongoose'; // assuming lib/mongoose exists based on open files
 
@@ -64,14 +66,20 @@ export async function POST(req: NextRequest) {
     doc.on('data', buffers.push.bind(buffers));
     
     // Header
-    doc.font('Helvetica-Bold').fontSize(26).fillColor('#0A3161').text('AL-MAWA INTERNATIONAL', { align: 'center' });
-    doc.fontSize(10).fillColor('#555555').text('TRY. TRUST. TRANSFORM.', { align: 'center' });
-    doc.moveDown();
+    const logoPath = path.join(process.cwd(), 'public', 'logo.png');
+    if (fs.existsSync(logoPath)) {
+      doc.image(logoPath, 40, 40, { width: 150 });
+      doc.y = 125;
+    } else {
+      doc.font('Helvetica-Bold').fontSize(26).fillColor('#0A3161').text('AL-MAWA INTERNATIONAL', 40, 40, { align: 'left' });
+      doc.fontSize(10).fillColor('#555555').text('TRY. TRUST. TRANSFORM.', { align: 'left' });
+      doc.moveDown();
+    }
 
     // Company Info Left & Proforma Right
     const yPos = doc.y;
     doc.fontSize(9).font('Helvetica-Bold').text('Corporate and Registered Office Address:', 40, yPos);
-    doc.font('Helvetica').text('1st Floor, Pride Icon, Office No. 102,103, Nexus Work Spaces,\nMundhwa - Kharadi Rd, Above Athithi Restaurant, Kharadi,\nPune, Maharashtra, Pin Code: 411014\nWebsite: www.al-mawa.international\nPhone: +91 9511991736 / +91 9561179693\nGST No: 27ABDCA0474D1Z1\nPAN No: ABDCA0474D', 40, yPos + 15, { width: 250 });
+    doc.font('Helvetica').text('1st Floor, Pride Icon, Office No. 102,103, Nexus Work Spaces,\nMundhwa - Kharadi Rd, Above Athithi Restaurant, Kharadi,\nPune, Maharashtra, Pin Code: 411014\nWebsite: www.al-mawa.international\nPhone: +91 9511991736 / +91 9561179693\nGST No: 27ABDCA0474D1Z1\nPAN No: ABDCA0474D', 40, yPos + 25, { width: 250 });
 
     // Proforma Info Box
     doc.fontSize(16).fillColor('#0A3161').font('Helvetica-Bold').text('PROFORMA INVOICE', 350, yPos);
