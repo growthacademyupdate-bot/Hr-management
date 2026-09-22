@@ -41,22 +41,22 @@
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
   --font-display: var(--font-display);
-
   --animate-in: animate-in 0.4s cubic-bezier(0.16, 1, 0.3, 1);
-  @keyframes animate-in {
-    from { opacity: 0; transform: translateY(10px) scale(0.98); }
-    to { opacity: 1; transform: translateY(0) scale(1); }
-  }
+}
 
-  @keyframes hr-pulse {
-    0%, 100% { opacity: 0.45; transform: scale(0.85); }
-    50% { opacity: 1; transform: scale(1.2); }
-  }
+@keyframes animate-in {
+  from { opacity: 0; transform: translateY(10px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
 
-  @keyframes hr-bar {
-    0%, 100% { transform: scaleY(0.72); opacity: 0.55; }
-    50% { transform: scaleY(1); opacity: 1; }
-  }
+@keyframes hr-pulse {
+  0%, 100% { opacity: 0.45; transform: scale(0.85); }
+  50% { opacity: 1; transform: scale(1.2); }
+}
+
+@keyframes hr-bar {
+  0%, 100% { transform: scaleY(0.72); opacity: 0.55; }
+  50% { transform: scaleY(1); opacity: 1; }
 }
 
 .hr-pulse { animation: hr-pulse 1.8s ease-in-out infinite; }

@@ -78,47 +78,397 @@ export function amountInWords(value: number) {
 export function calculatePayroll(input: PayrollInput): PayrollResult {
   const annualCTC = assertMoney(input.annualCTC, "Annual CTC");
   const basicSalary = assertMoney(input.basicSalary, "Basic salary");
+
   const monthlyCTC = roundMoney(annualCTC / 12);
-  const hraBase = input.hraMode === "percentage" ? basicSalary * assertMoney(input.hraPercentage, "HRA percentage") / 100 : assertMoney(input.hra, "HRA");
+
+  const hraBase =
+    input.hraMode === "percentage"
+      ? basicSalary * assertMoney(input.hraPercentage, "HRA percentage") / 100
+      : assertMoney(input.hra, "HRA");
+
   const hra = roundMoney(hraBase);
+
   const conveyance = assertMoney(input.conveyance, "Conveyance");
-  const medicalAllowance = assertMoney(input.medicalAllowance, "Medical allowance");
-  const customEarnings = (input.earnings || []).map(item => ({ name: String(item.name || "Other earnings").trim(), amount: assertMoney(item.amount, "Earning amount"), type: "earning" as const }));
-  const customDeductions = (input.deductions || []).map(item => ({ name: String(item.name || "Other deduction").trim(), amount: assertMoney(item.amount, "Deduction amount"), type: "deduction" as const }));
-  const customEarningsTotal = customEarnings.reduce((sum, item) => sum + item.amount, 0);
-  const automaticSpecialAllowance = Math.max(0, monthlyCTC - basicSalary - hra - conveyance - medicalAllowance - customEarningsTotal);
-  const specialAllowance = input.specialAllowance ? assertMoney(input.specialAllowance, "Special allowance") : roundMoney(automaticSpecialAllowance);
-  const pfBase = input.pfWageCeiling && input.pfWageCeiling > 0 ? Math.min(basicSalary, input.pfWageCeiling) : basicSalary;
-  const pfEmployeeContribution = input.pfEnabled ? roundMoney(pfBase * assertMoney(input.pfEmployeePercentage ?? 12, "PF employee percentage") / 100) : 0;
-  const pfEmployerContribution = input.pfEnabled ? roundMoney(pfBase * assertMoney(input.pfEmployerPercentage ?? 12, "PF employer percentage") / 100) : 0;
-  const esiBase = basicSalary + hra + conveyance + medicalAllowance + specialAllowance;
-  const esiEmployeeContribution = input.esiEnabled ? roundMoney(esiBase * assertMoney(input.esiEmployeePercentage ?? 0.75, "ESI employee percentage") / 100) : 0;
-  const esiEmployerContribution = input.esiEnabled ? roundMoney(esiBase * assertMoney(input.esiEmployerPercentage ?? 3.25, "ESI employer percentage") / 100) : 0;
-  const workingDays = Math.max(1, Math.floor(Number(input.workingDays || 30)));
-  const lwpDays = Math.max(0, Math.floor(Number(input.lwpDays || 0)));
-  if (lwpDays > workingDays) throw new Error("LWP days cannot exceed working days");
-  const grossSalary = roundMoney(basicSalary + hra + conveyance + medicalAllowance + specialAllowance + customEarnings.reduce((sum, item) => sum + item.amount, 0));
-  const lwpDeduction = roundMoney(grossSalary / workingDays * lwpDays);
-  const tds = input.tdsEnabled ? (input.annualTds ? roundMoney(assertMoney(input.annualTds, "Annual TDS") / 12) : assertMoney(input.monthlyTds, "Monthly TDS")) : 0;
-  const professionalTax = input.professionalTaxEnabled ? assertMoney(input.professionalTax, "Professional tax") : 0;
+  const medicalAllowance = assertMoney(
+    input.medicalAllowance,
+    "Medical allowance"
+  );
+
+  const customEarnings = (input.earnings || []).map((item) => ({
+    name: String(item.name || "Other earnings").trim(),
+    amount: assertMoney(item.amount, "Earning amount"),
+    type: "earning" as const,
+  }));
+
+  const customDeductions = (input.deductions || []).map((item) => ({
+    name: String(item.name || "Other deduction").trim(),
+    amount: assertMoney(item.amount, "Deduction amount"),
+    type: "deduction" as const,
+  }));
+
+  const customEarningsTotal = customEarnings.reduce(
+    (sum, item) => sum + item.amount,
+    0
+  );
+
+  const automaticSpecialAllowance = Math.max(
+    0,
+    monthlyCTC -
+      basicSalary -
+      hra -
+      conveyance -
+      medicalAllowance -
+      customEarningsTotal
+  );
+
+  const specialAllowance = input.specialAllowance
+    ? assertMoney(input.specialAllowance, "Special allowance")
+    : roundMoney(automaticSpecialAllowance);
+
+  // -----------------------------------------
+  // ATTENDANCE / PAYABLE DAYS
+  // -----------------------------------------
+
+  const workingDays = Math.max(
+    1,
+    Math.floor(Number(input.workingDays || 30))
+  );
+
+  const lwpDays = Math.max(
+    0,
+    Math.floor(Number(input.lwpDays || 0))
+  );
+
+  const payableDays = Math.max(
+    0,
+    Math.min(
+      workingDays,
+      Math.floor(
+        Number(
+          input.paidDays ??
+            workingDays - lwpDays
+        )
+      )
+    )
+  );
+
+  if (lwpDays > workingDays) {
+    throw new Error("LWP days cannot exceed working days");
+  }
+
+  // -----------------------------------------
+  // FULL MONTHLY GROSS
+  // -----------------------------------------
+
+  const fullMonthlyGross = roundMoney(
+    basicSalary +
+      hra +
+      conveyance +
+      medicalAllowance +
+      specialAllowance +
+      customEarningsTotal
+  );
+
+  // -----------------------------------------
+  // PER DAY SALARY
+  // -----------------------------------------
+
+  const perDaySalary = roundMoney(
+    fullMonthlyGross / workingDays
+  );
+
+  // -----------------------------------------
+  // PAYABLE SALARY
+  // -----------------------------------------
+
+  const payableGrossSalary = roundMoney(
+    perDaySalary * payableDays
+  );
+
+  // -----------------------------------------
+  // LWP DEDUCTION
+  // -----------------------------------------
+
+  const lwpDeduction = roundMoney(
+    fullMonthlyGross -
+      payableGrossSalary
+  );
+
+  // -----------------------------------------
+  // PF
+  // -----------------------------------------
+
+  const attendanceRatio =
+    workingDays > 0
+      ? payableDays / workingDays
+      : 0;
+
+  const proratedBasicSalary = roundMoney(
+    basicSalary * attendanceRatio
+  );
+
+  const pfBase =
+    input.pfWageCeiling &&
+    input.pfWageCeiling > 0
+      ? Math.min(
+          proratedBasicSalary,
+          input.pfWageCeiling
+        )
+      : proratedBasicSalary;
+
+  const pfEmployeeContribution = input.pfEnabled
+    ? roundMoney(
+        pfBase *
+          assertMoney(
+            input.pfEmployeePercentage ?? 12,
+            "PF employee percentage"
+          ) /
+          100
+      )
+    : 0;
+
+  const pfEmployerContribution = input.pfEnabled
+    ? roundMoney(
+        pfBase *
+          assertMoney(
+            input.pfEmployerPercentage ?? 12,
+            "PF employer percentage"
+          ) /
+          100
+      )
+    : 0;
+
+  // -----------------------------------------
+  // ESI
+  // -----------------------------------------
+
+  const proratedHra = roundMoney(
+    hra * attendanceRatio
+  );
+
+  const proratedConveyance = roundMoney(
+    conveyance * attendanceRatio
+  );
+
+  const proratedMedical = roundMoney(
+    medicalAllowance * attendanceRatio
+  );
+
+  const proratedSpecialAllowance = roundMoney(
+    specialAllowance * attendanceRatio
+  );
+
+  const esiBase =
+    proratedBasicSalary +
+    proratedHra +
+    proratedConveyance +
+    proratedMedical +
+    proratedSpecialAllowance;
+
+  const esiEmployeeContribution = input.esiEnabled
+    ? roundMoney(
+        esiBase *
+          assertMoney(
+            input.esiEmployeePercentage ?? 0.75,
+            "ESI employee percentage"
+          ) /
+          100
+      )
+    : 0;
+
+  const esiEmployerContribution = input.esiEnabled
+    ? roundMoney(
+        esiBase *
+          assertMoney(
+            input.esiEmployerPercentage ?? 3.25,
+            "ESI employer percentage"
+          ) /
+          100
+      )
+    : 0;
+
+  // -----------------------------------------
+  // TAXES
+  // -----------------------------------------
+
+  const tds = input.tdsEnabled
+    ? input.annualTds
+      ? roundMoney(
+          assertMoney(
+            input.annualTds,
+            "Annual TDS"
+          ) / 12
+        )
+      : assertMoney(
+          input.monthlyTds,
+          "Monthly TDS"
+        )
+    : 0;
+
+  const professionalTax =
+    input.professionalTaxEnabled
+      ? assertMoney(
+          input.professionalTax,
+          "Professional tax"
+        )
+      : 0;
+
+  // -----------------------------------------
+  // DEDUCTIONS
+  // -----------------------------------------
+
   const deductions: PayrollItem[] = [
-    ...(pfEmployeeContribution ? [{ name: "Provident Fund (PF)", amount: pfEmployeeContribution, type: "deduction" as const }] : []),
-    ...(esiEmployeeContribution ? [{ name: "Employee State Insurance (ESI)", amount: esiEmployeeContribution, type: "deduction" as const }] : []),
-    ...(professionalTax ? [{ name: "Professional Tax", amount: professionalTax, type: "deduction" as const }] : []),
-    ...(tds ? [{ name: "Income Tax / TDS", amount: tds, type: "deduction" as const }] : []),
-    ...(lwpDeduction ? [{ name: "Leave Without Pay (LWP)", amount: lwpDeduction, type: "deduction" as const }] : []),
+    ...(pfEmployeeContribution
+      ? [
+          {
+            name: "Provident Fund (PF)",
+            amount: pfEmployeeContribution,
+            type: "deduction" as const,
+          },
+        ]
+      : []),
+
+    ...(esiEmployeeContribution
+      ? [
+          {
+            name: "Employee State Insurance (ESI)",
+            amount: esiEmployeeContribution,
+            type: "deduction" as const,
+          },
+        ]
+      : []),
+
+    ...(professionalTax
+      ? [
+          {
+            name: "Professional Tax",
+            amount: professionalTax,
+            type: "deduction" as const,
+          },
+        ]
+      : []),
+
+    ...(tds
+      ? [
+          {
+            name: "Income Tax / TDS",
+            amount: tds,
+            type: "deduction" as const,
+          },
+        ]
+      : []),
+
+    ...(lwpDeduction
+      ? [
+          {
+            name: "Leave Without Pay (LWP)",
+            amount: lwpDeduction,
+            type: "deduction" as const,
+          },
+        ]
+      : []),
+
     ...customDeductions,
   ];
+
+  // -----------------------------------------
+  // EARNINGS
+  // -----------------------------------------
+
   const earnings: PayrollItem[] = [
-    { name: "Basic Salary", amount: basicSalary, type: "earning" },
-    { name: "House Rent Allowance (HRA)", amount: hra, type: "earning" },
-    { name: "Conveyance / Transport", amount: conveyance, type: "earning" },
-    { name: "Medical Allowance", amount: medicalAllowance, type: "earning" },
-    { name: "Special Allowance", amount: specialAllowance, type: "earning" },
-    ...customEarnings,
+    {
+      name: "Basic Salary",
+      amount: proratedBasicSalary,
+      type: "earning",
+    },
+    {
+      name: "House Rent Allowance (HRA)",
+      amount: proratedHra,
+      type: "earning",
+    },
+    {
+      name: "Conveyance / Transport",
+      amount: proratedConveyance,
+      type: "earning",
+    },
+    {
+      name: "Medical Allowance",
+      amount: proratedMedical,
+      type: "earning",
+    },
+    {
+      name: "Special Allowance",
+      amount: proratedSpecialAllowance,
+      type: "earning",
+    },
+    ...customEarnings.map((item) => ({
+      ...item,
+      amount: roundMoney(
+        item.amount * attendanceRatio
+      ),
+    })),
   ];
-  const totalEarnings = grossSalary;
-  const totalDeductions = roundMoney(deductions.reduce((sum, item) => sum + item.amount, 0));
-  const netSalary = roundMoney(Math.max(0, grossSalary - totalDeductions));
-  return { ...input, annualCTC, basicSalary, hra, conveyance, medicalAllowance, specialAllowance, monthlyCTC, annualGross: roundMoney(grossSalary * 12), grossSalary, earnings, deductions, pfEmployeeContribution, pfEmployerContribution, esiEmployeeContribution, esiEmployerContribution, lwpDeduction, workingDays, paidDays: Math.max(0, workingDays - lwpDays), lwpDays, tds, professionalTax, totalEarnings, totalDeductions, netSalary, amountInWords: amountInWords(netSalary) };
+
+const totalEarnings = payableGrossSalary;
+
+const totalDeductions = roundMoney(
+  deductions.reduce(
+    (sum, item) => sum + item.amount,
+    0
+  )
+);
+
+const netSalary = roundMoney(
+  Math.max(
+    0,
+    payableGrossSalary - totalDeductions
+  )
+);
+
+  return {
+    ...input,
+
+    annualCTC,
+    basicSalary,
+
+    hra,
+    conveyance,
+    medicalAllowance,
+    specialAllowance,
+
+    monthlyCTC,
+
+    annualGross: roundMoney(
+      payableGrossSalary * 12
+    ),
+
+    grossSalary: payableGrossSalary,
+
+    earnings,
+    deductions,
+
+    pfEmployeeContribution,
+    pfEmployerContribution,
+
+    esiEmployeeContribution,
+    esiEmployerContribution,
+
+    lwpDeduction,
+
+    workingDays,
+    paidDays: payableDays,
+    lwpDays,
+
+    tds,
+    professionalTax,
+
+    totalEarnings,
+    totalDeductions,
+
+    netSalary,
+
+    amountInWords: amountInWords(
+      netSalary
+    ),
+  };
 }

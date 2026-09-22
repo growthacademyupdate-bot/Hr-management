@@ -8,6 +8,7 @@ const EmployeeSchema = new mongoose.Schema({
   department: { type: String, required: true },
   designation: { type: String, required: true },
   joiningDate: { type: String, required: true }, // YYYY-MM-DD
+  leavingDate: { type: String }, // YYYY-MM-DD
   salary: { type: Number, required: true },
   status: { type: String, enum: ["Active", "Inactive", "On Leave"], default: "Active" },
   avatar: { type: String },
