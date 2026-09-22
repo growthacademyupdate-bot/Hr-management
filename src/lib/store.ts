@@ -78,48 +78,73 @@ const listeners = new Set<() => void>();
 
 function notify() { listeners.forEach((l) => l()); }
 
+let isFetching = false;
+let globalPollInterval: NodeJS.Timeout | null = null;
+let activeSubscriberCount = 0;
+
+export async function refreshDB() {
+  if (isFetching) return;
+  isFetching = true;
+  try {
+    const user = getCurrentUser();
+    const userId = user?.employeeId || user?.id;
+    const [emps, atts, ts, lvs, exps, acts, hols, notifs, dReports] = await Promise.all([
+      getEmployees(),
+      getAttendance(),
+      getTasks(user?.role, userId),
+      getLeaves(user?.role, userId),
+      getExpenses(user?.role, userId),
+      getActivities(),
+      getHolidays(),
+      userId ? getNotifications(userId) : Promise.resolve([]),
+      getDailyReports(user?.role, userId)
+    ]);
+    currentDB = {
+      employees: emps || [],
+      attendance: atts || [],
+      tasks: ts || [],
+      leaves: lvs || [],
+      expenses: exps || [],
+      activities: acts || [],
+      holidays: hols || [],
+      notifications: notifs || [],
+      dailyReports: dReports || [],
+      isLoading: false
+    };
+    notify();
+  } catch (err) {
+    console.error("refreshDB error:", err);
+    currentDB = { ...currentDB, isLoading: false };
+    notify();
+  } finally {
+    isFetching = false;
+  }
+}
+
 export function useDB() {
   const snap = useSyncExternalStore(
-    (cb) => { listeners.add(cb); return () => listeners.delete(cb); },
+    (cb) => {
+      listeners.add(cb);
+      activeSubscriberCount++;
+      if (activeSubscriberCount === 1) {
+        refreshDB();
+        globalPollInterval = setInterval(refreshDB, 3500); // Live poll every 3.5 seconds
+      }
+      return () => {
+        listeners.delete(cb);
+        activeSubscriberCount--;
+        if (activeSubscriberCount <= 0) {
+          activeSubscriberCount = 0;
+          if (globalPollInterval) {
+            clearInterval(globalPollInterval);
+            globalPollInterval = null;
+          }
+        }
+      };
+    },
     () => currentDB,
     () => currentDB
   );
-
-  useEffect(() => {
-    const user = getCurrentUser();
-    const userId = user?.employeeId || user?.id;
-    // Fetch real data on mount
-    Promise.all([
-      getEmployees(), getAttendance(), getTasks(user?.role, userId), 
-      getLeaves(user?.role, userId), getExpenses(user?.role, userId), getActivities(), getHolidays(),
-      userId ? getNotifications(userId) : Promise.resolve([]),
-      getDailyReports(user?.role, userId)
-    ])
-      .then(([emps, atts, ts, lvs, exps, acts, hols, notifs, dReports]) => {
-        currentDB = { employees: emps, attendance: atts, tasks: ts, leaves: lvs, expenses: exps, activities: acts, holidays: hols, notifications: notifs, dailyReports: dReports || [], isLoading: false };
-        notify();
-      })
-      .catch((e) => {
-        console.error(e);
-        currentDB = { ...currentDB, isLoading: false };
-        notify();
-      });
-
-    // Polling for notifications
-    let pollInterval: NodeJS.Timeout;
-    if (userId) {
-      pollInterval = setInterval(() => {
-        getNotifications(userId).then(notifs => {
-          currentDB.notifications = notifs;
-          notify();
-        }).catch(console.error);
-      }, 5000); // 5 seconds
-    }
-
-    return () => {
-      if (pollInterval) clearInterval(pollInterval);
-    };
-  }, []);
 
   return snap;
 }
@@ -135,6 +160,7 @@ export function useGlobalSearch() {
 
 export const api = {
   resetDB() { /* No-op for real DB */ },
+  refreshDB() { return refreshDB(); },
   setGlobalSearch(q: string) { globalSearch = q; notify(); },
   async addEmployee(emp: any) { const e = await addEmployee(emp); currentDB.employees = [e, ...currentDB.employees]; notify(); return e; },
   async updateEmployee(id: string, patch: any) { const e = await updateEmployee(id, patch); currentDB.employees = currentDB.employees.map(x => x.id === id ? e : x); notify(); },
