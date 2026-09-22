@@ -259,6 +259,7 @@ export const ROLE_MENUS: Record<Role, { label: string; to: string; icon: string 
     { label: "Notifications", to: "/notifications", icon: "Bell" },
     { label: "Settings", to: "/settings", icon: "Settings" },
     { label: "Profile", to: "/profile", icon: "User" },
+    { label: "Quotations", to: "/quotations", icon: "FileText" },
   ],
   hr: [
     { label: "Dashboard", to: "/dashboard", icon: "LayoutDashboard" },
@@ -272,6 +273,7 @@ export const ROLE_MENUS: Record<Role, { label: string; to: string; icon: string 
     { label: "Reports", to: "/reports", icon: "BarChart3" },
     { label: "Notifications", to: "/notifications", icon: "Bell" },
     { label: "Profile", to: "/profile", icon: "User" },
+    { label: "Quotations", to: "/quotations", icon: "FileText" },
   ],
   employee: [
     { label: "Dashboard", to: "/dashboard", icon: "LayoutDashboard" },
@@ -285,6 +287,7 @@ export const ROLE_MENUS: Record<Role, { label: string; to: string; icon: string 
     { label: "Holidays", to: "/holidays", icon: "CalendarDays" },
     { label: "Notifications", to: "/notifications", icon: "Bell" },
     { label: "Profile", to: "/profile", icon: "User" },
+    { label: "Quotations", to: "/quotations", icon: "FileText" },
   ],
 };
 
