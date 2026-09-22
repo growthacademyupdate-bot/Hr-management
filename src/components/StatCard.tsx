@@ -8,6 +8,7 @@ interface StatCardProps {
   icon: LucideIcon;
   trend?: string;
   tone?: "primary" | "success" | "warning" | "info" | "destructive";
+  pulse?: boolean;
 }
 
 const TONE_BG: Record<NonNullable<StatCardProps["tone"]>, string> = {
@@ -18,7 +19,7 @@ const TONE_BG: Record<NonNullable<StatCardProps["tone"]>, string> = {
   destructive: "bg-destructive/10 text-destructive",
 };
 
-export function StatCard({ label, value, icon: Icon, trend, tone = "primary" }: StatCardProps) {
+export function StatCard({ label, value, icon: Icon, trend, tone = "primary", pulse = false }: StatCardProps) {
   return (
     <Card className="border-0 shadow-sm hover:shadow-md transition">
       <CardContent className="p-5">
@@ -28,7 +29,13 @@ export function StatCard({ label, value, icon: Icon, trend, tone = "primary" }: 
             <div className="text-3xl font-bold mt-2 tracking-tight">{value}</div>
             {trend && <div className="text-xs text-muted-foreground mt-1">{trend}</div>}
           </div>
-          <div className={cn("h-11 w-11 rounded-xl grid place-items-center shrink-0", TONE_BG[tone])}>
+          <div className={cn("h-11 w-11 rounded-xl grid place-items-center shrink-0 relative", TONE_BG[tone])}>
+            {pulse && (
+              <span className="absolute -top-1 -right-1 flex h-3 w-3">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500 ring-2 ring-background" />
+              </span>
+            )}
             <Icon className="h-5 w-5" />
           </div>
         </div>

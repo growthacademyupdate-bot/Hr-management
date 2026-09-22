@@ -214,7 +214,6 @@ export async function loginAction(usernameOrId: string, password: string) {
 // ---------------- Employees ----------------
 export async function getEmployees() {
   await connectDB();
-  await Employee.updateMany({ department: "Application Point" }, { $set: { department: "Mobile App" } });
   const emps = await Employee.find({}).sort({ createdAt: -1 }).lean();
   return serialize(emps);
 }
@@ -723,7 +722,9 @@ async function logLoginActivity(employeeId: string) {
   
   let existing = await Attendance.findOne({ employeeId, date });
   if (!existing) {
-    existing = new Attendance({ id: `${employeeId}-${date}`, employeeId, date, firstLoginAt: now, sessions: [], status: "Incomplete", productivity: 80, loginTime: time });
+    existing = new Attendance({ id: `${employeeId}-${date}`, employeeId, date, firstLoginAt: now, sessions: [], status: "Present", productivity: 80, loginTime: time });
+  } else if (existing.status === "Absent") {
+    existing.status = "Present";
   }
   
   const activeSession = existing.sessions?.find((s: any) => !s.logoutAt);

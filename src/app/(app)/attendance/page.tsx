@@ -212,15 +212,26 @@ export default function AttendancePage() {
                       {record.firstLoginAt ? format(new Date(record.firstLoginAt), "hh:mm a") : record.loginTime || "—"}
                     </TableCell>
                     <TableCell>
-                      {record.lastLogoutAt ? format(new Date(record.lastLogoutAt), "hh:mm a") : record.logoutTime || "—"}
+                      {record.sessions?.some((s: any) => !s.logoutAt) ? (
+                        <span className="text-emerald-600 dark:text-emerald-400 font-medium text-xs">Active Now</span>
+                      ) : (
+                        record.lastLogoutAt ? format(new Date(record.lastLogoutAt), "hh:mm a") : record.logoutTime || "—"
+                      )}
                     </TableCell>
                     <TableCell>
-                      <Badge variant="secondary" className="font-mono">
-                        {record.totalWorkingSeconds ? formatDuration(record.totalWorkingSeconds) : `${record.workingHours || 0}h`}
-                      </Badge>
+                      {(() => {
+                        const activeSession = record.sessions?.find((s: any) => !s.logoutAt);
+                        const ongoingSecs = activeSession ? Math.max(0, Math.floor((Date.now() - new Date(activeSession.loginAt).getTime()) / 1000)) : 0;
+                        const totalSecs = (record.totalWorkingSeconds || (record.workingHours ? record.workingHours * 3600 : 0)) + ongoingSecs;
+                        return (
+                          <Badge variant="secondary" className="font-mono">
+                            {totalSecs > 0 ? formatDuration(totalSecs) : `${record.workingHours || 0}h`}
+                          </Badge>
+                        );
+                      })()}
                     </TableCell>
                     <TableCell>
-                      <StatusBadge status={record.status || "Absent"} />
+                      <StatusBadge status={record.sessions?.some((s: any) => !s.logoutAt) ? "Active Now" : (record.status || "Absent")} />
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex items-center justify-end gap-2">
