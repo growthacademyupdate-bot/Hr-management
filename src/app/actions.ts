@@ -827,8 +827,10 @@ export async function createHoliday(data: any, adminId: string, userRole: string
     throw new Error("End date cannot be before start date");
   }
 
+  const { notifyEmployees, ...holidayData } = data;
+
   const holiday = await Holiday.create({
-    ...data,
+    ...holidayData,
     id: `HOL-${Date.now()}`,
     createdBy: adminId
   });
@@ -840,36 +842,43 @@ export async function createHoliday(data: any, adminId: string, userRole: string
     metadata: { holidayId: holiday.id }
   });
 
-  // Bulk Notification to all employees and HR
-  const employees = await Employee.find({ status: "Active" }, { id: 1 }).lean();
-  const bulkNotifications = employees.map((emp: any) => ({
-    id: `NOT${Date.now()}${Math.floor(Math.random() * 1000)}${emp.id}`,
-    recipientId: emp.id,
-    senderId: adminId,
-    senderRole: userRole,
-    title: "New Holiday Added",
-    message: `New holiday added: ${holiday.name} - ${new Date(holiday.startDate).toLocaleDateString()}`,
-    type: "HOLIDAY_CREATED",
-    module: "HOLIDAY",
-    referenceId: holiday.id,
-    actionUrl: `/holidays`,
-  }));
-  
-  // Add HR to the bulk notification
-  bulkNotifications.push({
-    id: `NOT${Date.now()}${Math.floor(Math.random() * 1000)}hr`,
-    recipientId: "u_hr",
-    senderId: adminId,
-    senderRole: userRole,
-    title: "New Holiday Added",
-    message: `New holiday added: ${holiday.name} - ${new Date(holiday.startDate).toLocaleDateString()}`,
-    type: "HOLIDAY_CREATED",
-    module: "HOLIDAY",
-    referenceId: holiday.id,
-    actionUrl: `/holidays`,
-  });
+  // Only send notifications if explicitly requested (e.g. urgent/unplanned holidays)
+  if (notifyEmployees) {
+    const employees = await Employee.find({ status: "Active" }, { id: 1 }).lean();
+    const isSingleDay = holiday.startDate === holiday.endDate;
+    const dateText = isSingleDay 
+      ? new Date(holiday.startDate).toLocaleDateString()
+      : `${new Date(holiday.startDate).toLocaleDateString()} to ${new Date(holiday.endDate).toLocaleDateString()}`;
 
-  await Notification.insertMany(bulkNotifications);
+    const bulkNotifications = employees.map((emp: any) => ({
+      id: `NOT${Date.now()}${Math.floor(Math.random() * 1000)}${emp.id}`,
+      recipientId: emp.id,
+      senderId: adminId,
+      senderRole: userRole,
+      title: "Urgent Holiday Announcement",
+      message: `Holiday announcement: ${holiday.name} on ${dateText}`,
+      type: "HOLIDAY_CREATED",
+      module: "HOLIDAY",
+      referenceId: holiday.id,
+      actionUrl: `/holidays`,
+    }));
+    
+    // Add HR to the bulk notification
+    bulkNotifications.push({
+      id: `NOT${Date.now()}${Math.floor(Math.random() * 1000)}hr`,
+      recipientId: "u_hr",
+      senderId: adminId,
+      senderRole: userRole,
+      title: "Urgent Holiday Announcement",
+      message: `Holiday announcement: ${holiday.name} on ${dateText}`,
+      type: "HOLIDAY_CREATED",
+      module: "HOLIDAY",
+      referenceId: holiday.id,
+      actionUrl: `/holidays`,
+    });
+
+    await Notification.insertMany(bulkNotifications);
+  }
 
   return serialize(holiday);
 }
