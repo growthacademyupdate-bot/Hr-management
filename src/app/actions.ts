@@ -196,12 +196,15 @@ export async function loginAction(usernameOrId: string, password: string) {
 
     // Check employees
     const emp = await Employee.findOne({ email: new RegExp(`^${usernameOrId}$`, "i") });
-    if (emp && bcrypt.compareSync(password, emp.password)) {
-      await logLoginActivity(emp.id);
-      return {
-        success: true,
-        user: { id: `u_${emp.id}`, username: emp.email, password: emp.password, role: "employee", employeeId: emp.id, name: emp.name, email: emp.email, avatar: emp.avatar || "" }
-      };
+    if (emp) {
+      const isMatch = emp.password === password || (emp.password?.startsWith("$2a$") && bcrypt.compareSync(password, emp.password));
+      if (isMatch) {
+        await logLoginActivity(emp.id);
+        return {
+          success: true,
+          user: { id: `u_${emp.id}`, username: emp.email, password: emp.password, role: "employee", employeeId: emp.id, name: emp.name, email: emp.email, avatar: emp.avatar || "" }
+        };
+      }
     }
 
     return { success: false, error: "Invalid credentials" };
@@ -249,7 +252,7 @@ export async function addEmployee(data: any) {
     department: "General",
     joiningDate: new Date().toISOString().slice(0, 10),
     salary: 0,
-    password: bcrypt.hashSync("password123", 10),
+    password: data.password || "password123",
     ...rest, 
     id: finalId, 
     avatar: data.avatar || "" 
@@ -262,9 +265,6 @@ export async function updateEmployee(id: string, data: any) {
   if (data.avatar && typeof data.avatar === 'string' && data.avatar.startsWith("data:image")) {
     const result = await uploadImageToCloudinary(data.avatar);
     if (result.success) data.avatar = result.url;
-  }
-  if (data.password) {
-    data.password = bcrypt.hashSync(data.password, 10);
   }
   const emp = await Employee.findOneAndUpdate({ id }, data, { new: true }).lean();
   return serialize(emp);
