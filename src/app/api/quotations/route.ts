@@ -144,6 +144,8 @@ export async function POST(req: NextRequest) {
       doc.font('Helvetica-Bold').fontSize(10);
       const descHeight = doc.heightOfString(item.description, { width: 300 });
       let detailsHeight = 0;
+      let validDetails: string[] = [];
+
       if (item.serviceDetails) {
         doc.font('Helvetica').fontSize(9).fillColor('#333333');
         const details = item.serviceDetails.split('\n');
@@ -151,18 +153,20 @@ export async function POST(req: NextRequest) {
           const cleanText = d.trim();
           if (cleanText) {
             const bulletText = `• ${cleanText.replace(/^•\s*/, '')}`;
+            validDetails.push(bulletText);
             detailsHeight += doc.heightOfString(bulletText, { width: 290 }) + 4;
           }
         });
       }
       
-      let nextAmountYSim = 10 + 20; // amounts startY + 10, then +20
-      if (item.includeGst) nextAmountYSim += 20;
+      let amountsHeight = 10 + 20; 
+      if (item.includeGst) amountsHeight += 20;
+      amountsHeight += 15;
       
-      const itemHeight = Math.max(10 + descHeight + 6 + detailsHeight + 10, nextAmountYSim + 15);
+      const itemHeight = Math.max(10 + descHeight + 6 + detailsHeight + 10, amountsHeight);
       
-      // Page break check
-      if (currentY + itemHeight > doc.page.height - 40) {
+      // Page break check if item doesn't fit at all, at least start on a fresh page
+      if (currentY + Math.min(itemHeight, 100) > doc.page.height - 40) {
         doc.addPage();
         currentY = 40;
         // Redraw table headers
@@ -172,54 +176,79 @@ export async function POST(req: NextRequest) {
         currentY += 20;
       }
       
-      const startY = currentY;
+      let chunkStartY = currentY;
       
       doc.font('Helvetica-Bold').fontSize(10);
-      doc.fillColor('black').text(item.description, 50, startY + 10, { width: 300 });
+      doc.fillColor('black').text(item.description, 50, chunkStartY + 10, { width: 300 });
       
-      let detailsY = startY + 10 + descHeight + 6;
-      
-      if (item.serviceDetails) {
-        doc.font('Helvetica').fontSize(9).fillColor('#333333');
-        const details = item.serviceDetails.split('\n');
-        details.forEach((d: string) => {
-          const cleanText = d.trim();
-          if (cleanText) {
-            const bulletText = `• ${cleanText.replace(/^•\s*/, '')}`;
-            const h = doc.heightOfString(bulletText, { width: 290 });
-            doc.text(bulletText, 50, detailsY, { width: 290 });
-            detailsY += h + 4;
+      let currentTextY = chunkStartY + 10 + descHeight + 6;
+      let amountsDrawn = false;
+
+      const drawAmountsFn = (docObj: any, startY: number) => {
+          docObj.fontSize(9).fillColor('black');
+          const sub = Number(item.unitPrice) * Number(item.quantity);
+          docObj.font('Helvetica').text('Base Amount:', 360, startY).text(`Rs. ${sub.toFixed(2)}`, 460, startY);
+          
+          let nextAmountY = startY + 20;
+          if (item.includeGst) {
+            const sgstP = Number(item.sgstPercent) || 0;
+            const cgstP = Number(item.cgstPercent) || 0;
+            const totalGstPercent = sgstP + cgstP;
+            const gstAmount = (sub * totalGstPercent) / 100;
+            docObj.text(`GST @ ${totalGstPercent}%:`, 360, nextAmountY).text(`Rs. ${gstAmount.toFixed(2)}`, 460, nextAmountY);
+            nextAmountY += 20;
           }
-        });
-      }
+          const itemTotal = sub + (item.includeGst ? (sub * (Number(item.sgstPercent) + Number(item.cgstPercent))) / 100 : 0);
+          docObj.font('Helvetica-Bold').text('Total Amount:', 360, nextAmountY).text(`Rs. ${itemTotal.toFixed(2)}`, 460, nextAmountY);
+      };
 
-      // Amounts section
-      const amountsY = startY + 10;
-      doc.fontSize(9).fillColor('black');
-      const sub = Number(item.unitPrice) * Number(item.quantity);
-      
-      doc.font('Helvetica').text('Base Amount:', 360, amountsY).text(`Rs. ${sub.toFixed(2)}`, 460, amountsY);
-      
-      let nextAmountY = amountsY + 20;
-      if (item.includeGst) {
-        const sgstP = Number(item.sgstPercent) || 0;
-        const cgstP = Number(item.cgstPercent) || 0;
-        const totalGstPercent = sgstP + cgstP;
-        const gstAmount = (sub * totalGstPercent) / 100;
-        doc.text(`GST @ ${totalGstPercent}%:`, 360, nextAmountY).text(`Rs. ${gstAmount.toFixed(2)}`, 460, nextAmountY);
-        nextAmountY += 20;
+      if (validDetails.length > 0) {
+        doc.font('Helvetica').fontSize(9).fillColor('#333333');
+        for (const bulletText of validDetails) {
+          const h = doc.heightOfString(bulletText, { width: 290 });
+          
+          if (currentTextY + h > doc.page.height - 40) {
+            // Finish current chunk
+            if (!amountsDrawn) {
+                drawAmountsFn(doc, chunkStartY + 10);
+                amountsDrawn = true;
+            }
+            const chunkHeight = currentTextY - chunkStartY;
+            doc.rect(40, chunkStartY, 515, chunkHeight).stroke('#cccccc');
+            doc.moveTo(350, chunkStartY).lineTo(350, chunkStartY + chunkHeight).stroke('#cccccc');
+            
+            // Add new page
+            doc.addPage();
+            chunkStartY = 40;
+            // Draw table header
+            doc.rect(40, chunkStartY, 515, 20).fillAndStroke('#0A3161', '#0A3161');
+            doc.fillColor('white').font('Helvetica-Bold').fontSize(10).text('DESCRIPTION', 50, chunkStartY + 5);
+            doc.text('TOTAL AMOUNT', 360, chunkStartY + 5);
+            chunkStartY += 20;
+            currentTextY = chunkStartY + 10;
+            
+            // Reset font for the next text
+            doc.font('Helvetica').fontSize(9).fillColor('#333333');
+          }
+          
+          doc.text(bulletText, 50, currentTextY, { width: 290 });
+          currentTextY += h + 4;
+        }
       }
       
-      const itemTotal = sub + (item.includeGst ? (sub * (Number(item.sgstPercent) + Number(item.cgstPercent))) / 100 : 0);
-      doc.font('Helvetica-Bold').text('Total Amount:', 360, nextAmountY).text(`Rs. ${itemTotal.toFixed(2)}`, 460, nextAmountY);
+      currentTextY += 10;
+      if (!amountsDrawn) {
+          // If amounts not drawn yet, ensure chunk is tall enough
+          currentTextY = Math.max(currentTextY, chunkStartY + amountsHeight);
+          drawAmountsFn(doc, chunkStartY + 10);
+          amountsDrawn = true;
+      }
       
-      // Draw container box
-      doc.rect(40, startY, 515, itemHeight).stroke('#cccccc');
+      const chunkHeight = currentTextY - chunkStartY;
+      doc.rect(40, chunkStartY, 515, chunkHeight).stroke('#cccccc');
+      doc.moveTo(350, chunkStartY).lineTo(350, chunkStartY + chunkHeight).stroke('#cccccc');
       
-      // Vertical separator
-      doc.moveTo(350, startY).lineTo(350, startY + itemHeight).stroke('#cccccc');
-
-      currentY += itemHeight;
+      currentY = chunkStartY + chunkHeight;
     });
 
     if (additionalServices && additionalServices.length > 0) {
