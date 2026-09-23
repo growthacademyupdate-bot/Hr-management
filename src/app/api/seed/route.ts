@@ -41,7 +41,7 @@ export async function GET() {
         salary: 60000,
         status: "Active",
         avatar: "",
-        password: bcrypt.hashSync("emp123", 10) // Explicitly setting this password so demo login works
+        password: "emp123" // Explicitly setting this password so demo login works
       });
       emps.push(emp);
     }

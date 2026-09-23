@@ -192,7 +192,7 @@ export default function EmployeesPage() {
 
 function AddEmployeeDialog({ onClose }: { onClose: () => void }) {
   const [form, setForm] = useState({
-    customId: "", name: "", email: "", mobile: "", department: "Design", designation: "", joiningDate: new Date().toISOString().slice(0,10), salary: 60000, password: "tushar123", avatar: "",
+    customId: "", name: "", email: "", mobile: "", department: "Design", designation: "", joiningDate: new Date().toISOString().slice(0,10), salary: 60000, password: "", avatar: "",
   });
   const [showPw, setShowPw] = useState(false);
   async function submit() {
@@ -254,7 +254,7 @@ function AddEmployeeDialog({ onClose }: { onClose: () => void }) {
           </div>
         </div>
 
-        <div className="col-span-2 space-y-1"><Label>Full Name</Label><Input value={form.name} onChange={(e) => setForm({...form, name: e.target.value})} /></div>
+        <div className="col-span-2 space-y-1"><Label>Full Name</Label><Input value={form.name} onChange={(e) => setForm({...form, name: e.target.value})} placeholder="e.g. John Doe" /></div>
         {/* Employee ID field */}
         <div className="col-span-2 space-y-1">
           <Label className="flex items-center gap-1.5">
@@ -269,8 +269,8 @@ function AddEmployeeDialog({ onClose }: { onClose: () => void }) {
             maxLength={20}
           />
         </div>
-        <div className="space-y-1"><Label>Email</Label><Input value={form.email} onChange={(e) => setForm({...form, email: e.target.value})} /></div>
-        <div className="space-y-1"><Label>Mobile</Label><Input value={form.mobile} onChange={(e) => setForm({...form, mobile: e.target.value})} /></div>
+        <div className="space-y-1"><Label>Email</Label><Input type="email" value={form.email} onChange={(e) => setForm({...form, email: e.target.value})} placeholder="employee@example.com" /></div>
+        <div className="space-y-1"><Label>Mobile</Label><Input value={form.mobile} onChange={(e) => setForm({...form, mobile: e.target.value})} placeholder="+91 9876543210" /></div>
         <div className="space-y-1">
           <Label>Department</Label>
           <Select value={form.department} onValueChange={(v) => setForm({...form, department: v})}>
@@ -278,13 +278,13 @@ function AddEmployeeDialog({ onClose }: { onClose: () => void }) {
             <SelectContent>{DEPARTMENTS.map((d) => <SelectItem key={d} value={d}>{d}</SelectItem>)}</SelectContent>
           </Select>
         </div>
-        <div className="space-y-1"><Label>Designation</Label><Input value={form.designation} onChange={(e) => setForm({...form, designation: e.target.value})} /></div>
+        <div className="space-y-1"><Label>Designation</Label><Input value={form.designation} onChange={(e) => setForm({...form, designation: e.target.value})} placeholder="e.g. Frontend Developer" /></div>
         <div className="space-y-1"><Label>Joining Date</Label><Input type="date" value={form.joiningDate} onChange={(e) => setForm({...form, joiningDate: e.target.value})} /></div>
         <div className="space-y-1"><Label>Salary</Label><Input type="number" value={form.salary} onChange={(e) => setForm({...form, salary: +e.target.value})} /></div>
         <div className="col-span-2 space-y-1">
           <Label>Password</Label>
           <div className="relative">
-            <Input type={showPw ? "text" : "password"} value={form.password} onChange={(e) => setForm({...form, password: e.target.value})} />
+            <Input type={showPw ? "text" : "password"} value={form.password} onChange={(e) => setForm({...form, password: e.target.value})} placeholder="Enter employee password" />
             <Button type="button" variant="ghost" size="icon" className="absolute right-0 top-0 h-full px-3 hover:bg-transparent" onClick={() => setShowPw(!showPw)}>
               {showPw ? <EyeOff className="h-4 w-4 text-muted-foreground" /> : <Eye className="h-4 w-4 text-muted-foreground" />}
             </Button>
