@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { useAuth, useDB, api } from "@/lib/store";
 import { uploadImageToCloudinary } from "@/app/actions";
 import { PageHeader } from "@/components/PageHeader";
@@ -20,7 +21,7 @@ import {
   Mail, Phone, Calendar, Briefcase, IndianRupee, ShieldCheck,
   Camera, Loader2, Shield, Users, ListChecks, CheckCircle2,
   Clock, CalendarOff, Activity, TrendingUp, Star, Award,
-  Building2, Hash, UserCheck, Maximize2,
+  Building2, Hash, UserCheck, Maximize2, FileText,
 } from "lucide-react";
 import Image from "next/image";
 import { format } from "date-fns";
@@ -76,6 +77,7 @@ function InfoRow({ icon: Icon, label, value }: {
 export default function ProfilePage() {
   const user = useAuth();
   const db = useDB();
+  const router = useRouter();
   const [uploading, setUploading] = useState(false);
   const [isImageModalOpen, setIsImageModalOpen] = useState(false);
 
@@ -156,6 +158,13 @@ export default function ProfilePage() {
       <PageHeader
         title="My Profile"
         description="Your personal information, activity stats, and work summary."
+        actions={
+          emp && (
+            <Button variant="outline" onClick={() => router.push(`/employees/${emp.id}/documents`)}>
+              <FileText className="h-4 w-4 mr-2" /> Manage My Documents
+            </Button>
+          )
+        }
       />
 
       {/* TOP: Avatar + Name + Quick Stats */}

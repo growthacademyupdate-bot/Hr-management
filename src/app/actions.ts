@@ -1252,3 +1252,33 @@ export async function deleteDailyReport(reportId: string, employeeId: string, us
   return { success: true };
 }
 
+export async function uploadFileToCloudinary(base64File: string, filename: string) {
+  try {
+    const result = await cloudinary.uploader.upload(base64File, {
+      folder: "ems_documents",
+      resource_type: "auto",
+      public_id: filename.split('.').slice(0, -1).join('.') || filename,
+    });
+    return { success: true, url: result.secure_url };
+  } catch (error: any) {
+    console.error("Cloudinary upload error:", error);
+    return { success: false, error: "Failed to upload to Cloudinary" };
+  }
+}
+
+export async function updateEmployeeDocuments(employeeId: string, documents: any, emergencyContact?: string) {
+  await connectDB();
+  const updateData: any = {};
+  if (documents) updateData.documents = documents;
+  if (emergencyContact !== undefined) updateData.emergencyContact = emergencyContact;
+
+  const employee = await Employee.findOneAndUpdate(
+    { id: employeeId },
+    { $set: updateData },
+    { new: true }
+  ).lean();
+
+  if (!employee) throw new Error("Employee not found");
+  
+  return serialize(employee);
+}

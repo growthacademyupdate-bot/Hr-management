@@ -13,6 +13,8 @@ const EmployeeSchema = new mongoose.Schema({
   status: { type: String, enum: ["Active", "Inactive", "On Leave"], default: "Active" },
   avatar: { type: String },
   password: { type: String, required: true }, // Simple plain text for now, could hash in real app
+  emergencyContact: { type: String },
+  documents: { type: Object, default: {} },
 }, { timestamps: true });
 
 EmployeeSchema.index({ email: 1 });
