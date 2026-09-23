@@ -7,7 +7,7 @@ import { PageHeader } from "@/components/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Mail, Phone, Calendar, Briefcase, IndianRupee, ShieldCheck } from "lucide-react";
+import { ArrowLeft, Mail, Phone, Calendar, Briefcase, IndianRupee, ShieldCheck, FileText } from "lucide-react";
 import { StatusBadge } from "../../dashboard/page";
 
 export default function EmployeeDetailsPage({ params }: { params: Promise<{ id: string }> }) {
@@ -37,9 +37,14 @@ export default function EmployeeDetailsPage({ params }: { params: Promise<{ id: 
         title="Employee Profile" 
         description={`Detailed information for ${emp.name}`} 
         actions={
-          <Button variant="outline" onClick={() => router.push("/employees")}>
-            <ArrowLeft className="h-4 w-4 mr-2" /> Back
-          </Button>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={() => router.push(`/employees/${emp.id}/documents`)}>
+              <FileText className="h-4 w-4 mr-2" /> Manage Documents
+            </Button>
+            <Button variant="outline" onClick={() => router.push("/employees")}>
+              <ArrowLeft className="h-4 w-4 mr-2" /> Back
+            </Button>
+          </div>
         }
       />
 

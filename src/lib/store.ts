@@ -16,7 +16,7 @@ export interface User {
   id: string; username: string; password?: string; role: Role; name: string; email: string; avatar?: string; employeeId?: string;
 }
 export interface Employee {
-  id: string; name: string; email: string; mobile: string; department: string; designation: string; joiningDate: string; salary: number; status: string; avatar?: string; password?: string;
+  id: string; name: string; email: string; mobile: string; department: string; designation: string; joiningDate: string; salary: number; status: string; avatar?: string; password?: string; emergencyContact?: string; documents?: any;
 }
 export interface AttendanceSession {
   loginAt: string;
