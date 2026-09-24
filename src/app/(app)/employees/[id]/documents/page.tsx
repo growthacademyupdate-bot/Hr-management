@@ -161,7 +161,7 @@ export default function EmployeeDocumentsPage({ params }: { params: Promise<{ id
           
           <div className="flex flex-wrap items-center gap-2 mt-auto">
             <Button variant="outline" size="sm" asChild className="flex-1 sm:flex-none">
-              <a href={existingDoc.url} target="_blank" rel="noopener noreferrer">
+              <a href={`/api/documents/preview?url=${encodeURIComponent(existingDoc.url)}`} target="_blank" rel="noopener noreferrer">
                 <Eye className="h-4 w-4 mr-1.5 shrink-0" /> View
               </a>
             </Button>
