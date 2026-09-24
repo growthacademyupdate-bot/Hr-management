@@ -9,7 +9,7 @@ function errorResponse(error: unknown) {
   return NextResponse.json({ success: false, error: message }, { status: /Unauthorized|Authentication|Only HR/.test(message) ? 403 : 400 });
 }
 
-export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export async function GET(request: NextRequest, { params }: any) {
   try {
     await connectDB();
     const actor = getPayrollActor(request);
@@ -21,7 +21,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   } catch (error) { return errorResponse(error); }
 }
 
-export async function PUT(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export async function PUT(request: NextRequest, { params }: any) {
   try {
     await connectDB();
     const actor = getPayrollActor(request);
@@ -36,7 +36,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
   } catch (error) { return errorResponse(error); }
 }
 
-export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export async function DELETE(request: NextRequest, { params }: any) {
   try {
     await connectDB();
     const actor = getPayrollActor(request);

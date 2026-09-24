@@ -9,7 +9,7 @@ function invalidPeriod(value: string | null, label: string, min: number, max: nu
   return number;
 }
 
-export async function GET(request: NextRequest, { params }: { params: Promise<{ employeeId: string }> }) {
+export async function GET(request: NextRequest, { params }: any) {
   try {
     await connectDB();
     const actor = getPayrollActor(request);

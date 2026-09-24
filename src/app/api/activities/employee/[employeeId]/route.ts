@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import connectDB from "@/lib/mongoose";
 import { Activity } from "@/models/Activity";
 
-export async function GET(req: NextRequest, { params }: { params: Promise<{ employeeId: string }> }) {
+export async function GET(req: NextRequest, { params }: any) {
   try {
     await connectDB();
     const resolvedParams = await params;

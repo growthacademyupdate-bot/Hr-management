@@ -5,7 +5,7 @@ import { SalarySlip } from "@/models/SalarySlip";
 import { getPayrollActor } from "@/lib/payroll-auth";
 import { Setting } from "@/models/Setting";
 
-export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export async function GET(request: NextRequest, { params }: any) {
   try {
     await connectDB();
     const actor = getPayrollActor(request);
