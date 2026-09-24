@@ -1263,10 +1263,9 @@ export async function deleteDailyReport(reportId: string, employeeId: string, us
 
 export async function uploadFileToCloudinary(base64File: string, filename: string) {
   try {
-    const isPdf = filename.toLowerCase().endsWith('.pdf') || base64File.startsWith('data:application/pdf');
     const result = await cloudinary.uploader.upload(base64File, {
       folder: "ems_documents",
-      resource_type: isPdf ? "raw" : "auto",
+      resource_type: "auto",
       public_id: filename.split('.').slice(0, -1).join('.') || filename,
     });
     return { success: true, url: result.secure_url };
