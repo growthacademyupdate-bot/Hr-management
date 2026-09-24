@@ -1,6 +1,7 @@
 "use server";
 
 import bcrypt from "bcryptjs";
+import nodemailer from "nodemailer";
 import mongoose from "mongoose";
 import connectDB from "@/lib/mongoose";
 import { Employee } from "@/models/Employee";
@@ -222,6 +223,78 @@ export async function getEmployees() {
   return serialize(emps);
 }
 
+async function sendEmployeeCredentialsEmail(email: string, name: string, empId: string, plainPassword: string) {
+  if (!process.env.SMTP_USER || !process.env.SMTP_PASS) return;
+  try {
+    const transporter = nodemailer.createTransport({
+      host: process.env.SMTP_HOST || "smtp.gmail.com",
+      port: Number(process.env.SMTP_PORT || 587),
+      secure: process.env.SMTP_PORT === "465",
+      auth: {
+        user: process.env.SMTP_USER,
+        pass: process.env.SMTP_PASS,
+      },
+    });
+
+    const mailOptions = {
+      from: process.env.SMTP_FROM || process.env.SMTP_USER,
+      to: email,
+      subject: "Welcome! Your Employee Account Credentials",
+      html: `
+        <div style="font-family: Arial, sans-serif; padding: 20px;">
+          <h2>Welcome, ${name}!</h2>
+          <p>Your employee account has been created successfully. Below are your login credentials:</p>
+          <div style="background: #f4f4f4; padding: 15px; border-radius: 5px; margin: 20px 0;">
+            <p><strong>Login ID (Email):</strong> ${email}</p>
+            <p><strong>Employee ID:</strong> ${empId}</p>
+            <p><strong>Password:</strong> ${plainPassword}</p>
+          </div>
+          <p>Best regards,<br/>HR Department</p>
+        </div>
+      `,
+    };
+
+    await transporter.sendMail(mailOptions);
+    console.log("Credentials email sent to", email);
+  } catch (error) {
+    console.error("Failed to send credentials email:", error);
+  }
+}
+
+async function sendSystemNotificationEmail(toEmail: string | string[], subject: string, messageHtml: string) {
+  if (!process.env.SMTP_USER || !process.env.SMTP_PASS) return;
+  try {
+    const transporter = nodemailer.createTransport({
+      host: process.env.SMTP_HOST || "smtp.gmail.com",
+      port: Number(process.env.SMTP_PORT || 587),
+      secure: process.env.SMTP_PORT === "465",
+      auth: {
+        user: process.env.SMTP_USER,
+        pass: process.env.SMTP_PASS,
+      },
+    });
+
+    const mailOptions = {
+      from: process.env.SMTP_FROM || process.env.SMTP_USER,
+      to: Array.isArray(toEmail) ? toEmail.join(",") : toEmail,
+      subject: subject,
+      html: `
+        <div style="font-family: Arial, sans-serif; padding: 20px; max-width: 600px;">
+          <h2 style="color: #4f46e5;">HR Management System</h2>
+          <div style="background: #f9fafb; padding: 20px; border-radius: 8px; border: 1px solid #e5e7eb; margin: 20px 0;">
+            ${messageHtml}
+          </div>
+          <p style="font-size: 12px; color: #6b7280;">This is an automated notification from your HR Management System.</p>
+        </div>
+      `,
+    };
+
+    await transporter.sendMail(mailOptions);
+  } catch (error) {
+    console.error("Failed to send system notification email:", error);
+  }
+}
+
 export async function addEmployee(data: any) {
   await connectDB();
   const all = await Employee.find({}, { id: 1 }).lean();
@@ -246,6 +319,7 @@ export async function addEmployee(data: any) {
     if (result.success) data.avatar = result.url;
   }
 
+  const plainPassword = data.password || "password123";
   const { customId: _removed, ...rest } = data;
   const emp = await Employee.create({ 
     designation: "Staff",
@@ -253,11 +327,15 @@ export async function addEmployee(data: any) {
     department: "General",
     joiningDate: new Date().toISOString().slice(0, 10),
     salary: 0,
-    password: data.password || "password123",
+    password: plainPassword,
     ...rest, 
     id: finalId, 
     avatar: data.avatar || "" 
   });
+  
+  // Send email asynchronously
+  sendEmployeeCredentialsEmail(emp.email, emp.name, finalId, plainPassword).catch(console.error);
+
   return serialize(emp);
 }
 
@@ -416,6 +494,17 @@ export async function reviewTask(taskId: string, review: { hrRating: string; hrR
     referenceId: taskId,
     actionUrl: `/tasks`,
   });
+
+  const emp = await Employee.findOne({ id: task.assignedTo });
+  if (emp && emp.email) {
+    sendSystemNotificationEmail(
+      emp.email,
+      `Task Reviewed: ${task.title}`,
+      `<p>Your task "<strong>${task.title}</strong>" has been reviewed by HR.</p>
+       <p><strong>Performance Rating:</strong> ${review.hrRating}/5</p>
+       <p><strong>Feedback:</strong> ${review.hrReview || 'No additional feedback provided.'}</p>`
+    ).catch(console.error);
+  }
 
   return serialize(task);
 }
@@ -622,6 +711,17 @@ export async function hrReviewLeave(leaveId: string, action: "approve" | "reject
     referenceId: leaveId,
     actionUrl: `/leaves`,
   });
+
+  const emp = await Employee.findOne({ id: leave.employeeId });
+  if (emp && emp.email) {
+    const statusText = action === "approve" ? "Approved" : "Rejected";
+    const commentHtml = comment ? `<p><strong>HR Comment:</strong> ${comment}</p>` : "";
+    sendSystemNotificationEmail(
+      emp.email,
+      `Leave Request ${statusText}`,
+      `<p>Your leave request from <strong>${leave.startDate}</strong> to <strong>${leave.endDate}</strong> has been <strong>${statusText}</strong> by HR.</p>${commentHtml}`
+    ).catch(console.error);
+  }
 
   if (action === "approve") {
     await createNotification({
@@ -892,6 +992,19 @@ export async function createHoliday(data: any, adminId: string, userRole: string
     });
 
     await Notification.insertMany(bulkNotifications);
+    
+    // Broadcast email to all active employees
+    const emails = employees.map(e => e.email).filter(Boolean);
+    if (emails.length > 0) {
+      sendSystemNotificationEmail(
+        emails,
+        `New Holiday Announced: ${holiday.name}`,
+        `<p>A new holiday has been announced!</p>
+         <p><strong>Holiday:</strong> ${holiday.name}</p>
+         <p><strong>Date:</strong> ${dateText}</p>
+         <p><strong>Description:</strong> ${holiday.description || "N/A"}</p>`
+      ).catch(console.error);
+    }
   }
 
   return serialize(holiday);
@@ -1259,6 +1372,17 @@ export async function addDailyReport(
         actionUrl: `/daily-report`,
       });
     }
+  }
+
+  // Send email to HR
+  const hrEmail = process.env.HR_USERNAME;
+  if (hrEmail) {
+    sendSystemNotificationEmail(
+      hrEmail,
+      `Daily Task Report Submitted: ${data.employeeName}`,
+      `<p><strong>${data.employeeName}</strong> (${data.employeeId}) has submitted their daily task report for <strong>${data.reportDate}</strong>.</p>
+       <p>Please log in to the HR dashboard to review the report details.</p>`
+    ).catch(console.error);
   }
 
   return serialize(report);
