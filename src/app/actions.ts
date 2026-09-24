@@ -200,9 +200,10 @@ export async function loginAction(usernameOrId: string, password: string) {
       const isMatch = emp.password === password || (emp.password?.startsWith("$2a$") && bcrypt.compareSync(password, emp.password));
       if (isMatch) {
         await logLoginActivity(emp.id);
+        const loginDate = new Date().toISOString().slice(0, 10);
         return {
           success: true,
-          user: { id: `u_${emp.id}`, username: emp.email, password: emp.password, role: "employee", employeeId: emp.id, name: emp.name, email: emp.email, avatar: emp.avatar || "" }
+          user: { id: `u_${emp.id}`, username: emp.email, password: emp.password, role: "employee", employeeId: emp.id, name: emp.name, email: emp.email, avatar: emp.avatar || "", loginDate }
         };
       }
     }
@@ -718,13 +719,15 @@ export async function deleteActivity(activityId: string, userRole: string) {
 async function logLoginActivity(employeeId: string) {
   const now = new Date();
   const date = now.toISOString().slice(0, 10);
-  const time = now.toTimeString().slice(0, 5);
+  const time = now.toTimeString().slice(0, 5); // Format: "HH:MM"
   
   let existing = await Attendance.findOne({ employeeId, date });
   if (!existing) {
-    existing = new Attendance({ id: `${employeeId}-${date}`, employeeId, date, firstLoginAt: now, sessions: [], status: "Present", productivity: 80, loginTime: time });
+    // 9:00 AM to 6:00 PM tracking: Mark as "Late" if login is after 09:15 AM
+    const initialStatus = time > "09:15" ? "Late" : "Present";
+    existing = new Attendance({ id: `${employeeId}-${date}`, employeeId, date, firstLoginAt: now, sessions: [], status: initialStatus, productivity: 80, loginTime: time });
   } else if (existing.status === "Absent") {
-    existing.status = "Present";
+    existing.status = time > "09:15" ? "Late" : "Present";
   }
   
   const activeSession = existing.sessions?.find((s: any) => !s.logoutAt);
@@ -737,7 +740,7 @@ async function logLoginActivity(employeeId: string) {
     await createActivity({
       employeeId, actorId: employeeId, actorRole: "employee",
       activityType: "ATTENDANCE_LOGIN", module: "ATTENDANCE", referenceId: existing.id,
-      message: "You logged in successfully."
+      message: time > "09:15" ? "You logged in Late." : "You logged in successfully."
     });
   }
 }
@@ -746,7 +749,7 @@ export async function logLogoutActivity(employeeId: string) {
   await connectDB();
   const now = new Date();
   const date = now.toISOString().slice(0, 10);
-  const time = now.toTimeString().slice(0, 5);
+  const time = now.toTimeString().slice(0, 5); // Format: "HH:MM"
   
   const rec = await Attendance.findOne({ employeeId, date });
   if (rec) {
@@ -760,17 +763,28 @@ export async function logLogoutActivity(employeeId: string) {
       rec.lastLogoutAt = now;
       rec.logoutTime = time; 
       
-      if (rec.totalWorkingHours >= 8) rec.status = "Present";
-      else if (rec.totalWorkingHours >= 4) rec.status = "Half Day";
-      else if (rec.totalWorkingHours > 0) rec.status = "Short Day";
-      else rec.status = "Incomplete";
+      // Keep "Late" status if it was already set in the morning
+      let finalStatus = rec.status === "Late" ? "Late" : "Present";
       
+      // 9:00 AM to 6:00 PM tracking: Mark as "Early Leave" if logging out before 18:00 (6 PM)
+      // and they haven't fulfilled the 8 hours duration.
+      if (time < "18:00" && rec.totalWorkingHours < 8) {
+        if (rec.totalWorkingHours >= 4) {
+          finalStatus = finalStatus === "Late" ? "Late & Half Day" : "Half Day";
+        } else {
+          finalStatus = finalStatus === "Late" ? "Late & Early Leave" : "Early Leave";
+        }
+      } else if (rec.totalWorkingHours < 4) {
+        finalStatus = "Short Day";
+      }
+
+      rec.status = finalStatus;
       await rec.save();
 
       await createActivity({
         employeeId, actorId: employeeId, actorRole: "employee",
         activityType: "ATTENDANCE_LOGOUT", module: "ATTENDANCE", referenceId: rec.id,
-        message: "You logged out successfully."
+        message: time < "18:00" ? "You logged out early." : "You logged out successfully."
       });
     }
   }
