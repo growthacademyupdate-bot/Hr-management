@@ -16,5 +16,9 @@ export default function Home() {
     }
   }, [router]);
 
-  return null;
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-[#f5f7f4]">
+      <div className="text-[#14231f] font-semibold">Loading WorkMonitor...</div>
+    </div>
+  );
 }
