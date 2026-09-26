@@ -14,7 +14,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Search, Plus, Eye, EyeOff, Pencil, Trash2 } from "lucide-react";
-import { StatusBadge } from "../dashboard/page";
+import { StatusBadge } from "@/components/dashboard/SharedDashboardComponents";
 import { toast } from "sonner";
 import { useDataTable } from "@/hooks/useDataTable";
 import { SortableHeader } from "@/components/SortableHeader";
