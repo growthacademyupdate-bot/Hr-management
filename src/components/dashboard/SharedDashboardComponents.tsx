@@ -1,14 +1,16 @@
 "use client";
 
 import { useMemo } from "react";
-import { useDB } from "@/lib/store";
+import { useDB, api, useAuth } from "@/lib/store";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
-import { Search } from "lucide-react";
+import { Search, Trash2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { toast } from "sonner";
 import { useDataTable } from "@/hooks/useDataTable";
 import { SortableHeader } from "@/components/SortableHeader";
 import { DataTablePagination } from "@/components/DataTablePagination";
@@ -83,6 +85,7 @@ export function EmployeeActivityTable() {
 
       return {
         id: emp.id,
+        attendanceId: att?.id,
         name: emp.name,
         avatar: emp.avatar,
         department: emp.department,
@@ -127,6 +130,7 @@ export function EmployeeActivityTable() {
                 <SortableHeader field="workingSeconds" currentSortField={sortField} currentSortOrder={sortOrder} onSort={toggleSort}>Working Hours</SortableHeader>
                 <SortableHeader field="status" currentSortField={sortField} currentSortOrder={sortOrder} onSort={toggleSort}>Status</SortableHeader>
                 <SortableHeader field="productivity" currentSortField={sortField} currentSortOrder={sortOrder} onSort={toggleSort} className="w-32">Productivity</SortableHeader>
+                <TableHead className="w-16">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -160,6 +164,27 @@ export function EmployeeActivityTable() {
                       <Progress value={emp.productivity} className="h-2 w-16" />
                       <span className="text-[10px] font-medium tabular-nums">{emp.productivity}%</span>
                     </div>
+                  </TableCell>
+                  <TableCell>
+                    {emp.attendanceId && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 text-destructive hover:bg-destructive/10"
+                        onClick={async () => {
+                          if (confirm("Are you sure you want to delete this attendance record?")) {
+                            try {
+                              await api.deleteAttendance(emp.attendanceId);
+                              toast.success("Attendance record deleted");
+                            } catch (error) {
+                              toast.error("Failed to delete attendance record");
+                            }
+                          }
+                        }}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    )}
                   </TableCell>
                 </TableRow>
               ))}
