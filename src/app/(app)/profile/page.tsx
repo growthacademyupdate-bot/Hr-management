@@ -26,7 +26,7 @@ import {
 import Image from "next/image";
 import { format } from "date-fns";
 import { toast } from "sonner";
-import { StatusBadge } from "../dashboard/page";
+import { StatusBadge } from "@/components/dashboard/SharedDashboardComponents";
 
 function StatMini({ icon: Icon, label, value, sub, color = "primary" }: {
   icon: React.ComponentType<{ className?: string }>;

@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, Mail, Phone, Calendar, Briefcase, IndianRupee, ShieldCheck, FileText } from "lucide-react";
-import { StatusBadge } from "../../dashboard/page";
+import { StatusBadge } from "@/components/dashboard/SharedDashboardComponents";
 
 export default function EmployeeDetailsPage({ params }: { params: Promise<{ id: string }> }) {
   const router = useRouter();
