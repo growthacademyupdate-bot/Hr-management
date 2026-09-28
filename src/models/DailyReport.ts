@@ -9,6 +9,15 @@ const DailyReportSchema = new mongoose.Schema(
     reportDate: { type: String, required: true }, // YYYY-MM-DD
     reportDay: { type: String, required: true }, // e.g. Friday
     attendance: { type: String, default: "Present" },
+    jobRole: { type: String },
+    newLeads: { type: Number },
+    followUps: { type: Number },
+    interestedCustomers: { type: Number },
+    positiveCustomers: { type: Number },
+    convertedCustomers: { type: Number },
+    callsMade: { type: Number },
+    meetings: { type: Number },
+    additionalNotes: { type: String },
     reportSlot1: { type: String, default: "" }, // 9:30 am - 11:00 am Report
     reportSlot2: { type: String, default: "" }, // 11:20 am - 1:30 pm Report
     reportSlot3: { type: String, default: "" }, // 2:30 pm - 4:00 pm Report

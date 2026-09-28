@@ -8,15 +8,16 @@ import {
   getHolidays, createHoliday, updateHoliday, deleteHoliday,
   getExpenses, addExpense, cancelExpense, hrReviewExpense, adminReviewExpense, markExpenseReimbursed, deleteExpense,
   getNotifications, markNotificationAsRead, markAllNotificationsAsRead, deleteNotification as deleteNotificationAction, broadcastNotification, editBroadcastNotification, deleteBroadcastNotification,
-  getDailyReports, addDailyReport, deleteDailyReport
+  getDailyReports, addDailyReport, deleteDailyReport,
+  getLeads, addLead, updateLead, deleteLead
 } from "@/app/actions";
 
 export type Role = "admin" | "hr" | "employee";
 export interface User {
-  id: string; username: string; password?: string; role: Role; name: string; email: string; avatar?: string; employeeId?: string; loginDate?: string;
+  id: string; username: string; password?: string; role: Role; jobRole?: string; name: string; email: string; avatar?: string; employeeId?: string; loginDate?: string;
 }
 export interface Employee {
-  id: string; name: string; email: string; mobile: string; department: string; designation: string; joiningDate: string; salary: number; status: string; avatar?: string; password?: string; emergencyContact?: string; documents?: any;
+  id: string; name: string; email: string; mobile: string; department: string; designation: string; jobRole?: string; joiningDate: string; salary: number; status: string; avatar?: string; password?: string; emergencyContact?: string; documents?: any;
 }
 export interface AttendanceSession {
   loginAt: string;
@@ -47,6 +48,10 @@ export interface Notification {
   id: string; recipientId: string; recipientRole?: string; senderId?: string; senderRole?: string; title: string; message: string; type: string; module: string; referenceId?: string; actionUrl?: string; isRead: boolean; readAt?: string; metadata?: any; createdAt: string;
 }
 
+export interface Lead {
+  id: string; customerName: string; company?: string; mobile: string; alternateMobile?: string; email?: string; address?: string; city?: string; state?: string; pincode?: string; leadSource?: string; productService?: string; leadStatus: string; followUpDate?: string; remarks?: string; notes?: string; requirement?: string; expectedValue?: number; employeeId: string; createdBy?: string; createdAt?: string; updatedAt?: string;
+}
+
 export interface DailyReport {
   id: string;
   employeeId: string;
@@ -61,18 +66,27 @@ export interface DailyReport {
   reportSlot4: string;
   directorCallTiming: string;
   internalMeeting: string;
+  jobRole?: string;
+  newLeads?: number;
+  followUps?: number;
+  interestedCustomers?: number;
+  positiveCustomers?: number;
+  convertedCustomers?: number;
+  callsMade?: number;
+  meetings?: number;
+  additionalNotes?: string;
   submittedAt: string;
   createdAt?: string;
   updatedAt?: string;
 }
 
 interface DB {
-  employees: Employee[]; attendance: AttendanceRecord[]; tasks: Task[]; leaves: Leave[]; expenses: Expense[]; activities: Activity[]; holidays: Holiday[]; notifications: Notification[]; dailyReports: DailyReport[];
+  employees: Employee[]; attendance: AttendanceRecord[]; tasks: Task[]; leaves: Leave[]; expenses: Expense[]; activities: Activity[]; holidays: Holiday[]; notifications: Notification[]; dailyReports: DailyReport[]; leads: Lead[];
   isLoading: boolean;
 }
 
 const AUTH_KEY = "ems_auth_v1";
-let currentDB: DB = { employees: [], attendance: [], tasks: [], leaves: [], expenses: [], activities: [], holidays: [], notifications: [], dailyReports: [], isLoading: true };
+let currentDB: DB = { employees: [], attendance: [], tasks: [], leaves: [], expenses: [], activities: [], holidays: [], notifications: [], dailyReports: [], leads: [], isLoading: true };
 let globalSearch = "";
 const listeners = new Set<() => void>();
 
@@ -94,7 +108,7 @@ export async function refreshDB(force = false) {
   try {
     const user = getCurrentUser();
     const userId = user?.employeeId || user?.id;
-    const [emps, atts, ts, lvs, exps, acts, hols, notifs, dReports] = await Promise.all([
+    const [emps, atts, ts, lvs, exps, acts, hols, notifs, dReports, leadsData] = await Promise.all([
       getEmployees(),
       getAttendance(),
       getTasks(user?.role, userId),
@@ -103,7 +117,8 @@ export async function refreshDB(force = false) {
       getActivities(),
       getHolidays(),
       userId ? getNotifications(userId) : Promise.resolve([]),
-      getDailyReports(user?.role, userId)
+      getDailyReports(user?.role, userId),
+      getLeads(user?.role, userId)
     ]);
     currentDB = {
       employees: emps || [],
@@ -115,8 +130,20 @@ export async function refreshDB(force = false) {
       holidays: hols || [],
       notifications: notifs || [],
       dailyReports: dReports || [],
+      leads: leadsData || [],
       isLoading: false
     };
+
+    // Auto-sync employee session with db
+    if (user && user.role === "employee") {
+      const dbEmp = (emps || []).find((e: any) => e.id === user.employeeId);
+      if (dbEmp && dbEmp.jobRole !== user.jobRole) {
+        const updatedUser = { ...user, jobRole: dbEmp.jobRole };
+        localStorage.setItem(AUTH_KEY, JSON.stringify(updatedUser));
+        window.dispatchEvent(new Event("ems_auth_change"));
+      }
+    }
+
     notify();
   } catch (err) {
     console.error("refreshDB error:", err);
@@ -267,6 +294,31 @@ export const api = {
     if (!user) return;
     await deleteDailyReport(reportId, user.employeeId || user.id, user.role);
     currentDB.dailyReports = currentDB.dailyReports.filter(r => r.id !== reportId);
+    notify();
+  },
+
+  // LEADS
+  async addLead(data: any) {
+    const user = getCurrentUser();
+    if (!user) return;
+    const lead = await addLead(data, user.employeeId || user.id);
+    currentDB.leads = [lead, ...currentDB.leads];
+    notify();
+    return lead;
+  },
+  async updateLead(id: string, data: any) {
+    const user = getCurrentUser();
+    if (!user) return;
+    const lead = await updateLead(id, data, user.role, user.employeeId || user.id);
+    currentDB.leads = currentDB.leads.map(x => x.id === id ? lead : x);
+    notify();
+    return lead;
+  },
+  async deleteLead(id: string) {
+    const user = getCurrentUser();
+    if (!user) return;
+    await deleteLead(id, user.role);
+    currentDB.leads = currentDB.leads.filter(x => x.id !== id);
     notify();
   }
 };

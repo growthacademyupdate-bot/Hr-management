@@ -191,8 +191,9 @@ export default function EmployeesPage() {
 }
 
 function AddEmployeeDialog({ onClose }: { onClose: () => void }) {
+  const JOB_ROLES = ["Sales", "Marketing", "Developer", "Accountant", "Support", "Other"];
   const [form, setForm] = useState({
-    customId: "", name: "", email: "", mobile: "", department: "Design", designation: "", joiningDate: new Date().toISOString().slice(0,10), salary: 60000, password: "", avatar: "",
+    customId: "", name: "", email: "", mobile: "", department: "Design", designation: "", jobRole: "", joiningDate: new Date().toISOString().slice(0,10), salary: 60000, password: "", avatar: "",
   });
   const [showPw, setShowPw] = useState(false);
   async function submit() {
@@ -201,7 +202,9 @@ function AddEmployeeDialog({ onClose }: { onClose: () => void }) {
       return; 
     }
     try {
-      const newEmp = await api.addEmployee({ ...form, status: "Active" });
+      const submitData = { ...form, status: "Active" };
+      if (submitData.jobRole === "none") submitData.jobRole = "";
+      const newEmp = await api.addEmployee(submitData);
       toast.success(`Employee added! ID: ${newEmp.id}`);
       onClose();
     } catch (err: any) {
@@ -279,6 +282,16 @@ function AddEmployeeDialog({ onClose }: { onClose: () => void }) {
           </Select>
         </div>
         <div className="space-y-1"><Label>Designation</Label><Input value={form.designation} onChange={(e) => setForm({...form, designation: e.target.value})} placeholder="e.g. Frontend Developer" /></div>
+        <div className="space-y-1">
+          <Label>Job Role <span className="text-muted-foreground text-xs">(optional)</span></Label>
+          <Select value={form.jobRole} onValueChange={(v) => setForm({...form, jobRole: v})}>
+            <SelectTrigger><SelectValue placeholder="Select Job Role" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="none">None</SelectItem>
+              {JOB_ROLES.map((r) => <SelectItem key={r} value={r}>{r}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
         <div className="space-y-1"><Label>Joining Date</Label><Input type="date" value={form.joiningDate} onChange={(e) => setForm({...form, joiningDate: e.target.value})} /></div>
         <div className="space-y-1"><Label>Salary</Label><Input type="number" value={form.salary} onChange={(e) => setForm({...form, salary: +e.target.value})} /></div>
         <div className="col-span-2 space-y-1">
@@ -300,12 +313,14 @@ function AddEmployeeDialog({ onClose }: { onClose: () => void }) {
 }
 
 function EditEmployeeDialog({ employee, open, onClose }: { employee: Employee; open: boolean; onClose: () => void }) {
+  const JOB_ROLES = ["Sales", "Marketing", "Developer", "Accountant", "Support", "Other"];
   const [form, setForm] = useState({
     name: employee.name,
     email: employee.email,
     mobile: employee.mobile,
     department: employee.department,
     designation: employee.designation,
+    jobRole: employee.jobRole || "none",
     joiningDate: employee.joiningDate,
     salary: employee.salary,
     password: employee.password,
@@ -317,7 +332,9 @@ function EditEmployeeDialog({ employee, open, onClose }: { employee: Employee; o
       toast.error("Please fill in all required fields (Name, Email, Mobile, Designation, Password)"); 
       return; 
     }
-    await api.updateEmployee(employee.id, { ...form, status: employee.status });
+    const updateData = { ...form, status: employee.status };
+    if (updateData.jobRole === "none") updateData.jobRole = "";
+    await api.updateEmployee(employee.id, updateData);
     toast.success("Employee updated");
     onClose();
   }
@@ -379,6 +396,16 @@ function EditEmployeeDialog({ employee, open, onClose }: { employee: Employee; o
             </Select>
           </div>
           <div className="space-y-1"><Label>Designation</Label><Input value={form.designation} onChange={(e) => setForm({...form, designation: e.target.value})} /></div>
+          <div className="space-y-1">
+            <Label>Job Role <span className="text-muted-foreground text-xs">(optional)</span></Label>
+            <Select value={form.jobRole} onValueChange={(v) => setForm({...form, jobRole: v})}>
+              <SelectTrigger><SelectValue placeholder="Select Job Role" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">None</SelectItem>
+                {JOB_ROLES.map((r) => <SelectItem key={r} value={r}>{r}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
           <div className="space-y-1"><Label>Joining Date</Label><Input type="date" value={form.joiningDate} onChange={(e) => setForm({...form, joiningDate: e.target.value})} /></div>
           <div className="space-y-1"><Label>Salary</Label><Input type="number" value={form.salary} onChange={(e) => setForm({...form, salary: +e.target.value})} /></div>
           <div className="col-span-2 space-y-1">

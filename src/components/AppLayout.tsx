@@ -130,7 +130,23 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   }
 
   if (!user) return null;
-  const menu = ROLE_MENUS[user.role];
+  let menu = [...ROLE_MENUS[user.role]];
+
+  if (user.role === "employee" && user.jobRole === "Sales") {
+    // Remove default Daily Report, add Sales specific routes
+    menu = menu.filter(m => m.label !== "Daily Task Report");
+    menu.splice(1, 0, 
+      { label: "Sales Report", to: "/sales-reports", icon: "ClipboardList" },
+      { label: "Leads", to: "/leads", icon: "Users" },
+      { label: "Positive Customers", to: "/positive-customers", icon: "User" }
+    );
+  } else if (user.role === "admin") {
+    menu.splice(2, 0, 
+      { label: "Sales Reports", to: "/sales-reports", icon: "ClipboardList" },
+      { label: "Leads", to: "/leads", icon: "Users" },
+      { label: "Positive Customers", to: "/positive-customers", icon: "User" }
+    );
+  }
 
   const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter" && searchResults) {
