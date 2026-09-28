@@ -33,6 +33,13 @@ const LeadSchema = new mongoose.Schema(
     notes: { type: String },
     requirement: { type: String },
     expectedValue: { type: Number },
+    callOutcome: { type: String },
+    clientFollowUp: { type: String },
+    constructionInteriorWork: { type: Boolean, default: false },
+    gmbProfileWork: { type: Boolean, default: false },
+    logoWork: { type: Boolean, default: false },
+    websiteWork: { type: Boolean, default: false },
+    documentationWork: { type: Boolean, default: false },
     employeeId: { type: String, required: true }, // The sales employee who created it
     createdBy: { type: String },
   },

@@ -57,23 +57,31 @@ export default function LeadsPage() {
           </div>
         </CardHeader>
         <CardContent>
-          <div className="rounded-md border overflow-hidden">
-            <Table>
+          <div className="rounded-md border overflow-x-auto">
+            <Table className="whitespace-nowrap">
               <TableHeader className="bg-muted/50">
                 <TableRow>
-                  <TableHead>Date</TableHead>
-                  <TableHead>Customer / Company</TableHead>
-                  <TableHead>Contact</TableHead>
-                  <TableHead>Status</TableHead>
+                  <TableHead>Lead Date</TableHead>
+                  <TableHead>Client ID</TableHead>
+                  <TableHead>Client Name</TableHead>
+                  <TableHead>Client Contact No.</TableHead>
+                  <TableHead>Call Outcome</TableHead>
+                  <TableHead>Remarks</TableHead>
+                  <TableHead>Follow Up</TableHead>
+                  <TableHead>Client Follow Up</TableHead>
+                  <TableHead>Construction & Interior</TableHead>
+                  <TableHead>GMB Profile</TableHead>
+                  <TableHead>Logo Work</TableHead>
+                  <TableHead>Website Work</TableHead>
+                  <TableHead>Documentation</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {filteredLeads.map((lead) => (
                   <TableRow key={lead.id}>
-                    <TableCell className="font-medium whitespace-nowrap">
-                      {lead.createdAt ? new Date(lead.createdAt).toLocaleDateString() : "N/A"}
-                    </TableCell>
+                    <TableCell>{lead.createdAt ? new Date(lead.createdAt).toLocaleDateString() : "N/A"}</TableCell>
+                    <TableCell>{lead.id}</TableCell>
                     <TableCell>
                       <div className="font-medium">{lead.customerName}</div>
                       <div className="text-xs text-muted-foreground">{lead.company}</div>
@@ -82,14 +90,15 @@ export default function LeadsPage() {
                       <div>{lead.mobile}</div>
                       <div className="text-xs text-muted-foreground">{lead.email}</div>
                     </TableCell>
-                    <TableCell>
-                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                        lead.leadStatus === 'POSITIVE' ? 'bg-emerald-100 text-emerald-800' : 
-                        lead.leadStatus === 'LOST' ? 'bg-red-100 text-red-800' : 'bg-blue-100 text-blue-800'
-                      }`}>
-                        {lead.leadStatus}
-                      </span>
-                    </TableCell>
+                    <TableCell>{lead.callOutcome || "-"}</TableCell>
+                    <TableCell>{lead.remarks || "-"}</TableCell>
+                    <TableCell>{lead.followUpDate || "-"}</TableCell>
+                    <TableCell>{lead.clientFollowUp || "-"}</TableCell>
+                    <TableCell>{lead.constructionInteriorWork ? "Yes" : "No"}</TableCell>
+                    <TableCell>{lead.gmbProfileWork ? "Yes" : "No"}</TableCell>
+                    <TableCell>{lead.logoWork ? "Yes" : "No"}</TableCell>
+                    <TableCell>{lead.websiteWork ? "Yes" : "No"}</TableCell>
+                    <TableCell>{lead.documentationWork ? "Yes" : "No"}</TableCell>
                     <TableCell className="text-right">
                       <Button variant="ghost" size="icon" onClick={() => setEditingLead(lead)}>
                         <Pencil className="h-4 w-4" />
@@ -109,7 +118,7 @@ export default function LeadsPage() {
                 ))}
                 {filteredLeads.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">No leads found.</TableCell>
+                    <TableCell colSpan={14} className="text-center py-8 text-muted-foreground">No leads found.</TableCell>
                   </TableRow>
                 )}
               </TableBody>
@@ -128,7 +137,9 @@ export default function LeadsPage() {
 
 function LeadFormDialog({ open, onClose, lead }: { open: boolean; onClose: () => void; lead?: any }) {
   const [form, setForm] = useState(lead || {
-    customerName: "", company: "", mobile: "", email: "", leadStatus: "NEW", remarks: ""
+    customerName: "", company: "", mobile: "", email: "", leadStatus: "NEW", remarks: "",
+    callOutcome: "", followUpDate: "", clientFollowUp: "",
+    constructionInteriorWork: false, gmbProfileWork: false, logoWork: false, websiteWork: false, documentationWork: false
   });
 
   const isEditing = !!lead;
@@ -158,7 +169,7 @@ function LeadFormDialog({ open, onClose, lead }: { open: boolean; onClose: () =>
         <DialogHeader>
           <DialogTitle>{isEditing ? "Edit Lead" : "Add New Lead"}</DialogTitle>
         </DialogHeader>
-        <div className="grid grid-cols-2 gap-4 py-4">
+        <div className="grid grid-cols-2 gap-4 py-4 max-h-[65vh] overflow-y-auto px-1">
           <div className="col-span-2 space-y-2">
             <Label>Customer Name *</Label>
             <Input value={form.customerName} onChange={e => setForm({...form, customerName: e.target.value})} placeholder="Full name" />
@@ -186,9 +197,46 @@ function LeadFormDialog({ open, onClose, lead }: { open: boolean; onClose: () =>
               </SelectContent>
             </Select>
           </div>
+          <div className="space-y-2">
+            <Label>Call Outcome</Label>
+            <Input value={form.callOutcome} onChange={e => setForm({...form, callOutcome: e.target.value})} placeholder="Outcome" />
+          </div>
+          <div className="space-y-2">
+            <Label>Follow Up Date</Label>
+            <Input type="date" value={form.followUpDate} onChange={e => setForm({...form, followUpDate: e.target.value})} />
+          </div>
+          <div className="col-span-2 space-y-2">
+            <Label>Client Follow Up</Label>
+            <Input value={form.clientFollowUp} onChange={e => setForm({...form, clientFollowUp: e.target.value})} placeholder="Client follow up notes..." />
+          </div>
           <div className="col-span-2 space-y-2">
             <Label>Remarks</Label>
             <Input value={form.remarks} onChange={e => setForm({...form, remarks: e.target.value})} placeholder="Notes..." />
+          </div>
+          <div className="col-span-2">
+            <Label className="mb-2 block">Work Requirements</Label>
+            <div className="grid grid-cols-2 gap-2 text-sm">
+              <label className="flex items-center space-x-2">
+                <input type="checkbox" className="w-4 h-4" checked={form.constructionInteriorWork} onChange={e => setForm({...form, constructionInteriorWork: e.target.checked})} />
+                <span>Construction & Interior Work</span>
+              </label>
+              <label className="flex items-center space-x-2">
+                <input type="checkbox" className="w-4 h-4" checked={form.gmbProfileWork} onChange={e => setForm({...form, gmbProfileWork: e.target.checked})} />
+                <span>GMB Profile Work</span>
+              </label>
+              <label className="flex items-center space-x-2">
+                <input type="checkbox" className="w-4 h-4" checked={form.logoWork} onChange={e => setForm({...form, logoWork: e.target.checked})} />
+                <span>Logo Work</span>
+              </label>
+              <label className="flex items-center space-x-2">
+                <input type="checkbox" className="w-4 h-4" checked={form.websiteWork} onChange={e => setForm({...form, websiteWork: e.target.checked})} />
+                <span>Website Work</span>
+              </label>
+              <label className="flex items-center space-x-2">
+                <input type="checkbox" className="w-4 h-4" checked={form.documentationWork} onChange={e => setForm({...form, documentationWork: e.target.checked})} />
+                <span>Documentation Work</span>
+              </label>
+            </div>
           </div>
         </div>
         <DialogFooter>

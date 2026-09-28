@@ -50,6 +50,7 @@ export interface Notification {
 
 export interface Lead {
   id: string; customerName: string; company?: string; mobile: string; alternateMobile?: string; email?: string; address?: string; city?: string; state?: string; pincode?: string; leadSource?: string; productService?: string; leadStatus: string; followUpDate?: string; remarks?: string; notes?: string; requirement?: string; expectedValue?: number; employeeId: string; createdBy?: string; createdAt?: string; updatedAt?: string;
+  callOutcome?: string; clientFollowUp?: string; constructionInteriorWork?: boolean; gmbProfileWork?: boolean; logoWork?: boolean; websiteWork?: boolean; documentationWork?: boolean;
 }
 
 export interface DailyReport {
