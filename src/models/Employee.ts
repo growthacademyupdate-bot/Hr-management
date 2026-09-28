@@ -7,6 +7,7 @@ const EmployeeSchema = new mongoose.Schema({
   mobile: { type: String, required: true },
   department: { type: String, required: true },
   designation: { type: String, required: true },
+  jobRole: { type: String, enum: ["Sales", "Marketing", "Developer", "Accountant", "Support", "Other"] },
   joiningDate: { type: String, required: true }, // YYYY-MM-DD
   leavingDate: { type: String }, // YYYY-MM-DD
   salary: { type: Number, required: true },

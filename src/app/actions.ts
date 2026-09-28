@@ -14,6 +14,7 @@ import { Holiday } from "@/models/Holiday";
 import { Notification } from "@/models/Notification";
 import { Expense } from "@/models/Expense";
 import { DailyReport } from "@/models/DailyReport";
+import { Lead } from "@/models/Lead";
 
 // Helper to serialize Mongoose documents
 function serialize(doc: any) {
@@ -204,7 +205,7 @@ export async function loginAction(usernameOrId: string, password: string) {
         const loginDate = new Date().toISOString().slice(0, 10);
         return {
           success: true,
-          user: { id: `u_${emp.id}`, username: emp.email, password: emp.password, role: "employee", employeeId: emp.id, name: emp.name, email: emp.email, avatar: emp.avatar || "", loginDate }
+          user: { id: `u_${emp.id}`, username: emp.email, password: emp.password, role: "employee", jobRole: emp.jobRole, employeeId: emp.id, name: emp.name, email: emp.email, avatar: emp.avatar || "", loginDate }
         };
       }
     }
@@ -1306,24 +1307,7 @@ export async function getDailyReports(role?: string, employeeId?: string) {
   return serialize(reports);
 }
 
-export async function addDailyReport(
-  data: {
-    employeeId: string;
-    employeeName: string;
-    designation: string;
-    reportDate: string;
-    reportDay: string;
-    attendance?: string;
-    reportSlot1?: string;
-    reportSlot2?: string;
-    reportSlot3?: string;
-    reportSlot4?: string;
-    directorCallTiming?: string;
-    internalMeeting?: string;
-  },
-  submitterId: string,
-  submitterRole: string
-) {
+export async function addDailyReport(data: any, submitterId: string, submitterRole: string) {
   await connectDB();
   const id = `DTR${Date.now()}${Math.floor(Math.random() * 1000)}`;
 
@@ -1341,6 +1325,15 @@ export async function addDailyReport(
     reportSlot4: data.reportSlot4 || "",
     directorCallTiming: data.directorCallTiming || "",
     internalMeeting: data.internalMeeting || "",
+    jobRole: data.jobRole || "",
+    newLeads: data.newLeads || 0,
+    followUps: data.followUps || 0,
+    interestedCustomers: data.interestedCustomers || 0,
+    positiveCustomers: data.positiveCustomers || 0,
+    convertedCustomers: data.convertedCustomers || 0,
+    callsMade: data.callsMade || 0,
+    meetings: data.meetings || 0,
+    additionalNotes: data.additionalNotes || "",
     submittedAt: new Date().toISOString(),
   });
 
@@ -1429,3 +1422,76 @@ export async function updateEmployeeDocuments(employeeId: string, documents: any
   
   return serialize(employee);
 }
+
+// ----------------------------------------------------------------------
+// LEADS & POSITIVE CUSTOMERS
+// ----------------------------------------------------------------------
+export async function getLeads(role?: string, employeeId?: string) {
+  try {
+    await connectDB();
+    let query: any = {};
+    if (role === "employee" && employeeId) {
+      query.employeeId = employeeId;
+    }
+    // HR and Admin can see all
+    const leads = await Lead.find(query).sort({ createdAt: -1 }).lean();
+    return serialize(leads);
+  } catch (error) {
+    console.error("Failed to fetch leads:", error);
+    return [];
+  }
+}
+
+export async function addLead(data: any, employeeId: string) {
+  try {
+    await connectDB();
+    const id = `LD${Date.now()}`;
+    const lead = await Lead.create({ ...data, id, employeeId, createdBy: employeeId });
+    
+    await createActivity({
+      employeeId,
+      actorId: employeeId,
+      activityType: data.leadStatus === "POSITIVE" ? "POSITIVE_CUSTOMER_CREATED" : "LEAD_CREATED",
+      module: "sales",
+      referenceId: id,
+      message: `Added new ${data.leadStatus === "POSITIVE" ? "positive customer" : "lead"}: ${data.customerName}`,
+    });
+    
+    return serialize(lead);
+  } catch (error) {
+    console.error("Failed to add lead:", error);
+    throw error;
+  }
+}
+
+export async function updateLead(id: string, data: any, role: string, employeeId: string) {
+  try {
+    await connectDB();
+    const existing = await Lead.findOne({ id });
+    if (!existing) throw new Error("Lead not found");
+    
+    if (role === "employee" && existing.employeeId !== employeeId) {
+       throw new Error("Unauthorized");
+    }
+
+    Object.assign(existing, data);
+    await existing.save();
+    return serialize(existing);
+  } catch (error) {
+    console.error("Failed to update lead:", error);
+    throw error;
+  }
+}
+
+export async function deleteLead(id: string, role: string) {
+  try {
+    if (role !== "admin") throw new Error("Only Admin can delete leads");
+    await connectDB();
+    await Lead.findOneAndDelete({ id });
+    return { success: true };
+  } catch (error) {
+    console.error("Failed to delete lead:", error);
+    throw error;
+  }
+}
+
