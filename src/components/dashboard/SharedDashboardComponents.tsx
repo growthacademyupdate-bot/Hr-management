@@ -174,7 +174,7 @@ export function EmployeeActivityTable() {
                         onClick={async () => {
                           if (confirm("Are you sure you want to delete this attendance record?")) {
                             try {
-                              await api.deleteAttendance(emp.attendanceId);
+                              await api.deleteAttendance(emp.attendanceId!);
                               toast.success("Attendance record deleted");
                             } catch (error) {
                               toast.error("Failed to delete attendance record");
