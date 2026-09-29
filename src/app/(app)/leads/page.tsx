@@ -142,7 +142,12 @@ function LeadFormDialog({ open, onClose, lead }: { open: boolean; onClose: () =>
     constructionInteriorWork: false, gmbProfileWork: false, logoWork: false, websiteWork: false, documentationWork: false
   });
 
+  const user = useAuth();
+  const db = useDB();
   const isEditing = !!lead;
+  
+  // Fetch sales employees for assignment if admin
+  const salesEmployees = db.employees?.filter((e: any) => e.jobRole === "Sales" && e.status === "Active") || [];
 
   async function submit() {
     if (!form.customerName || !form.mobile) {
@@ -205,6 +210,19 @@ function LeadFormDialog({ open, onClose, lead }: { open: boolean; onClose: () =>
             <Label>Follow Up Date</Label>
             <Input type="date" value={form.followUpDate} onChange={e => setForm({...form, followUpDate: e.target.value})} />
           </div>
+          {user?.role === "admin" && (
+            <div className="space-y-2">
+              <Label>Assign to Sales Employee</Label>
+              <Select value={form.employeeId || ""} onValueChange={v => setForm({...form, employeeId: v})}>
+                <SelectTrigger><SelectValue placeholder="Select Employee" /></SelectTrigger>
+                <SelectContent>
+                  {salesEmployees.map((emp: any) => (
+                    <SelectItem key={emp.id} value={emp.id}>{emp.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
           <div className="col-span-2 space-y-2">
             <Label>Client Follow Up</Label>
             <Input value={form.clientFollowUp} onChange={e => setForm({...form, clientFollowUp: e.target.value})} placeholder="Client follow up notes..." />

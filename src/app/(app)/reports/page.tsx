@@ -15,6 +15,7 @@ import { toast } from "sonner";
 import { useDataTable } from "@/hooks/useDataTable";
 import { SortableHeader } from "@/components/SortableHeader";
 import { DataTablePagination } from "@/components/DataTablePagination";
+import { SalesPerformanceReport } from "./SalesPerformanceReport";
 
 export default function ReportsPage() {
   const user = useAuth();
@@ -119,6 +120,9 @@ export default function ReportsPage() {
         <button onClick={() => setActiveTab("performance")} className={`px-4 py-2 text-sm font-medium border-b-2 whitespace-nowrap ${activeTab === "performance" ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`}>
           {isEmployee ? "My Performance" : "Employee Performance"}
         </button>
+        <button onClick={() => setActiveTab("sales-performance")} className={`px-4 py-2 text-sm font-medium border-b-2 whitespace-nowrap ${activeTab === "sales-performance" ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`}>
+          Sales Performance
+        </button>
         <button onClick={() => setActiveTab("tasks")} className={`px-4 py-2 text-sm font-medium border-b-2 whitespace-nowrap ${activeTab === "tasks" ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`}>
           {isEmployee ? "My Tasks" : "Task Reports"}
         </button>
@@ -162,6 +166,11 @@ export default function ReportsPage() {
         {/* PERFORMANCE TAB */}
         {activeTab === "performance" && (
           <PerformanceReport filterByDate={filterByDate} isEmployee={isEmployee} isAdmin={isAdmin} isHR={isHR} />
+        )}
+
+        {/* SALES PERFORMANCE TAB */}
+        {activeTab === "sales-performance" && (
+          <SalesPerformanceReport />
         )}
 
         {/* TASKS TAB */}

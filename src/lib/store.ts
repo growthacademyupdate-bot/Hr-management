@@ -302,7 +302,8 @@ export const api = {
   async addLead(data: any) {
     const user = getCurrentUser();
     if (!user) return;
-    const lead = await addLead(data, user.employeeId || user.id);
+    const empId = data.employeeId || user.employeeId || user.id;
+    const lead = await addLead(data, empId);
     currentDB.leads = [lead, ...currentDB.leads];
     notify();
     return lead;
