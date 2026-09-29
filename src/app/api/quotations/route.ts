@@ -79,7 +79,7 @@ export async function POST(req: NextRequest) {
     // Company Info Left & Proforma Right
     const yPos = doc.y;
     doc.fontSize(9).font('Helvetica-Bold').text('Corporate and Registered Office Address:', 40, yPos);
-    doc.font('Helvetica').text('1st Floor, Pride Icon, Office No. 102,103, Nexus Work Spaces,\nMundhwa - Kharadi Rd, Above Athithi Restaurant, Kharadi,\nPune, Maharashtra, Pin Code: 411014\nWebsite: www.al-mawa.international\nPhone: +91 9511991736 / +91 9561179693\nGST No: 27ABDCA0474D1Z1\nPAN No: ABDCA0474D', 40, yPos + 25, { width: 250 });
+    doc.font('Helvetica').text('1st Floor, Pride Icon, Office No. 102,103, Nexus Work Spaces,\nMundhwa - Kharadi Rd, Above Athithi Restaurant, Kharadi,\nPune, Maharashtra, Pin Code: 411014\nWebsite: www.al-mawa.international\nPhone: +91 9561106693 / +91 9561179693\nGST No: 27ABDCA0474D1Z1\nPAN No: ABDCA0474D', 40, yPos + 25, { width: 250 });
 
     // Proforma Info Box
     doc.fontSize(16).fillColor('#0A3161').font('Helvetica-Bold').text('PROFORMA INVOICE', 350, yPos);

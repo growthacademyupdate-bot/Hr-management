@@ -130,7 +130,7 @@ export default function ReportsPage() {
           {isEmployee ? "My Leaves" : "Leave Reports"}
         </button>
         {(isAdmin || isHR) && (
-          <button onClick={() => setActiveTab("attendance-export")} className={`px-4 py-2 text-sm font-medium border-b-2 whitespace-nowrap ${activeTab === "attendance-export" ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`}>Attendance Export</button>
+          <button onClick={() => setActiveTab("attendance-export")} className={`px-4 py-2 text-sm font-medium border-b-2 whitespace-nowrap ${activeTab === "attendance-export" ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`}>Daily Logins & Attendance</button>
         )}
       </div>
 
@@ -712,7 +712,7 @@ function AttendanceExportReport({ filterByDate, onExportCSV }: any) {
   return (
     <Card className="border-0 shadow-sm overflow-hidden">
       <CardHeader className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-        <CardTitle>Attendance Export</CardTitle>
+        <CardTitle>Daily Logins & Attendance</CardTitle>
         <div className="flex items-center gap-3">
           <div className="relative w-48 sm:w-64">
             <Search className="h-4 w-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />

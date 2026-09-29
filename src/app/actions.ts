@@ -821,8 +821,13 @@ export async function deleteActivity(activityId: string, userRole: string) {
 
 async function logLoginActivity(employeeId: string) {
   const now = new Date();
-  const date = now.toISOString().slice(0, 10);
-  const time = now.toTimeString().slice(0, 5); // Format: "HH:MM"
+  
+  // Use Asia/Kolkata (IST) timezone
+  const dateStr = now.toLocaleString("en-IN", { timeZone: "Asia/Kolkata", year: 'numeric', month: '2-digit', day: '2-digit' });
+  const [day, month, year] = dateStr.split('/');
+  const date = `${year}-${month}-${day}`;
+  
+  const time = now.toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata", hour: '2-digit', minute: '2-digit', hour12: false });
   
   let existing = await Attendance.findOne({ employeeId, date });
   if (!existing) {
@@ -851,8 +856,13 @@ async function logLoginActivity(employeeId: string) {
 export async function logLogoutActivity(employeeId: string) {
   await connectDB();
   const now = new Date();
-  const date = now.toISOString().slice(0, 10);
-  const time = now.toTimeString().slice(0, 5); // Format: "HH:MM"
+  
+  // Use Asia/Kolkata (IST) timezone
+  const dateStr = now.toLocaleString("en-IN", { timeZone: "Asia/Kolkata", year: 'numeric', month: '2-digit', day: '2-digit' });
+  const [day, month, year] = dateStr.split('/');
+  const date = `${year}-${month}-${day}`;
+  
+  const time = now.toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata", hour: '2-digit', minute: '2-digit', hour12: false });
   
   const rec = await Attendance.findOne({ employeeId, date });
   if (rec) {
