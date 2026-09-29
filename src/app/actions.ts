@@ -228,8 +228,9 @@ async function sendEmployeeCredentialsEmail(email: string, name: string, empId: 
   if (!process.env.SMTP_USER || !process.env.SMTP_PASS) return;
   try {
     const transporter = nodemailer.createTransport({
-      host: process.env.SMTP_HOST || "smtp.gmail.com",
-      port: Number(process.env.SMTP_PORT || 587),
+      service: process.env.SMTP_HOST === "smtp.gmail.com" ? "gmail" : undefined,
+      host: process.env.SMTP_HOST !== "smtp.gmail.com" ? process.env.SMTP_HOST : undefined,
+      port: process.env.SMTP_HOST !== "smtp.gmail.com" ? Number(process.env.SMTP_PORT || 587) : undefined,
       secure: process.env.SMTP_PORT === "465",
       auth: {
         user: process.env.SMTP_USER,
@@ -266,8 +267,9 @@ async function sendSystemNotificationEmail(toEmail: string | string[], subject: 
   if (!process.env.SMTP_USER || !process.env.SMTP_PASS) return;
   try {
     const transporter = nodemailer.createTransport({
-      host: process.env.SMTP_HOST || "smtp.gmail.com",
-      port: Number(process.env.SMTP_PORT || 587),
+      service: process.env.SMTP_HOST === "smtp.gmail.com" ? "gmail" : undefined,
+      host: process.env.SMTP_HOST !== "smtp.gmail.com" ? process.env.SMTP_HOST : undefined,
+      port: process.env.SMTP_HOST !== "smtp.gmail.com" ? Number(process.env.SMTP_PORT || 587) : undefined,
       secure: process.env.SMTP_PORT === "465",
       auth: {
         user: process.env.SMTP_USER,
