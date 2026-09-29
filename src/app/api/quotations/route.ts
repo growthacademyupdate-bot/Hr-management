@@ -289,8 +289,8 @@ export async function POST(req: NextRequest) {
     }
 
     let footerY = currentY;
-    // We expect the footer to need around 350 pixels of height
-    if (footerY + 350 > doc.page.height - 40) {
+    // We expect the footer to need around 450 pixels of height now because of extra terms
+    if (footerY + 450 > doc.page.height - 40) {
       doc.addPage();
       footerY = 40;
     } else {
@@ -329,7 +329,18 @@ export async function POST(req: NextRequest) {
       "In case of cheque bounce, the client is subject to a Rs. 1000 fine.",
       "Cash payments are not accepted.",
       "The project will begin only after the payment has been successfully received. Once payment is confirmed, a minimum of 7 working days is required to initiate and progress the work.",
-      "Payments should be transferred only to the company official bank account. Any payment made to other accounts will be solely the responsibility of the payer."
+      "Payments should be transferred only to the company official bank account. Any payment made to other accounts will be solely the responsibility of the payer.",
+      "--- FOR WEB/SOFTWARE DEVELOPMENT PROJECTS ---",
+      "Third-Party Services: All external APIs, third-party services, and integrations required for the project will be charged separately and shall be borne by the customer.",
+      "Server & Hosting: All server, VPS, hosting, and cloud infrastructure charges will be borne by the customer.",
+      "Database: Any database-related charges, including MongoDB Atlas or other database services, will be charged separately to the customer.",
+      "Deployment: Any deployment, cloud infrastructure, or related service charges will be borne by the customer.",
+      "Domain: Domain registration, renewal, transfer, and related charges will be paid by the customer.",
+      "Cloud Services: Any charges for Cloudinary, Cloudflare, AWS, or other cloud storage/CDN services will be borne by the customer.",
+      "API & Subscription Charges: Any charges for SMS, WhatsApp, email, payment gateways, AI services, or other subscription/usage-based APIs will be paid separately by the customer.",
+      "Recurring Charges: All recurring subscription, renewal, storage, bandwidth, and API usage charges after deployment will be the customer's responsibility.",
+      "Account & Billing: Third-party accounts and services should preferably be registered under the customer's name and billing details.",
+      "Note: The above charges are not included in the development/project cost mentioned in this quotation and will be billed separately based on actual third-party service charges."
     ];
 
     let tY = footerY + 25;
@@ -363,14 +374,23 @@ export async function POST(req: NextRequest) {
     bY += 12;
     doc.font('Helvetica-Bold').text('Branch: ', 375, bY, { continued: true }).font('Helvetica').text('Kharadi, Pune Maharashtra', { width: 175 });
     
-    // Concerned Authority Signature
-    const authSignY = footerY + 160;
+    bY += 25;
+    const qrPath = path.join(process.cwd(), 'public', 'qr_code.png');
+    if (fs.existsSync(qrPath)) {
+      doc.font('Helvetica-Bold').fontSize(8).text('SCAN TO PAY (UPI)', 375, bY, { width: 175, align: 'center' });
+      bY += 12;
+      doc.image(qrPath, 375 + (175 - 100)/2, bY, { width: 100 });
+      bY += 105;
+      doc.font('Helvetica-Bold').fontSize(8).text('UPI ID: 9028346900m@pnb', 375, bY, { width: 175, align: 'center' });
+    }
+
+    // Concerned Authority Signature (Align near the bottom of the terms box or below QR)
+    const authSignY = Math.max(tY - 30, bY + 40);
     doc.moveTo(375, authSignY).lineTo(545, authSignY).stroke('#000000');
     doc.font('Helvetica-Bold').fontSize(9).text("CONCERNED AUTHORITY", 375, authSignY + 5);
 
-    // Bank Details Border Box - make it match the Terms box height or just cover bank details
-    // It's cleaner to make it end at the same height or a bit shorter. We will give it a fixed height relative to authSignY.
-    doc.rect(370, footerY + 20, 185, (authSignY + 20) - (footerY + 20)).stroke('#cccccc');
+    // Bank Details Border Box - make it match the Terms box height exactly
+    doc.rect(370, footerY + 20, 185, tY - (footerY + 20)).stroke('#cccccc');
 
     // Thank You Text at bottom center
     const thankYouY = Math.max(tY, authSignY + 20) + 20;
