@@ -55,13 +55,14 @@ export async function GET(req: NextRequest) {
         $group: {
           _id: "$employeeId",
           // Leads
+          NEW: { $sum: { $cond: [{ $eq: ["$leadStatus", "NEW"] }, 1, 0] } },
+          CONTACTED: { $sum: { $cond: [{ $eq: ["$leadStatus", "CONTACTED"] }, 1, 0] } },
+          FOLLOW_UP: { $sum: { $cond: [{ $eq: ["$leadStatus", "FOLLOW_UP"] }, 1, 0] } },
           INTERESTED: { $sum: { $cond: [{ $eq: ["$leadStatus", "INTERESTED"] }, 1, 0] } },
-          NOT_INTERESTED: { $sum: { $cond: [{ $eq: ["$leadStatus", "NOT_INTERESTED"] }, 1, 0] } },
-          NOT_ELIGIBLE: { $sum: { $cond: [{ $eq: ["$leadStatus", "NOT_ELIGIBLE"] }, 1, 0] } },
-          CALL_NOT_RECEIVED: { $sum: { $cond: [{ $eq: ["$leadStatus", "CALL_NOT_RECEIVED"] }, 1, 0] } },
-          NOT_CONNECTED: { $sum: { $cond: [{ $eq: ["$leadStatus", "NOT_CONNECTED"] }, 1, 0] } },
-          CONVERTED: { $sum: { $cond: [{ $eq: ["$leadStatus", "CONVERTED"] }, 1, 0] } },
           POSITIVE: { $sum: { $cond: [{ $eq: ["$leadStatus", "POSITIVE"] }, 1, 0] } },
+          NOT_INTERESTED: { $sum: { $cond: [{ $eq: ["$leadStatus", "NOT_INTERESTED"] }, 1, 0] } },
+          CONVERTED: { $sum: { $cond: [{ $eq: ["$leadStatus", "CONVERTED"] }, 1, 0] } },
+          LOST: { $sum: { $cond: [{ $eq: ["$leadStatus", "LOST"] }, 1, 0] } },
           totalLeads: { $sum: 1 },
 
           // Loans
@@ -122,13 +123,14 @@ export async function GET(req: NextRequest) {
         name: emp.name,
         jobRole: emp.jobRole,
         leads: {
+          NEW: agg.NEW || 0,
+          CONTACTED: agg.CONTACTED || 0,
+          FOLLOW_UP: agg.FOLLOW_UP || 0,
           INTERESTED: agg.INTERESTED || 0,
-          NOT_INTERESTED: agg.NOT_INTERESTED || 0,
-          NOT_ELIGIBLE: agg.NOT_ELIGIBLE || 0,
-          CALL_NOT_RECEIVED: agg.CALL_NOT_RECEIVED || 0,
-          NOT_CONNECTED: agg.NOT_CONNECTED || 0,
-          CONVERTED: agg.CONVERTED || 0,
           POSITIVE: agg.POSITIVE || 0,
+          NOT_INTERESTED: agg.NOT_INTERESTED || 0,
+          CONVERTED: agg.CONVERTED || 0,
+          LOST: agg.LOST || 0,
           TOTAL: agg.totalLeads || 0
         },
         loans: {

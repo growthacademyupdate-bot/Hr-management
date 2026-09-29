@@ -146,7 +146,7 @@ export function SalesPerformanceReport() {
       </div>
 
       {/* SUMMARY CARDS */}
-      <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
         <Card className="bg-primary/5 border-primary/10">
           <CardContent className="p-4 flex flex-col items-center justify-center text-center h-full">
             <div className="text-2xl font-bold text-primary">{summary.totalSalesEmployees}</div>
@@ -165,29 +165,11 @@ export function SalesPerformanceReport() {
             <div className="text-xs font-medium text-muted-foreground uppercase mt-1">Positive Customers</div>
           </CardContent>
         </Card>
-        <Card className="bg-purple-500/5 border-purple-500/10">
-          <CardContent className="p-4 flex flex-col items-center justify-center text-center h-full">
-            <div className="text-2xl font-bold text-purple-600">{summary.totalLoans}</div>
-            <div className="text-xs font-medium text-muted-foreground uppercase mt-1">Total Loans</div>
-          </CardContent>
-        </Card>
-        <Card className="bg-orange-500/5 border-orange-500/10">
-          <CardContent className="p-4 flex flex-col items-center justify-center text-center h-full">
-            <div className="text-2xl font-bold text-orange-600">{summary.totalDocuments}</div>
-            <div className="text-xs font-medium text-muted-foreground uppercase mt-1">Total Documents</div>
-          </CardContent>
-        </Card>
-        <Card className="bg-pink-500/5 border-pink-500/10">
-          <CardContent className="p-4 flex flex-col items-center justify-center text-center h-full">
-            <div className="text-2xl font-bold text-pink-600">{summary.totalBusinessServices}</div>
-            <div className="text-xs font-medium text-muted-foreground uppercase mt-1">Business Services</div>
-          </CardContent>
-        </Card>
       </div>
 
       <div className="flex flex-col xl:flex-row gap-6 mb-6 items-start">
         {/* LEADS REPORT */}
-        <div className="w-full xl:w-2/3 overflow-x-auto shadow-sm border border-gray-400">
+        <div className="w-full overflow-x-auto shadow-sm border border-gray-400">
           <TableHeader title="LEADS REPORT" />
           <table className="w-full bg-white border-collapse border border-gray-400 min-w-max">
             <thead className="bg-gray-50">
@@ -197,77 +179,15 @@ export function SalesPerformanceReport() {
               </tr>
             </thead>
             <tbody>
+              <Row label="NEW" category="leads" field="NEW" />
+              <Row label="CONTACTED" category="leads" field="CONTACTED" />
+              <Row label="FOLLOW UP" category="leads" field="FOLLOW_UP" />
               <Row label="INTERESTED" category="leads" field="INTERESTED" />
-              <Row label="NOT INTERESTED" category="leads" field="NOT_INTERESTED" />
-              <Row label="NOT ELIGIBLE" category="leads" field="NOT_ELIGIBLE" />
-              <Row label="CALL NOT RECEIVED" category="leads" field="CALL_NOT_RECEIVED" />
-              <Row label="NOT CONNECTED" category="leads" field="NOT_CONNECTED" />
-              <Row label="CONVERTED" category="leads" field="CONVERTED" />
               <Row label="POSITIVE" category="leads" field="POSITIVE" />
+              <Row label="NOT INTERESTED" category="leads" field="NOT_INTERESTED" />
+              <Row label="CONVERTED" category="leads" field="CONVERTED" />
+              <Row label="LOST" category="leads" field="LOST" />
               <Row label="TOTAL LEADS" category="leads" field="TOTAL" isTotal />
-            </tbody>
-          </table>
-        </div>
-
-        {/* LOAN REPORT */}
-        <div className="w-full xl:w-1/3 overflow-x-auto shadow-sm border border-gray-400">
-          <TableHeader title="LOAN REPORT" />
-          <table className="w-full bg-white border-collapse border border-gray-400 min-w-max">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="border border-gray-400 px-3 py-2 text-center text-xs font-bold uppercase min-w-[150px]">STATUS</th>
-                <EmployeeHeaders />
-              </tr>
-            </thead>
-            <tbody>
-              <Row label="LOGIN" category="loans" field="LOGIN" />
-              <Row label="REJECTED" category="loans" field="REJECTED" />
-              <Row label="PENDING" category="loans" field="PENDING" />
-              <Row label="PENDING OF DISBURSEMENT" category="loans" field="PENDING_OF_DISBURSEMENT" />
-              <Row label="TOTAL" category="loans" field="TOTAL" isTotal />
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      <div className="flex flex-col xl:flex-row gap-6 items-start">
-        {/* DOCUMENTS REPORT */}
-        <div className="w-full xl:w-1/2 overflow-x-auto shadow-sm border border-gray-400">
-          <TableHeader title="DOCUMENTS REPORT" />
-          <table className="w-full bg-white border-collapse border border-gray-400 min-w-max">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="border border-gray-400 px-3 py-2 text-center text-xs font-bold uppercase min-w-[150px]">STATUS</th>
-                <EmployeeHeaders />
-              </tr>
-            </thead>
-            <tbody>
-              <Row label="DOC RECEIVED" category="documents" field="DOC_RECEIVED" />
-              <Row label="DOC PENDING" category="documents" field="DOC_PENDING" />
-              <Row label="DOC VERIFIED" category="documents" field="DOC_VERIFIED" />
-              <Row label="DOC REJECTED" category="documents" field="DOC_REJECTED" />
-              <Row label="TOTAL" category="documents" field="TOTAL" isTotal />
-            </tbody>
-          </table>
-        </div>
-
-        {/* BUSINESS SERVICES REPORT */}
-        <div className="w-full xl:w-1/2 overflow-x-auto shadow-sm border border-gray-400">
-          <TableHeader title="BUSINESS SERVICES REPORT" />
-          <table className="w-full bg-white border-collapse border border-gray-400 min-w-max">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="border border-gray-400 px-3 py-2 text-center text-xs font-bold uppercase min-w-[200px]">SERVICE</th>
-                <EmployeeHeaders />
-              </tr>
-            </thead>
-            <tbody>
-              <Row label="CONSTRUCTION & INTERIOR WORK" category="businessServices" field="CONSTRUCTION_INTERIOR" />
-              <Row label="DIGITAL MARKETING & GMB" category="businessServices" field="DIGITAL_MARKETING_GMB" />
-              <Row label="WEBSITE DEVELOPMENT" category="businessServices" field="WEBSITE_DEVELOPMENT" />
-              <Row label="LOGO DESIGN" category="businessServices" field="LOGO_DESIGN" />
-              <Row label="DOCUMENTATION WORK" category="businessServices" field="DOCUMENTATION_WORK" />
-              <Row label="TOTAL" category="businessServices" field="TOTAL" isTotal />
             </tbody>
           </table>
         </div>
@@ -284,7 +204,7 @@ export function SalesPerformanceReport() {
           </DialogHeader>
           
           <div className="overflow-y-auto flex-1 pr-2">
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+            <div className="grid grid-cols-2 gap-4 mb-6">
               <div className="p-3 border rounded bg-muted/20 text-center">
                 <div className="text-sm font-semibold text-muted-foreground uppercase">Total Leads</div>
                 <div className="text-2xl font-bold">{selectedEmployee?.leads?.TOTAL || 0}</div>
@@ -294,14 +214,6 @@ export function SalesPerformanceReport() {
                 <div className="text-2xl font-bold text-emerald-700">
                   {(selectedEmployee?.leads?.POSITIVE || 0) + (selectedEmployee?.leads?.INTERESTED || 0)}
                 </div>
-              </div>
-              <div className="p-3 border rounded bg-purple-500/10 text-center">
-                <div className="text-sm font-semibold text-purple-700 uppercase">Total Loans</div>
-                <div className="text-2xl font-bold text-purple-700">{selectedEmployee?.loans?.TOTAL || 0}</div>
-              </div>
-              <div className="p-3 border rounded bg-blue-500/10 text-center">
-                <div className="text-sm font-semibold text-blue-700 uppercase">Total Services</div>
-                <div className="text-2xl font-bold text-blue-700">{selectedEmployee?.businessServices?.TOTAL || 0}</div>
               </div>
             </div>
 
