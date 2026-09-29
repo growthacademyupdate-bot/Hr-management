@@ -10,27 +10,64 @@ import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Search, Plus, Pencil, Trash2 } from "lucide-react";
+import { Search, Plus, Pencil, Trash2, CalendarIcon, UserIcon } from "lucide-react";
+import { useDataTable } from "@/hooks/useDataTable";
+import { DataTablePagination } from "@/components/DataTablePagination";
+import { Badge } from "@/components/ui/badge";
 
 export default function LeadsPage() {
   const user = useAuth();
   const db = useDB();
   const [search, setSearch] = useState("");
+  const [employeeFilter, setEmployeeFilter] = useState("all");
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [editingLead, setEditingLead] = useState<any>(null);
 
-  if (!user || (user.role === "employee" && user.jobRole !== "Sales")) return <div className="p-6">Unauthorized access</div>;
-
   const leads = db.leads || [];
   
-  // Sales sees only their own, Admin sees all
+  const salesEmployees = db.employees?.filter((e: any) => e.jobRole === "Sales" && e.status === "Active") || [];
+
   const filteredLeads = leads.filter(l => {
+    if (!user) return false;
     const matchesSearch = l.customerName.toLowerCase().includes(search.toLowerCase()) || 
                           l.company?.toLowerCase().includes(search.toLowerCase()) ||
                           l.mobile.includes(search);
     const matchesRole = user.role === "admin" || l.employeeId === (user.employeeId || user.id);
-    return matchesSearch && matchesRole;
+    const matchesEmployeeFilter = employeeFilter === "all" || l.employeeId === employeeFilter;
+    
+    return matchesSearch && matchesRole && matchesEmployeeFilter;
   });
+
+  const { 
+    paginatedData, 
+    page, 
+    setPage, 
+    pageSize, 
+    setPageSize, 
+    totalPages, 
+    totalItems, 
+    startIndex, 
+    endIndex 
+  } = useDataTable({ 
+    data: filteredLeads, 
+    defaultPageSize: 15 
+  });
+
+  if (!user || (user.role === "employee" && user.jobRole !== "Sales")) return <div className="p-6">Unauthorized access</div>;
+
+  const getStatusBadge = (status: string) => {
+    switch (status) {
+      case "NEW": return <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">NEW</Badge>;
+      case "CONTACTED": return <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200">CONTACTED</Badge>;
+      case "FOLLOW_UP": return <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-200">FOLLOW UP</Badge>;
+      case "INTERESTED": return <Badge variant="outline" className="bg-indigo-50 text-indigo-700 border-indigo-200">INTERESTED</Badge>;
+      case "POSITIVE": return <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200">POSITIVE</Badge>;
+      case "NOT_INTERESTED": return <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200">NOT INTERESTED</Badge>;
+      case "CONVERTED": return <Badge variant="outline" className="bg-green-100 text-green-800 border-green-300 font-bold">CONVERTED</Badge>;
+      case "LOST": return <Badge variant="outline" className="bg-gray-100 text-gray-700 border-gray-300">LOST</Badge>;
+      default: return <Badge variant="outline">{status}</Badge>;
+    }
+  };
 
   return (
     <div className="p-6 space-y-6 max-w-7xl mx-auto">
@@ -44,86 +81,150 @@ export default function LeadsPage() {
         )}
       </div>
 
-      <Card>
-        <CardHeader className="py-4">
-          <div className="relative max-w-md">
-            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-            <Input 
-              placeholder="Search by name, company or mobile..." 
-              className="pl-9" 
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
+      <Card className="border-border shadow-sm">
+        <CardHeader className="py-4 bg-muted/20 border-b border-border">
+          <div className="flex flex-col sm:flex-row gap-4 items-center justify-between">
+            <div className="relative w-full max-w-md">
+              <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+              <Input 
+                placeholder="Search by name, company or mobile..." 
+                className="pl-9 bg-white" 
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+            </div>
+            {user.role === "admin" && (
+              <div className="w-full sm:w-64">
+                <Select value={employeeFilter} onValueChange={setEmployeeFilter}>
+                  <SelectTrigger className="bg-white"><SelectValue placeholder="All Sales Employees" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Employees</SelectItem>
+                    {salesEmployees.map((emp: any) => (
+                      <SelectItem key={emp.id} value={emp.id}>{emp.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
           </div>
         </CardHeader>
-        <CardContent>
-          <div className="rounded-md border overflow-x-auto">
-            <Table className="whitespace-nowrap">
-              <TableHeader className="bg-muted/50">
+        <CardContent className="p-0">
+          <div className="overflow-x-auto">
+            <Table className="whitespace-nowrap w-full">
+              <TableHeader className="bg-muted/50 text-xs uppercase tracking-wider">
                 <TableRow>
-                  <TableHead>Lead Date</TableHead>
-                  <TableHead>Client ID</TableHead>
-                  <TableHead>Client Name</TableHead>
-                  <TableHead>Client Contact No.</TableHead>
-                  <TableHead>Call Outcome</TableHead>
-                  <TableHead>Remarks</TableHead>
-                  <TableHead>Follow Up</TableHead>
-                  <TableHead>Client Follow Up</TableHead>
-                  <TableHead>Construction & Interior</TableHead>
-                  <TableHead>GMB Profile</TableHead>
-                  <TableHead>Logo Work</TableHead>
-                  <TableHead>Website Work</TableHead>
-                  <TableHead>Documentation</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
+                  <TableHead className="font-semibold text-muted-foreground">Date</TableHead>
+                  <TableHead className="font-semibold text-muted-foreground">Employee</TableHead>
+                  <TableHead className="font-semibold text-muted-foreground">Client Name</TableHead>
+                  <TableHead className="font-semibold text-muted-foreground">Contact</TableHead>
+                  <TableHead className="font-semibold text-muted-foreground">Status & Outcome</TableHead>
+                  <TableHead className="font-semibold text-muted-foreground">Remarks</TableHead>
+                  <TableHead className="font-semibold text-muted-foreground">Follow Up</TableHead>
+                  <TableHead className="font-semibold text-muted-foreground">Client Follow Up</TableHead>
+                  <TableHead className="font-semibold text-muted-foreground text-center">Construction</TableHead>
+                  <TableHead className="font-semibold text-muted-foreground text-center">GMB</TableHead>
+                  <TableHead className="font-semibold text-muted-foreground text-center">Logo</TableHead>
+                  <TableHead className="font-semibold text-muted-foreground text-center">Website</TableHead>
+                  <TableHead className="font-semibold text-muted-foreground text-center">Documentation</TableHead>
+                  <TableHead className="text-right font-semibold text-muted-foreground">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredLeads.map((lead) => (
-                  <TableRow key={lead.id}>
-                    <TableCell>{lead.createdAt ? new Date(lead.createdAt).toLocaleDateString() : "N/A"}</TableCell>
-                    <TableCell>{lead.id}</TableCell>
-                    <TableCell>
-                      <div className="font-medium">{lead.customerName}</div>
-                      <div className="text-xs text-muted-foreground">{lead.company}</div>
-                    </TableCell>
-                    <TableCell>
-                      <div>{lead.mobile}</div>
-                      <div className="text-xs text-muted-foreground">{lead.email}</div>
-                    </TableCell>
-                    <TableCell>{lead.callOutcome || "-"}</TableCell>
-                    <TableCell>{lead.remarks || "-"}</TableCell>
-                    <TableCell>{lead.followUpDate || "-"}</TableCell>
-                    <TableCell>{lead.clientFollowUp || "-"}</TableCell>
-                    <TableCell>{lead.constructionInteriorWork ? "Yes" : "No"}</TableCell>
-                    <TableCell>{lead.gmbProfileWork ? "Yes" : "No"}</TableCell>
-                    <TableCell>{lead.logoWork ? "Yes" : "No"}</TableCell>
-                    <TableCell>{lead.websiteWork ? "Yes" : "No"}</TableCell>
-                    <TableCell>{lead.documentationWork ? "Yes" : "No"}</TableCell>
-                    <TableCell className="text-right">
-                      <Button variant="ghost" size="icon" onClick={() => setEditingLead(lead)}>
-                        <Pencil className="h-4 w-4" />
-                      </Button>
-                      {user.role === "admin" && (
-                        <Button variant="ghost" size="icon" className="text-destructive" onClick={async () => {
-                          if(confirm("Are you sure?")) {
-                            await api.deleteLead(lead.id);
-                            toast.success("Lead deleted");
-                          }
-                        }}>
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      )}
-                    </TableCell>
-                  </TableRow>
-                ))}
-                {filteredLeads.length === 0 && (
+                {paginatedData.map((lead) => {
+                  const employeeName = db.employees?.find((e: any) => e.id === lead.employeeId)?.name || lead.employeeId || "-";
+                  return (
+                    <TableRow key={lead.id} className="hover:bg-muted/30 transition-colors">
+                      <TableCell className="text-sm">
+                        <div className="flex items-center text-muted-foreground">
+                          <CalendarIcon className="mr-1 h-3 w-3" />
+                          {lead.createdAt ? new Date(lead.createdAt).toLocaleDateString() : "N/A"}
+                        </div>
+                        <div className="text-[10px] text-muted-foreground uppercase">{lead.id}</div>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center font-medium text-sm">
+                          <UserIcon className="mr-1 h-3 w-3 text-muted-foreground" />
+                          {employeeName}
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <div className="font-semibold text-sm">{lead.customerName}</div>
+                        <div className="text-xs text-muted-foreground">{lead.company || "-"}</div>
+                      </TableCell>
+                      <TableCell>
+                        <div className="font-medium text-sm">{lead.mobile}</div>
+                        <div className="text-xs text-muted-foreground">{lead.email || "-"}</div>
+                      </TableCell>
+                      <TableCell>
+                        {getStatusBadge(lead.leadStatus)}
+                        {lead.callOutcome && <div className="text-xs mt-1 text-muted-foreground max-w-[120px] truncate" title={lead.callOutcome}>{lead.callOutcome}</div>}
+                      </TableCell>
+                      <TableCell>
+                        <div className="text-sm max-w-[150px] truncate" title={lead.remarks}>{lead.remarks || "-"}</div>
+                      </TableCell>
+                      <TableCell>
+                        {lead.followUpDate && (
+                          <div className="text-sm px-2 py-1 bg-amber-50 text-amber-700 rounded border border-amber-100 inline-block">
+                            {lead.followUpDate}
+                          </div>
+                        )}
+                        {!lead.followUpDate && "-"}
+                      </TableCell>
+                      <TableCell className="text-sm max-w-[150px] truncate" title={lead.clientFollowUp}>{lead.clientFollowUp || "-"}</TableCell>
+                      <TableCell className="text-center">{lead.constructionInteriorWork ? <Badge variant="secondary" className="bg-emerald-100 text-emerald-700">Yes</Badge> : <span className="text-muted-foreground/30">-</span>}</TableCell>
+                      <TableCell className="text-center">{lead.gmbProfileWork ? <Badge variant="secondary" className="bg-emerald-100 text-emerald-700">Yes</Badge> : <span className="text-muted-foreground/30">-</span>}</TableCell>
+                      <TableCell className="text-center">{lead.logoWork ? <Badge variant="secondary" className="bg-emerald-100 text-emerald-700">Yes</Badge> : <span className="text-muted-foreground/30">-</span>}</TableCell>
+                      <TableCell className="text-center">{lead.websiteWork ? <Badge variant="secondary" className="bg-emerald-100 text-emerald-700">Yes</Badge> : <span className="text-muted-foreground/30">-</span>}</TableCell>
+                      <TableCell className="text-center">{lead.documentationWork ? <Badge variant="secondary" className="bg-emerald-100 text-emerald-700">Yes</Badge> : <span className="text-muted-foreground/30">-</span>}</TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex items-center justify-end gap-2">
+                          <Button variant="outline" size="sm" className="h-8 border-primary/20 text-primary hover:bg-primary/10" onClick={() => setEditingLead(lead)}>
+                            <Pencil className="h-3.5 w-3.5 mr-1" />
+                            Edit
+                          </Button>
+                          {(user.role === "admin" || user.jobRole === "Sales") && (
+                            <Button variant="outline" size="sm" className="h-8 border-destructive/20 text-destructive hover:bg-destructive/10" onClick={async () => {
+                              if(confirm("Are you sure you want to delete this lead?")) {
+                                await api.deleteLead(lead.id);
+                                toast.success("Lead deleted successfully");
+                              }
+                            }}>
+                              <Trash2 className="h-3.5 w-3.5 mr-1" />
+                              Delete
+                            </Button>
+                          )}
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+                {paginatedData.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={14} className="text-center py-8 text-muted-foreground">No leads found.</TableCell>
+                    <TableCell colSpan={15} className="text-center py-12">
+                      <div className="flex flex-col items-center justify-center text-muted-foreground">
+                        <Search className="h-8 w-8 mb-2 opacity-20" />
+                        <p>No leads found matching your criteria.</p>
+                      </div>
+                    </TableCell>
                   </TableRow>
                 )}
               </TableBody>
             </Table>
           </div>
+          {totalPages > 1 && (
+            <div className="p-4 border-t border-border bg-muted/10">
+              <DataTablePagination 
+                page={page} 
+                pageSize={pageSize}
+                totalPages={totalPages}
+                totalItems={totalItems}
+                startIndex={startIndex}
+                endIndex={endIndex}
+                onPageChange={setPage}
+                onPageSizeChange={setPageSize}
+              />
+            </div>
+          )}
         </CardContent>
       </Card>
 
