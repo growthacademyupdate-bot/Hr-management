@@ -7,7 +7,200 @@ import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Textarea } from '@/components/ui/textarea';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from 'sonner';
+
+const quotationTemplates: Record<string, { description: string; serviceDetails: string }> = {
+  ecommerce: {
+    description: 'E-commerce Website',
+    serviceDetails: `Modern & Responsive E-Commerce Website
+Developed a fully responsive e-commerce website using the MERN Stack (MongoDB, Express.js, React.js, Node.js).
+Optimized for desktop, tablet, and mobile devices.
+User Registration & Authentication
+User signup and login functionality.
+Secure authentication and authorization using JWT.
+Password encryption and protected user accounts.
+Product Management
+Add, update, delete, and manage products from the admin panel.
+Product details including name, description, price, images, category, stock, and specifications.
+Product availability and inventory management.
+Category & Sub-Category Management
+Create and manage product categories and sub-categories.
+Display products according to their respective categories.
+Product Search & Filtering
+Search products by name and keywords.
+Filter products based on category, price, availability, and other attributes.
+Sorting functionality for better product discovery.
+Product Details Page
+Detailed product information with multiple product images.
+Product pricing, descriptions, stock availability, and specifications.
+Add-to-cart and wishlist functionality.
+Shopping Cart
+Add and remove products from the cart.
+Update product quantities.
+Automatic calculation of subtotal and total amount.
+Cart data maintained for the logged-in user.
+Wishlist
+Users can save products to their wishlist.
+Add wishlist products directly to the shopping cart.
+Checkout & Order Management
+Complete checkout process with customer and delivery details.
+Order summary before placing an order.
+Order creation and order history for customers.
+Online Payment Integration
+Integration of an online payment gateway such as Razorpay/Stripe.
+Secure payment processing.
+Payment status and transaction tracking.
+Order Tracking
+Users can view their previous and current orders.
+Order status such as Pending, Confirmed, Processing, Shipped, Delivered, and Cancelled.
+Admin can update order status.
+Admin Dashboard
+Dedicated admin dashboard for managing the complete e-commerce platform.
+Manage users, products, categories, inventory, orders, and payments.
+Dashboard statistics and business overview.
+Inventory Management
+Track available product stock.
+Automatically update stock based on orders.
+Low-stock management and inventory updates.
+Customer Management
+Admin can view and manage registered customers.
+Customer details and order history can be monitored from the admin panel.
+API Development
+Developed RESTful APIs using Node.js and Express.js.
+APIs for authentication, products, categories, users, cart, wishlist, orders, and payments.
+Database Management
+MongoDB used as the primary database.
+MongoDB/Mongoose used for efficient data storage and management.
+Security
+JWT-based authentication and protected routes.
+Password hashing and secure API access.
+Role-based access for Admin and Customer.
+Performance & Optimization
+Optimized API requests and database queries.
+Efficient product loading and responsive user experience.
+Proper frontend and backend structure for scalability.
+Admin Reports & Analytics
+Overview of total products, customers, orders, revenue, and pending orders.
+Order and sales information available through the admin dashboard.
+Deployment & Production Setup
+Complete frontend and backend deployment setup.
+Production-ready environment configuration.
+Domain, hosting/server, database, payment gateway, and third-party API integration can be configured as required.`
+  },
+  digital: {
+    description: 'Digital Marketing / Social Media Management',
+    serviceDetails: `Social Media Marketing strategy and planning.
+Social media profile setup and optimization.
+Content Planning based on brand and target audience.
+Creative Post Designing for social media platforms.
+Reels & Short Video Creation.
+Professional Video Shooting for reels, promotional videos, and brand content.
+Product/Service Photography for marketing content.
+Video editing, transitions, effects, and background music.
+Reels Editing & Optimization for social media platforms.
+Caption and content writing for posts and reels.
+Hashtag research and content optimization.
+Promotional creatives for offers, products, and services.
+Brand-focused content creation and visual consistency.
+Social media posting and content publishing.
+Monthly Content Calendar preparation.
+Campaign and promotional content planning.
+Performance tracking and basic social media reporting.
+Regular content updates based on marketing requirements.`
+  },
+  billing: {
+    description: 'Billing S/W',
+    serviceDetails: `Development of Billing & POS Software using the MERN Stack.
+Secure Admin Login & Role-Based Access.
+Admin Dashboard with sales, revenue, orders, and business statistics.
+Product Management – add, edit, delete, and manage products.
+Category Management for organizing products.
+Customer Management – maintain customer details and purchase history.
+Billing / POS Module for creating and processing bills.
+Generate GST/Tax Invoices with applicable tax calculations.
+Discount Management for applying item-wise or bill-wise discounts.
+Payment Management with Cash, UPI, Card, and other payment options.
+Sales Management with daily, weekly, and monthly sales records.
+Purchase Management for managing product purchases.
+Inventory / Stock Management with stock-in and stock-out tracking.
+Low Stock Alerts for inventory monitoring.
+Supplier Management for maintaining supplier records.
+Expense Management for tracking business expenses.
+Return / Refund Management for sales and purchase returns.
+Reports & Analytics for sales, purchases, inventory, expenses, and payments.
+Search, filter, sorting, and pagination functionality.
+Invoice Print & PDF generation.
+User/Employee Management with role-based permissions.
+Responsive interface for Desktop, Tablet, and Mobile.
+REST API development using Node.js & Express.js.
+MongoDB database integration.
+React.js based frontend development.
+JWT Authentication and authorization.
+Basic security, validation, and error handling.
+Production deployment and configuration.
+Testing and bug fixing before final delivery.`
+  },
+  erp: {
+    description: 'ERP/CRM',
+    serviceDetails: `Development of a custom ERP/CRM software using the MERN Stack.
+Admin, Employee, and Customer modules.
+Secure Login & Role-Based Access Control.
+Admin dashboard with business overview and key statistics.
+Customer Management – add, edit, delete, and manage customer records.
+Employee Management – employee profiles, roles, and responsibilities.
+Lead Management – create, assign, track, and manage leads.
+Follow-up Management – schedule and track customer follow-ups.
+Task Management – assign tasks to employees and track task status.
+Sales Management – manage sales activities, quotations, and transactions.
+Quotation Management – create, manage, and download quotations.
+Invoice Management – create and manage invoices.
+Payment Management – track received and pending payments.
+Expense Management – record and manage business expenses.
+Reports & Analytics – generate business and performance reports.
+Notifications & Alerts for important activities and updates.
+Search, filter, sorting, and pagination functionality.
+Dashboard with charts, tables, and graphical reports.
+Responsive UI for Desktop, Tablet, and Mobile.
+REST API development using Node.js & Express.js.
+MongoDB database integration for data management.
+React.js frontend development.
+Authentication and authorization using JWT.
+API validation, error handling, and basic security implementation.
+Deployment and production configuration.
+Testing and bug fixing before final delivery.`
+  },
+  portfolio: {
+    description: 'Portfolio Website',
+    serviceDetails: `Professional Company Portfolio Website design and development.
+Modern, responsive, and user-friendly UI/UX.
+Home Page with company introduction, highlights, and key sections.
+About Company section with company information, vision, mission, and objectives.
+Services section to showcase company services.
+Projects / Portfolio section to display completed projects and work.
+Team Members section to showcase employees/team members.
+Testimonials section for client reviews and feedback.
+Gallery section for company images and activities.
+Contact Us page with enquiry/contact form.
+Integration of WhatsApp, Email, Google Maps, and Social Media links.
+Admin Login with secure authentication.
+Admin dashboard to manage website content.
+Admin can Add, Edit, Delete, and Update Services.
+Admin can Add, Edit, Delete, and Update Projects/Portfolio.
+Admin can manage Team Members.
+Admin can manage Testimonials and Client Reviews.
+Admin can manage Gallery/Images.
+Admin can update About Company content.
+Admin can manage Contact/Enquiry details.
+Image upload and content management functionality.
+Fully responsive website for Desktop, Tablet, and Mobile.
+SEO-friendly website structure.
+Basic performance optimization.
+Website testing and bug fixing before deployment.
+Production deployment and basic configuration.
+6 Months Free Support for minor bug fixes and technical assistance.`
+  }
+};
 
 export default function QuotationGenerator() {
   const [formData, setFormData] = useState({
@@ -60,6 +253,15 @@ export default function QuotationGenerator() {
     const newServices = [...additionalServices];
     newServices[index] = { ...newServices[index], [field]: value };
     setAdditionalServices(newServices);
+  };
+
+  const handleQuotationTemplateSelect = (value: string) => {
+    if (quotationTemplates[value]) {
+      const template = quotationTemplates[value];
+      const newItems = [...items];
+      newItems[0] = { ...newItems[0], description: template.description, serviceDetails: template.serviceDetails };
+      setItems(newItems);
+    }
   };
 
   const removeAdditionalService = (index: number) => {
@@ -146,6 +348,21 @@ export default function QuotationGenerator() {
             <CardTitle className="text-lg">Customer Information</CardTitle>
           </CardHeader>
           <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-2 md:col-span-2">
+              <Label>Select Quotation</Label>
+              <Select onValueChange={handleQuotationTemplateSelect}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select template..." />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="ecommerce">1. E-commerce</SelectItem>
+                  <SelectItem value="digital">2. Digital</SelectItem>
+                  <SelectItem value="billing">3. Billing S/W</SelectItem>
+                  <SelectItem value="erp">4. ERP/CRM</SelectItem>
+                  <SelectItem value="portfolio">5. Portfolio</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
             <div className="space-y-2">
               <Label>Customer Name *</Label>
               <Input name="customerName" value={formData.customerName} onChange={handleInputChange} placeholder="Enter customer name" />
