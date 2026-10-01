@@ -169,11 +169,6 @@ export async function POST(req: NextRequest) {
       if (currentY + Math.min(itemHeight, 100) > doc.page.height - 40) {
         doc.addPage();
         currentY = 40;
-        // Redraw table headers
-        doc.rect(40, currentY, 515, 20).fillAndStroke('#0A3161', '#0A3161');
-        doc.fillColor('white').font('Helvetica-Bold').fontSize(10).text('DESCRIPTION', 50, currentY + 5);
-        doc.text('TOTAL AMOUNT', 360, currentY + 5);
-        currentY += 20;
       }
       
       let chunkStartY = currentY;
@@ -220,11 +215,6 @@ export async function POST(req: NextRequest) {
             // Add new page
             doc.addPage();
             chunkStartY = 40;
-            // Draw table header
-            doc.rect(40, chunkStartY, 515, 20).fillAndStroke('#0A3161', '#0A3161');
-            doc.fillColor('white').font('Helvetica-Bold').fontSize(10).text('DESCRIPTION', 50, chunkStartY + 5);
-            doc.text('TOTAL AMOUNT', 360, chunkStartY + 5);
-            chunkStartY += 20;
             currentTextY = chunkStartY + 10;
             
             // Reset font for the next text

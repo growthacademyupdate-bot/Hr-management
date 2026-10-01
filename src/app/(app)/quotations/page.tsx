@@ -13,80 +13,16 @@ import { toast } from 'sonner';
 const quotationTemplates: Record<string, { description: string; serviceDetails: string }> = {
   ecommerce: {
     description: 'E-commerce Website',
-    serviceDetails: `Modern & Responsive E-Commerce Website
-Developed a fully responsive e-commerce website using the MERN Stack (MongoDB, Express.js, React.js, Node.js).
-Optimized for desktop, tablet, and mobile devices.
-User Registration & Authentication
-User signup and login functionality.
-Secure authentication and authorization using JWT.
-Password encryption and protected user accounts.
-Product Management
-Add, update, delete, and manage products from the admin panel.
-Product details including name, description, price, images, category, stock, and specifications.
-Product availability and inventory management.
-Category & Sub-Category Management
-Create and manage product categories and sub-categories.
-Display products according to their respective categories.
-Product Search & Filtering
-Search products by name and keywords.
-Filter products based on category, price, availability, and other attributes.
-Sorting functionality for better product discovery.
-Product Details Page
-Detailed product information with multiple product images.
-Product pricing, descriptions, stock availability, and specifications.
-Add-to-cart and wishlist functionality.
-Shopping Cart
-Add and remove products from the cart.
-Update product quantities.
-Automatic calculation of subtotal and total amount.
-Cart data maintained for the logged-in user.
-Wishlist
-Users can save products to their wishlist.
-Add wishlist products directly to the shopping cart.
-Checkout & Order Management
-Complete checkout process with customer and delivery details.
-Order summary before placing an order.
-Order creation and order history for customers.
-Online Payment Integration
-Integration of an online payment gateway such as Razorpay/Stripe.
-Secure payment processing.
-Payment status and transaction tracking.
-Order Tracking
-Users can view their previous and current orders.
-Order status such as Pending, Confirmed, Processing, Shipped, Delivered, and Cancelled.
-Admin can update order status.
-Admin Dashboard
-Dedicated admin dashboard for managing the complete e-commerce platform.
-Manage users, products, categories, inventory, orders, and payments.
-Dashboard statistics and business overview.
-Inventory Management
-Track available product stock.
-Automatically update stock based on orders.
-Low-stock management and inventory updates.
-Customer Management
-Admin can view and manage registered customers.
-Customer details and order history can be monitored from the admin panel.
-API Development
-Developed RESTful APIs using Node.js and Express.js.
-APIs for authentication, products, categories, users, cart, wishlist, orders, and payments.
-Database Management
-MongoDB used as the primary database.
-MongoDB/Mongoose used for efficient data storage and management.
-Security
-JWT-based authentication and protected routes.
-Password hashing and secure API access.
-Role-based access for Admin and Customer.
-Performance & Optimization
-Optimized API requests and database queries.
-Efficient product loading and responsive user experience.
-Proper frontend and backend structure for scalability.
-Admin Reports & Analytics
-Overview of total products, customers, orders, revenue, and pending orders.
-Order and sales information available through the admin dashboard.
-Deployment & Production Setup
-Complete frontend and backend deployment setup.
-Production-ready environment configuration.
-Domain, hosting/server, database, payment gateway, and third-party API integration can be configured as required.`
+    serviceDetails: `Responsive E-Commerce Website – Developed using MongoDB, Express.js, React.js, and Node.js with mobile, tablet, and desktop support.
+User Authentication & Security – Signup, login, JWT authentication, password hashing, protected routes, and role-based access.
+Product & Category Management – Admin can manage products, categories, sub-categories, pricing, images, descriptions, specifications, and stock.
+Search & Product Filtering – Product search, category/price/availability filters, sorting, and detailed product pages.
+Cart & Wishlist – Add/remove products, quantity management, wishlist, and automatic cart total calculation.
+Checkout & Online Payment – Customer details, delivery information, order summary, and Razorpay/Stripe payment integration.
+Order Management & Tracking – Order placement, order history, payment status, and tracking through Pending, Confirmed, Processing, Shipped, Delivered, and Cancelled statuses.
+Admin Dashboard – Centralized management of customers, products, categories, inventory, orders, payments, revenue, and business statistics.
+REST API & Database – Developed RESTful APIs using Node.js/Express.js with MongoDB/Mongoose for authentication, products, orders, cart, wishlist, and payments.
+Performance & Deployment – Optimized application performance, database queries, API requests, and provided production deployment/configuration support.`
   },
   digital: {
     description: 'Digital Marketing / Social Media Management',
@@ -219,7 +155,7 @@ export default function QuotationGenerator() {
   });
 
   const [items, setItems] = useState([
-    { description: '', unitPrice: 0, quantity: 1, sgstPercent: 0, cgstPercent: 0, includeGst: true, serviceDetails: '' }
+    { description: '', unitPrice: '', quantity: '', sgstPercent: '', cgstPercent: '', includeGst: true, serviceDetails: '' }
   ]);
 
   const [additionalServices, setAdditionalServices] = useState<{ description: string, amount: string }[]>([]);
@@ -236,7 +172,7 @@ export default function QuotationGenerator() {
   };
 
   const addItem = () => {
-    setItems([...items, { description: '', unitPrice: 0, quantity: 1, sgstPercent: 0, cgstPercent: 0, includeGst: true, serviceDetails: '' }]);
+    setItems([...items, { description: '', unitPrice: '', quantity: '', sgstPercent: '', cgstPercent: '', includeGst: true, serviceDetails: '' }]);
   };
 
   const removeItem = (index: number) => {
@@ -289,7 +225,7 @@ export default function QuotationGenerator() {
   const [isGenerating, setIsGenerating] = useState(false);
 
   const generatePDF = async () => {
-    if (!formData.customerName || !formData.companyName || !formData.customerMobile || !formData.address || !formData.pincode || !formData.quoteNumber || !formData.date || !formData.validUntil || !formData.bdeName || items.some(i => !i.description || i.unitPrice < 0 || i.quantity <= 0)) {
+    if (!formData.customerName || !formData.companyName || !formData.customerMobile || !formData.address || !formData.pincode || !formData.quoteNumber || !formData.date || !formData.validUntil || !formData.bdeName || items.some(i => !i.description || i.unitPrice === '' || Number(i.unitPrice) < 0 || i.quantity === '' || Number(i.quantity) <= 0)) {
       toast.error("Please fill all required fields correctly.");
       return;
     }
