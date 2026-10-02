@@ -208,7 +208,7 @@ export function AdminDashboard() {
         </Card>
       </div>
 
-      <div className="grid lg:grid-cols-3 gap-6">
+      <div className="grid lg:grid-cols-2 gap-6">
         {/* EXPENSE OVERVIEW */}
         <Card className="border-0 shadow-sm">
           <CardHeader><CardTitle>Expense Overview</CardTitle></CardHeader>
@@ -254,7 +254,7 @@ export function AdminDashboard() {
           </CardContent>
         </Card>
 
-        {/* QUICK ACTIONS */}
+        {/* QUICK ACTIONS 
         <Card className="border-0 shadow-sm bg-primary/5 border-primary/10">
           <CardHeader><CardTitle>Quick Actions</CardTitle></CardHeader>
           <CardContent>
@@ -268,6 +268,7 @@ export function AdminDashboard() {
             </div>
           </CardContent>
         </Card>
+        */}
       </div>
 
       <div className="mt-6">

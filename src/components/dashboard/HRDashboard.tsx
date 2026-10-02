@@ -146,6 +146,7 @@ export function HRDashboard() {
         </Card>
       </div>
 
+      {/* 
       <div className="grid lg:grid-cols-3 gap-6">
         <Card className="border-0 shadow-sm">
           <CardHeader><CardTitle>Recent Leave Requests</CardTitle></CardHeader>
@@ -203,6 +204,7 @@ export function HRDashboard() {
           </CardContent>
         </Card>
       </div>
+      */}
       
       <div className="mt-6">
         <EmployeeActivityTable />
