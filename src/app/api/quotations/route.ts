@@ -278,25 +278,69 @@ export async function POST(req: NextRequest) {
       currentY = addY + 5;
     }
 
-    let footerY = currentY;
-    // We expect the footer to need around 450 pixels of height now because of extra terms
-    if (footerY + 450 > doc.page.height - 40) {
-      doc.addPage();
-      footerY = 40;
-    } else {
-      footerY += 15;
+    let footerY = currentY + 15;
+    let bankDetailsDrawn = false;
+    let bankBoxBottom = 0;
+
+    const drawBankDetails = (startY: number) => {
+        doc.rect(370, startY, 185, 20).fillAndStroke('#0A3161', '#0A3161');
+        doc.fillColor('white').font('Helvetica-Bold').fontSize(10).text('BANK DETAILS', 375, startY + 5);
+        
+        let bY = startY + 25;
+        doc.fillColor('black');
+        doc.font('Helvetica-Bold').fontSize(8).text('Bank: ', 375, bY, { continued: true }).font('Helvetica').text('Punjab National Bank');
+        bY += 12;
+        doc.font('Helvetica-Bold').text('Account Name: ', 375, bY, { continued: true }).font('Helvetica').text('AL-MAWA INTERNATIONAL (OPC) PRIVATE LIMITED', { width: 175 });
+        bY += doc.heightOfString('AL-MAWA INTERNATIONAL (OPC) PRIVATE LIMITED', { width: 175 }) + 2;
+        doc.font('Helvetica-Bold').text('Account No: ', 375, bY, { continued: true }).font('Helvetica').text('6630002100005155');
+        bY += 12;
+        doc.font('Helvetica-Bold').text('IFSC: ', 375, bY, { continued: true }).font('Helvetica').text('PUNB0663000');
+        bY += 12;
+        doc.font('Helvetica-Bold').text('Swift Code: ', 375, bY, { continued: true }).font('Helvetica').text('0300641');
+        bY += 12;
+        doc.font('Helvetica-Bold').text('Branch: ', 375, bY, { continued: true }).font('Helvetica').text('Kharadi, Pune Maharashtra', { width: 175 });
+        
+        bY += 25;
+        const qrPath = path.join(process.cwd(), 'public', 'qr_code.png');
+        if (fs.existsSync(qrPath)) {
+          doc.font('Helvetica-Bold').fontSize(8).text('SCAN TO PAY (UPI)', 375, bY, { width: 175, align: 'center' });
+          bY += 12;
+          doc.image(qrPath, 375 + (175 - 100)/2, bY, { width: 100 });
+          bY += 105;
+          doc.font('Helvetica-Bold').fontSize(8).text('UPI ID: 9028346900m@pnb', 375, bY, { width: 175, align: 'center' });
+        }
+
+        const authSignY = bY + 30;
+        doc.moveTo(375, authSignY).lineTo(545, authSignY).stroke('#000000');
+        doc.font('Helvetica-Bold').fontSize(9).text("CONCERNED AUTHORITY", 375, authSignY + 5);
+
+        const bottom = authSignY + 20;
+        doc.rect(370, startY + 20, 185, bottom - (startY + 20)).stroke('#cccccc');
+        return bottom;
+    };
+
+    let termsBoxY = footerY;
+    let isFirstTermsPage = true;
+    let hasBankBoxThisPage = false;
+    
+    // If Bank Details fit, draw it now. Needs ~285 points.
+    if (termsBoxY + 285 <= doc.page.height - 40) {
+        bankBoxBottom = drawBankDetails(termsBoxY);
+        bankDetailsDrawn = true;
+        hasBankBoxThisPage = true;
     }
 
-    // Terms and Conditions Box (Left)
-    doc.rect(40, footerY, 320, 20).fillAndStroke('#0A3161', '#0A3161');
-    doc.fillColor('white').font('Helvetica-Bold').fontSize(10).text('TERMS AND CONDITIONS', 45, footerY + 5);
-    
-    // Bank Details Box (Right)
-    doc.rect(370, footerY, 185, 20).fillAndStroke('#0A3161', '#0A3161');
-    doc.fillColor('white').font('Helvetica-Bold').fontSize(10).text('BANK DETAILS', 375, footerY + 5);
+    const drawTermsHeader = (y: number, hasBankBox: boolean) => {
+      const width = hasBankBox ? 320 : 515;
+      doc.rect(40, y, width, 20).fillAndStroke('#0A3161', '#0A3161');
+      doc.fillColor('white').font('Helvetica-Bold').fontSize(10).text('TERMS AND CONDITIONS', 45, y + 5);
+      return y + 25;
+    };
 
-    // Terms content
+    let tY = drawTermsHeader(termsBoxY, hasBankBoxThisPage);
+    let termsStartY = termsBoxY + 20;
     doc.fillColor('black').font('Helvetica').fontSize(7);
+    
     const terms = [
       "Valid for 3 days from the date of issue; prices may change thereafter.",
       "Covers only the services mentioned; additional work will be charged separately.",
@@ -333,58 +377,81 @@ export async function POST(req: NextRequest) {
       "Note: The above charges are not included in the development/project cost mentioned in this quotation and will be billed separately based on actual third-party service charges."
     ];
 
-    let tY = footerY + 25;
-    terms.forEach(term => {
-      const h = doc.heightOfString(`• ${term}`, { width: 310 });
-      doc.text(`• ${term}`, 45, tY, { width: 310 });
+    for (let i = 0; i < terms.length; i++) {
+      const term = terms[i];
+      let boxWidth = hasBankBoxThisPage ? 310 : 505;
+      let h = doc.heightOfString(`• ${term}`, { width: boxWidth });
+      
+      if (tY + h > doc.page.height - 40) {
+        doc.rect(40, termsStartY, hasBankBoxThisPage ? 320 : 515, tY - termsStartY).stroke('#cccccc');
+        doc.addPage();
+        isFirstTermsPage = false;
+        termsBoxY = 40;
+        
+        hasBankBoxThisPage = false;
+        if (!bankDetailsDrawn) {
+            bankBoxBottom = drawBankDetails(termsBoxY);
+            bankDetailsDrawn = true;
+            hasBankBoxThisPage = true;
+        }
+
+        tY = termsBoxY + 5;
+        termsStartY = termsBoxY;
+        doc.fillColor('black').font('Helvetica').fontSize(7);
+        
+        // Recalculate width and height for the new page context
+        boxWidth = hasBankBoxThisPage ? 310 : 505;
+        h = doc.heightOfString(`• ${term}`, { width: boxWidth });
+      }
+      
+      doc.text(`• ${term}`, 45, tY, { width: boxWidth });
       tY += h + 2;
-    });
+    }
 
     tY += 15;
+    if (tY + 30 > doc.page.height - 40) {
+        doc.rect(40, termsStartY, hasBankBoxThisPage ? 320 : 515, tY - 15 - termsStartY).stroke('#cccccc');
+        doc.addPage();
+        isFirstTermsPage = false;
+        termsBoxY = 40;
+        
+        hasBankBoxThisPage = false;
+        if (!bankDetailsDrawn) {
+            bankBoxBottom = drawBankDetails(termsBoxY);
+            bankDetailsDrawn = true;
+            hasBankBoxThisPage = true;
+        }
+        
+        tY = 40;
+        termsStartY = 40;
+    }
+
     doc.font('Helvetica-Oblique').text("Customer Acceptance (Sign below):", 45, tY);
     tY += 25;
     doc.moveTo(45, tY).lineTo(200, tY).stroke('#000000');
     tY += 5;
 
-    // Draw the Terms Border Box
-    doc.rect(40, footerY + 20, 320, tY - (footerY + 20)).stroke('#cccccc');
+    doc.rect(40, termsStartY, hasBankBoxThisPage ? 320 : 515, tY - termsStartY).stroke('#cccccc');
 
-    // Bank details content
-    let bY = footerY + 25;
-    doc.font('Helvetica-Bold').fontSize(8).text('Bank: ', 375, bY, { continued: true }).font('Helvetica').text('Punjab National Bank');
-    bY += 12;
-    doc.font('Helvetica-Bold').text('Account Name: ', 375, bY, { continued: true }).font('Helvetica').text('AL-MAWA INTERNATIONAL (OPC) PRIVATE LIMITED', { width: 175 });
-    const accNameH = doc.heightOfString('AL-MAWA INTERNATIONAL (OPC) PRIVATE LIMITED', { width: 175 });
-    bY += accNameH + 2;
-    doc.font('Helvetica-Bold').text('Account No: ', 375, bY, { continued: true }).font('Helvetica').text('6630002100005155');
-    bY += 12;
-    doc.font('Helvetica-Bold').text('IFSC: ', 375, bY, { continued: true }).font('Helvetica').text('PUNB0663000');
-    bY += 12;
-    doc.font('Helvetica-Bold').text('Swift Code: ', 375, bY, { continued: true }).font('Helvetica').text('0300641');
-    bY += 12;
-    doc.font('Helvetica-Bold').text('Branch: ', 375, bY, { continued: true }).font('Helvetica').text('Kharadi, Pune Maharashtra', { width: 175 });
+    let finalY = tY + 20;
+    if (hasBankBoxThisPage) {
+        finalY = Math.max(tY, bankBoxBottom) + 20;
+    }
     
-    bY += 25;
-    const qrPath = path.join(process.cwd(), 'public', 'qr_code.png');
-    if (fs.existsSync(qrPath)) {
-      doc.font('Helvetica-Bold').fontSize(8).text('SCAN TO PAY (UPI)', 375, bY, { width: 175, align: 'center' });
-      bY += 12;
-      doc.image(qrPath, 375 + (175 - 100)/2, bY, { width: 100 });
-      bY += 105;
-      doc.font('Helvetica-Bold').fontSize(8).text('UPI ID: 9028346900m@pnb', 375, bY, { width: 175, align: 'center' });
+    // Just in case terms were very short and didn't trigger a page break, but Bank Box didn't fit
+    if (!bankDetailsDrawn) {
+        doc.addPage();
+        bankBoxBottom = drawBankDetails(40);
+        hasBankBoxThisPage = true;
+        finalY = bankBoxBottom + 20;
     }
 
-    // Concerned Authority Signature (Align near the bottom of the terms box or below QR)
-    const authSignY = Math.max(tY - 30, bY + 40);
-    doc.moveTo(375, authSignY).lineTo(545, authSignY).stroke('#000000');
-    doc.font('Helvetica-Bold').fontSize(9).text("CONCERNED AUTHORITY", 375, authSignY + 5);
-
-    // Bank Details Border Box - make it match the Terms box height exactly
-    doc.rect(370, footerY + 20, 185, tY - (footerY + 20)).stroke('#cccccc');
-
-    // Thank You Text at bottom center
-    const thankYouY = Math.max(tY, authSignY + 20) + 20;
-    doc.font('Helvetica-Bold').fontSize(14).fillColor('#0078D7').text('Thank You For The Opportunity!', 40, thankYouY, { align: 'center', width: 515 });
+    if (finalY + 20 > doc.page.height - 40) {
+        doc.addPage();
+        doc.font('Helvetica-Bold').fontSize(14).fillColor('#0078D7').text('Thank You For The Opportunity!', 40, 40, { align: 'center', width: 515 });
+    } else {
+        doc.font('Helvetica-Bold').fontSize(14).fillColor('#0078D7').text('Thank You For The Opportunity!', 40, finalY, { align: 'center', width: 515 });
+    }
 
     doc.end();
 

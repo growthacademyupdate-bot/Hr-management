@@ -138,6 +138,45 @@ Production deployment and basic configuration.
   }
 };
 
+const digitalPackages = {
+  basic: {
+    description: 'Digital Marketing - Basic Package (4 Reels + 6 Posts)',
+    unitPrice: '6000',
+    serviceDetails: `Social Media Marketing strategy and planning.
+Content Planning based on brand and target audience.
+Creative Post Designing for social media platforms (6 Posts/month).
+Reels & Short Video Creation and Editing (4 Reels/month).
+Caption and content writing for posts and reels.
+Hashtag research and content optimization.
+Regular content updates and posting.`
+  },
+  standard: {
+    description: 'Digital Marketing - Standard Package (6 Reels + 8 Posts)',
+    unitPrice: '10000',
+    serviceDetails: `Social Media Marketing strategy and planning.
+Content Planning based on brand and target audience.
+Creative Post Designing for social media platforms (8 Posts/month).
+Reels & Short Video Creation and Editing (6 Reels/month).
+Caption and content writing for posts and reels.
+Hashtag research and content optimization.
+Regular content updates and posting.
+Basic performance tracking and reporting.`
+  },
+  premium: {
+    description: 'Digital Marketing - Premium Package (10 Reels + 15 Posts)',
+    unitPrice: '15000',
+    serviceDetails: `Social Media Marketing strategy and planning.
+Content Planning based on brand and target audience.
+Creative Post Designing for social media platforms (15 Posts/month).
+Reels & Short Video Creation and Editing (10 Reels/month).
+Caption and content writing for posts and reels.
+Hashtag research and content optimization.
+Promotional creatives for offers, products, and services.
+Regular content updates and posting.
+Performance tracking and monthly reporting.`
+  }
+};
+
 export default function QuotationGenerator() {
   const [formData, setFormData] = useState({
     customerName: '',
@@ -159,6 +198,7 @@ export default function QuotationGenerator() {
   ]);
 
   const [additionalServices, setAdditionalServices] = useState<{ description: string, amount: string }[]>([]);
+  const [selectedTemplate, setSelectedTemplate] = useState<string>('');
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -192,10 +232,29 @@ export default function QuotationGenerator() {
   };
 
   const handleQuotationTemplateSelect = (value: string) => {
+    setSelectedTemplate(value);
     if (quotationTemplates[value]) {
       const template = quotationTemplates[value];
       const newItems = [...items];
       newItems[0] = { ...newItems[0], description: template.description, serviceDetails: template.serviceDetails };
+      setItems(newItems);
+    }
+  };
+
+  const handleDigitalPackageSelect = (value: string) => {
+    if (digitalPackages[value as keyof typeof digitalPackages]) {
+      const pkg = digitalPackages[value as keyof typeof digitalPackages];
+      const newItems = [...items];
+      newItems[0] = { 
+        ...newItems[0], 
+        description: pkg.description, 
+        serviceDetails: pkg.serviceDetails,
+        unitPrice: pkg.unitPrice,
+        quantity: '1',
+        cgstPercent: '9',
+        sgstPercent: '9',
+        includeGst: true
+      };
       setItems(newItems);
     }
   };
@@ -299,6 +358,21 @@ export default function QuotationGenerator() {
                 </SelectContent>
               </Select>
             </div>
+            {selectedTemplate === 'digital' && (
+              <div className="space-y-2 md:col-span-2">
+                <Label>Select Digital Package</Label>
+                <Select onValueChange={handleDigitalPackageSelect}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select digital package..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="basic">Basic (4 Reels + 6 Posts) - ₹6K</SelectItem>
+                    <SelectItem value="standard">Standard (6 Reels + 8 Posts) - ₹10K</SelectItem>
+                    <SelectItem value="premium">Premium (10 Reels + 15 Posts) - ₹15K</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
             <div className="space-y-2">
               <Label>Customer Name *</Label>
               <Input name="customerName" value={formData.customerName} onChange={handleInputChange} placeholder="Enter customer name" />
