@@ -1438,6 +1438,48 @@ export async function updateEmployeeDocuments(employeeId: string, documents: any
 // ----------------------------------------------------------------------
 // LEADS & POSITIVE CUSTOMERS
 // ----------------------------------------------------------------------
+export async function checkLeadFollowUpsAction(employeeId?: string) {
+  try {
+    const todayObj = new Date();
+    const todayStr = todayObj.toISOString().slice(0, 10);
+    const futureObj = new Date();
+    futureObj.setDate(futureObj.getDate() + 2);
+    const futureStr = futureObj.toISOString().slice(0, 10);
+
+    let query: any = {
+      leadStatus: { $in: ["NEW", "CONTACTED", "FOLLOW_UP", "INTERESTED", "POSITIVE"] },
+      followUpDate: { $gte: todayStr, $lte: futureStr }
+    };
+    if (employeeId) {
+      query.employeeId = employeeId;
+    }
+
+    const leads = await Lead.find(query).lean();
+    for (const lead of leads) {
+      const l = lead as any;
+      if (!l.followUpDate) continue;
+      const refId = `FOLLOWUP_${l.id}_${l.followUpDate}`;
+      const exists = await Notification.findOne({ referenceId: refId });
+      
+      if (!exists) {
+        await createNotification({
+          recipientId: l.employeeId,
+          senderId: "SYSTEM",
+          senderRole: "system",
+          title: "Lead Follow-up Reminder",
+          message: `Upcoming follow-up for lead "${l.customerName}" scheduled on ${l.followUpDate}.`,
+          type: "LEAD_FOLLOW_UP",
+          module: "sales",
+          referenceId: refId,
+          actionUrl: "/leads"
+        });
+      }
+    }
+  } catch (err) {
+    console.error("checkLeadFollowUpsAction error:", err);
+  }
+}
+
 export async function getLeads(role?: string, employeeId?: string) {
   try {
     await connectDB();
@@ -1447,6 +1489,10 @@ export async function getLeads(role?: string, employeeId?: string) {
     }
     // HR and Admin can see all
     const leads = await Lead.find(query).sort({ createdAt: -1 }).lean();
+    
+    // Check for nearby follow-ups asynchronously (fire and forget)
+    checkLeadFollowUpsAction(role === "employee" ? employeeId : undefined).catch(console.error);
+    
     return serialize(leads);
   } catch (error) {
     console.error("Failed to fetch leads:", error);

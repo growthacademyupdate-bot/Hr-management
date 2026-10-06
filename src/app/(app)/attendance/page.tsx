@@ -282,7 +282,12 @@ export default function AttendancePage() {
                 )}
                 <div className="text-muted-foreground">Total Working Time:</div>
                 <div className="font-medium text-right text-primary">
-                  {selectedRecord.totalWorkingSeconds ? formatDuration(selectedRecord.totalWorkingSeconds) : `${selectedRecord.workingHours || 0}h`}
+                  {(() => {
+                    const activeSession = selectedRecord.sessions?.find((s: any) => !s.logoutAt);
+                    const ongoingSecs = activeSession ? Math.max(0, Math.floor((Date.now() - new Date(activeSession.loginAt).getTime()) / 1000)) : 0;
+                    const totalSecs = (selectedRecord.totalWorkingSeconds || (selectedRecord.workingHours ? selectedRecord.workingHours * 3600 : 0)) + ongoingSecs;
+                    return totalSecs > 0 ? formatDuration(totalSecs) : `${selectedRecord.workingHours || 0}h`;
+                  })()}
                 </div>
               </div>
               
@@ -303,7 +308,13 @@ export default function AttendancePage() {
                           </div>
                         </div>
                         <Badge variant="secondary" className="font-mono">
-                          {formatDuration(session.durationSeconds)}
+                          {(() => {
+                            let dur = session.durationSeconds || 0;
+                            if (!session.logoutAt) {
+                              dur += Math.max(0, Math.floor((Date.now() - new Date(session.loginAt).getTime()) / 1000));
+                            }
+                            return formatDuration(dur);
+                          })()}
                         </Badge>
                       </div>
                     ))
