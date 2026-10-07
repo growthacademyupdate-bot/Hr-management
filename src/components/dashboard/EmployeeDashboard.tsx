@@ -12,6 +12,7 @@ import { Clock, Activity, ListChecks, CheckCircle2, TrendingUp, Calendar, Receip
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid } from "recharts";
 import { Skeleton } from "@/components/ui/skeleton";
 import { StatusBadge } from "@/components/dashboard/SharedDashboardComponents";
+import { SalesDashboard } from "@/components/dashboard/SalesDashboard";
 
 function formatDuration(seconds?: number) {
   if (!seconds) return "0h 0m";
@@ -90,6 +91,10 @@ export function EmployeeDashboard() {
         <StatCard label="Pending Expenses" value={pendingExpenses} icon={Receipt} tone="info" />
         <StatCard label="Unread Notifications" value={unreadNotifs} icon={Activity} tone="destructive" />
       </div>
+
+      {user.jobRole === "Sales" && (
+        <SalesDashboard />
+      )}
 
       <div className="grid lg:grid-cols-2 gap-4">
         {/* MY TASKS */}
