@@ -831,11 +831,11 @@ async function logLoginActivity(employeeId: string) {
   
   let existing = await Attendance.findOne({ employeeId, date });
   if (!existing) {
-    // 9:00 AM to 6:00 PM tracking: Mark as "Late" if login is after 09:15 AM
-    const initialStatus = time > "09:15" ? "Late" : "Present";
+    // 9:00 AM to 6:00 PM tracking: Mark as "Late" if login is after 09:45 AM
+    const initialStatus = time > "09:45" ? "Late" : "Present";
     existing = new Attendance({ id: `${employeeId}-${date}`, employeeId, date, firstLoginAt: now, sessions: [], status: initialStatus, productivity: 80, loginTime: time });
   } else if (existing.status === "Absent") {
-    existing.status = time > "09:15" ? "Late" : "Present";
+    existing.status = time > "09:45" ? "Late" : "Present";
   }
   
   const activeSession = existing.sessions?.find((s: any) => !s.logoutAt);
@@ -848,7 +848,7 @@ async function logLoginActivity(employeeId: string) {
     await createActivity({
       employeeId, actorId: employeeId, actorRole: "employee",
       activityType: "ATTENDANCE_LOGIN", module: "ATTENDANCE", referenceId: existing.id,
-      message: time > "09:15" ? "You logged in Late." : "You logged in successfully."
+      message: time > "09:45" ? "You logged in Late." : "You logged in successfully."
     });
   }
 }
