@@ -27,12 +27,8 @@ export function SalesDashboard() {
   const totalFollowUps = myReports.reduce((acc, curr) => acc + (curr.followUps || 0), 0);
 
   return (
-    <div className="p-6 space-y-6 max-w-7xl mx-auto">
-      <div className="flex flex-col gap-1">
-        <h1 className="text-3xl font-bold tracking-tight">Welcome, {user.name}</h1>
-        <p className="text-muted-foreground">Job Role: Sales | {new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
-      </div>
-
+    <div className="space-y-4">
+      <h2 className="text-xl font-semibold tracking-tight">Sales Overview</h2>
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
@@ -80,7 +76,6 @@ export function SalesDashboard() {
           </CardContent>
         </Card>
       </div>
-
     </div>
   );
 }
