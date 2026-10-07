@@ -15,6 +15,7 @@ import { Notification } from "@/models/Notification";
 import { Expense } from "@/models/Expense";
 import { DailyReport } from "@/models/DailyReport";
 import { Lead } from "@/models/Lead";
+import { DataScraping } from "@/models/DataScraping";
 
 // Helper to serialize Mongoose documents
 function serialize(doc: any) {
@@ -1551,5 +1552,47 @@ export async function deleteLead(id: string, role: string) {
     console.error("Failed to delete lead:", error);
     throw error;
   }
+}
+
+// ---------------- Data Scraping ----------------
+export async function getDataScrapings(userRole?: string, userId?: string) {
+  await connectDB();
+  if (userRole === "employee" && userId) {
+    const data = await DataScraping.find({ employeeId: userId }).sort({ createdAt: -1 }).lean();
+    return serialize(data);
+  }
+  const data = await DataScraping.find({}).sort({ createdAt: -1 }).lean();
+  return serialize(data);
+}
+
+export async function addDataScraping(data: any, userId: string) {
+  await connectDB();
+  const all = await DataScraping.find({}, { id: 1 }).lean();
+  let max = 0;
+  for (const doc of all) {
+    const num = parseInt((doc as any).id.replace("DS", ""), 10);
+    if (!isNaN(num) && num > max) max = num;
+  }
+  const id = `DS${String(max + 1).padStart(3, "0")}`;
+  
+  const emp = await Employee.findOne({ id: userId }, { name: 1 }).lean();
+  
+  const record = await DataScraping.create({
+    ...data,
+    id,
+    employeeId: userId,
+    employeeName: data.employeeName || (emp as any)?.name || "Unknown",
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  });
+  
+  return serialize(record);
+}
+
+export async function deleteDataScraping(id: string, userRole: string) {
+  await connectDB();
+  if (userRole !== "admin" && userRole !== "hr") throw new Error("Unauthorized");
+  await DataScraping.findOneAndDelete({ id });
+  return { success: true };
 }
 
