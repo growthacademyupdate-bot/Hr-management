@@ -163,27 +163,29 @@ export function AdminDashboard() {
             <CardTitle>Recent Tasks</CardTitle>
           </CardHeader>
           <CardContent className="p-0">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Task</TableHead>
-                  <TableHead>Employee</TableHead>
-                  <TableHead>Status</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {recentTasks.map((t) => {
-                  const emp = db.employees.find(e => e.id === t.assignedTo);
-                  return (
-                    <TableRow key={t.id}>
-                      <TableCell className="font-medium text-sm">{t.title}</TableCell>
-                      <TableCell>{emp?.name || t.assignedTo}</TableCell>
-                      <TableCell><StatusBadge status={t.status} /></TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Task</TableHead>
+                    <TableHead>Employee</TableHead>
+                    <TableHead>Status</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {recentTasks.map((t) => {
+                    const emp = db.employees.find(e => e.id === t.assignedTo);
+                    return (
+                      <TableRow key={t.id}>
+                        <TableCell className="font-medium text-sm">{t.title}</TableCell>
+                        <TableCell>{emp?.name || t.assignedTo}</TableCell>
+                        <TableCell><StatusBadge status={t.status} /></TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </div>
           </CardContent>
         </Card>
 

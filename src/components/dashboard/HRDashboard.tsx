@@ -118,30 +118,32 @@ export function HRDashboard() {
             <CardTitle>Tasks Pending HR Review</CardTitle>
           </CardHeader>
           <CardContent className="p-0 overflow-y-auto flex-1 h-[288px]">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Task</TableHead>
-                  <TableHead>Employee</TableHead>
-                  <TableHead>Submitted</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {db.tasks.filter(t => t.status === "completed").length === 0 && (
-                  <TableRow><TableCell colSpan={3} className="text-center py-8 text-muted-foreground">No tasks pending review.</TableCell></TableRow>
-                )}
-                {db.tasks.filter(t => t.status === "completed").slice(0, 5).map((t) => {
-                  const emp = db.employees.find(e => e.id === t.assignedTo);
-                  return (
-                    <TableRow key={t.id}>
-                      <TableCell className="font-medium text-sm">{t.title}</TableCell>
-                      <TableCell>{emp?.name || t.assignedTo}</TableCell>
-                      <TableCell className="text-xs text-muted-foreground">{t.completedAt ? new Date(t.completedAt).toLocaleDateString() : '—'}</TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Task</TableHead>
+                    <TableHead>Employee</TableHead>
+                    <TableHead>Submitted</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {db.tasks.filter(t => t.status === "completed").length === 0 && (
+                    <TableRow><TableCell colSpan={3} className="text-center py-8 text-muted-foreground">No tasks pending review.</TableCell></TableRow>
+                  )}
+                  {db.tasks.filter(t => t.status === "completed").slice(0, 5).map((t) => {
+                    const emp = db.employees.find(e => e.id === t.assignedTo);
+                    return (
+                      <TableRow key={t.id}>
+                        <TableCell className="font-medium text-sm">{t.title}</TableCell>
+                        <TableCell>{emp?.name || t.assignedTo}</TableCell>
+                        <TableCell className="text-xs text-muted-foreground">{t.completedAt ? new Date(t.completedAt).toLocaleDateString() : '—'}</TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </div>
           </CardContent>
         </Card>
       </div>
