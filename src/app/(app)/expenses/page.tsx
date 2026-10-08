@@ -1293,6 +1293,7 @@ function PrintExpenseBillModal({ expense, employee, onClose, numberToWords }: { 
           <div className="flex gap-2">
             <Button variant="outline" onClick={() => {
               const element = contentRef.current;
+              if (!element) return;
               html2pdf().set({
                 margin: 0,
                 filename: `Expense_Bill_${expense.id}.pdf`,
