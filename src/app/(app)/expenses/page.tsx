@@ -60,6 +60,9 @@ export default function ExpensesPage() {
     customCategory: "",
     vehicleType: "",
     vehicleNumber: "",
+    distanceKm: "",
+    vehicleAverage: "",
+    petrolRate: "",
     targetEmployeeId: "",
   });
   const [editExpenseId, setEditExpenseId] = useState<string | null>(null);
@@ -75,6 +78,20 @@ export default function ExpensesPage() {
   const isHR = user?.role === "hr";
   const isEmployee = user?.role === "employee";
   const currentUserId = user?.employeeId || user?.id;
+
+  // Auto-calculate amount for fuel/travel
+  useEffect(() => {
+    const isFuelCategory = formData.category === "Travel" || /bike|car|scooter|vehicle|fuel|petrol/i.test(formData.category === "Other" ? formData.customCategory : formData.category);
+    if (isFuelCategory && formData.distanceKm && formData.vehicleAverage && formData.petrolRate) {
+      const d = parseFloat(formData.distanceKm);
+      const a = parseFloat(formData.vehicleAverage);
+      const r = parseFloat(formData.petrolRate);
+      if (!isNaN(d) && !isNaN(a) && !isNaN(r) && a > 0) {
+        const calculatedAmount = (d / a) * r;
+        setFormData(prev => ({ ...prev, amount: calculatedAmount.toFixed(2) }));
+      }
+    }
+  }, [formData.distanceKm, formData.vehicleAverage, formData.petrolRate, formData.category, formData.customCategory]);
 
   // Filtered dataset
   const expensesData = useMemo(() => {
@@ -197,6 +214,9 @@ export default function ExpensesPage() {
         upiId: formData.upiId || null,
         vehicleType: formData.vehicleType || null,
         vehicleNumber: formData.vehicleNumber || null,
+        distanceKm: formData.distanceKm || null,
+        vehicleAverage: formData.vehicleAverage || null,
+        petrolRate: formData.petrolRate || null,
         targetEmployeeId: (!isEmployee && formData.targetEmployeeId) ? formData.targetEmployeeId : currentUserId,
       };
 
@@ -225,6 +245,9 @@ export default function ExpensesPage() {
         customCategory: "",
         vehicleType: "",
         vehicleNumber: "",
+        distanceKm: "",
+        vehicleAverage: "",
+        petrolRate: "",
         targetEmployeeId: "",
       });
       setEditExpenseId(null);
@@ -331,7 +354,8 @@ export default function ExpensesPage() {
           setFormData({
             title: "", category: "Travel", amount: "", expenseDate: new Date().toISOString().slice(0, 10),
             description: "", receiptUrls: [], gstPercent: "0", bankHolderName: "", bankName: "", branch: "",
-            accountNo: "", ifscCode: "", upiId: "", customCategory: "", vehicleType: "", vehicleNumber: "", targetEmployeeId: ""
+            accountNo: "", ifscCode: "", upiId: "", customCategory: "", vehicleType: "", vehicleNumber: "",
+            distanceKm: "", vehicleAverage: "", petrolRate: "", targetEmployeeId: ""
           });
           setOpenAddModal(true);
         }} className="gap-2 shadow-sm">
@@ -621,6 +645,9 @@ export default function ExpensesPage() {
                                 customCategory: "",
                                 vehicleType: item.vehicleType || "",
                                 vehicleNumber: item.vehicleNumber || "",
+                                distanceKm: item.distanceKm ? item.distanceKm.toString() : "",
+                                vehicleAverage: item.vehicleAverage ? item.vehicleAverage.toString() : "",
+                                petrolRate: item.petrolRate ? item.petrolRate.toString() : "",
                                 targetEmployeeId: item.employeeId || "",
                               });
                               setOpenAddModal(true);
@@ -755,7 +782,12 @@ export default function ExpensesPage() {
                     value={formData.amount}
                     onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
                     required
+                    readOnly={(formData.category === "Travel" || /bike|car|scooter|vehicle|fuel|petrol/i.test(formData.category === "Other" ? formData.customCategory : formData.category))}
+                    className={(formData.category === "Travel" || /bike|car|scooter|vehicle|fuel|petrol/i.test(formData.category === "Other" ? formData.customCategory : formData.category)) ? "bg-muted/50 focus-visible:ring-0 cursor-not-allowed" : ""}
                   />
+                  {(formData.category === "Travel" || /bike|car|scooter|vehicle|fuel|petrol/i.test(formData.category === "Other" ? formData.customCategory : formData.category)) && (
+                    <div className="text-[10px] text-muted-foreground mt-1">Auto-calculated from fuel details below</div>
+                  )}
                 </div>
               </div>
 
@@ -797,7 +829,7 @@ export default function ExpensesPage() {
 
               {(formData.category === "Travel" || /bike|car|scooter|vehicle|fuel|petrol/i.test(formData.category === "Other" ? formData.customCategory : formData.category)) && (
                 <div className="space-y-3 p-4 border rounded-lg bg-orange-50/50 border-orange-100">
-                  <div className="font-semibold text-sm text-orange-900">Vehicle Details</div>
+                  <div className="font-semibold text-sm text-orange-900">Vehicle & Fuel Details</div>
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-1">
                       <Label className="text-xs">Vehicle Type</Label>
@@ -806,6 +838,20 @@ export default function ExpensesPage() {
                     <div className="space-y-1">
                       <Label className="text-xs">Vehicle Number</Label>
                       <Input className="h-8 text-xs" placeholder="e.g. MH 12 AB 1234" value={formData.vehicleNumber} onChange={e => setFormData({...formData, vehicleNumber: e.target.value})} />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-3 gap-3 pt-2 border-t border-orange-200">
+                    <div className="space-y-1">
+                      <Label className="text-xs">Distance (KM)</Label>
+                      <Input type="number" step="any" className="h-8 text-xs bg-white" placeholder="e.g. 50" value={formData.distanceKm} onChange={e => setFormData({...formData, distanceKm: e.target.value})} />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Vehicle Avg (KM/L)</Label>
+                      <Input type="number" step="any" className="h-8 text-xs bg-white" placeholder="e.g. 45" value={formData.vehicleAverage} onChange={e => setFormData({...formData, vehicleAverage: e.target.value})} />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Petrol Rate (₹/L)</Label>
+                      <Input type="number" step="any" className="h-8 text-xs bg-white" placeholder="e.g. 106.5" value={formData.petrolRate} onChange={e => setFormData({...formData, petrolRate: e.target.value})} />
                     </div>
                   </div>
                 </div>
@@ -914,7 +960,14 @@ export default function ExpensesPage() {
                     <Badge variant="secondary">{selectedExpense.category}</Badge>
                     <span>Date: {new Date(selectedExpense.expenseDate).toLocaleDateString()}</span>
                   </div>
-                  <div className="text-xl font-bold text-primary mt-2">₹{selectedExpense.amount.toLocaleString()}</div>
+                  <div className="text-xl font-bold text-primary mt-2">
+                    ₹{selectedExpense.amount.toLocaleString()}
+                    {selectedExpense.distanceKm && selectedExpense.petrolRate && selectedExpense.vehicleAverage && (
+                      <span className="text-xs font-normal text-muted-foreground ml-2">
+                        ({selectedExpense.distanceKm} KM | Avg: {selectedExpense.vehicleAverage} KM/L | Rate: ₹{selectedExpense.petrolRate}/L)
+                      </span>
+                    )}
+                  </div>
                 </div>
 
                 {selectedExpense.description && (
@@ -1130,6 +1183,11 @@ function PrintExpenseBillModal({ expense, employee, onClose, numberToWords }: { 
                       Vehicle: {expense.vehicleType} {expense.vehicleNumber ? `- ${expense.vehicleNumber}` : ''}
                     </div>
                   )}
+                  {(expense.distanceKm && expense.petrolRate && expense.vehicleAverage) ? (
+                    <div className="text-xs text-gray-500 font-normal">
+                      Calculation: {expense.distanceKm} KM / {expense.vehicleAverage} KM/L × ₹{expense.petrolRate}/L
+                    </div>
+                  ) : null}
                 </td>
                 <td className="border-l border-r border-black p-1 text-gray-600">-</td>
                 <td className="border-l border-r border-black p-1">1 Nos</td>

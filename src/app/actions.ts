@@ -1157,6 +1157,9 @@ export async function addExpense(data: any, authorId: string) {
     employeeId: targetId,
     receiptUrls: uploadedReceiptUrls,
     amount: Number(data.amount),
+    distanceKm: data.distanceKm ? Number(data.distanceKm) : null,
+    vehicleAverage: data.vehicleAverage ? Number(data.vehicleAverage) : null,
+    petrolRate: data.petrolRate ? Number(data.petrolRate) : null,
     appliedAt: new Date().toISOString(),
     status: "pending"
   });
@@ -1369,7 +1372,15 @@ export async function updateExpense(id: string, data: any, userRole: string, use
 
   const updated = await Expense.findOneAndUpdate(
     { id },
-    { $set: { ...data, receiptUrls: uploadedReceiptUrls, amount: Number(data.amount) } },
+    { $set: { 
+        ...data, 
+        receiptUrls: uploadedReceiptUrls, 
+        amount: Number(data.amount),
+        distanceKm: data.distanceKm ? Number(data.distanceKm) : null,
+        vehicleAverage: data.vehicleAverage ? Number(data.vehicleAverage) : null,
+        petrolRate: data.petrolRate ? Number(data.petrolRate) : null,
+      } 
+    },
     { new: true }
   ).lean();
   
