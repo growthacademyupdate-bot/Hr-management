@@ -6,7 +6,7 @@ import {
   getLeaves, addLeave, cancelLeave, hrReviewLeave, adminReviewLeave, deleteLeave as deleteLeaveAction,
   getAttendance, getActivities, logLogoutActivity, deleteAttendance, deleteActivity as deleteActivityAction, updateSystemSetting, getSystemSettings, updateSystemSettings,
   getHolidays, createHoliday, updateHoliday, deleteHoliday,
-  getExpenses, addExpense, cancelExpense, hrReviewExpense, adminReviewExpense, markExpenseReimbursed, deleteExpense,
+  getExpenses, addExpense, updateExpense, cancelExpense, hrReviewExpense, adminReviewExpense, markExpenseReimbursed, deleteExpense,
   getNotifications, markNotificationAsRead, markAllNotificationsAsRead, deleteNotification as deleteNotificationAction, broadcastNotification, editBroadcastNotification, deleteBroadcastNotification,
   getDailyReports, addDailyReport, deleteDailyReport,
   getLeads, addLead, updateLead, deleteLead,
@@ -36,7 +36,7 @@ export interface Leave {
   id: string; employeeId: string; type: "Casual Leave" | "Sick Leave" | "Earned Leave" | "Emergency Leave" | "Other"; startDate: string; endDate: string; numberOfDays: number; reason: string; status: "pending" | "hr_approved" | "hr_rejected" | "admin_approved" | "admin_rejected" | "cancelled"; appliedAt: string; hrReviewedBy?: string | null; hrReviewedAt?: string | null; hrReviewComment?: string | null; adminReviewedBy?: string | null; adminReviewedAt?: string | null; adminReviewComment?: string | null; cancelledBy?: string | null; cancelledAt?: string | null;
 }
 export interface Expense {
-  id: string; employeeId: string; title: string; category: string; amount: number; expenseDate: string; description: string; receiptUrl?: string | null; gstPercent?: number; vehicleType?: string; vehicleNumber?: string; bankHolderName?: string; bankName?: string; branch?: string; accountNo?: string; ifscCode?: string; upiId?: string; status: "pending" | "hr_approved" | "hr_rejected" | "admin_approved" | "admin_rejected" | "reimbursed" | "cancelled"; appliedAt: string; hrReviewedBy?: string | null; hrReviewedAt?: string | null; hrReviewComment?: string | null; adminReviewedBy?: string | null; adminReviewedAt?: string | null; adminReviewComment?: string | null; reimbursedBy?: string | null; reimbursedAt?: string | null; cancelledBy?: string | null; cancelledAt?: string | null;
+  id: string; employeeId: string; title: string; category: string; amount: number; expenseDate: string; description: string; receiptUrls?: string[] | null; gstPercent?: number; vehicleType?: string; vehicleNumber?: string; bankHolderName?: string; bankName?: string; branch?: string; accountNo?: string; ifscCode?: string; upiId?: string; status: "pending" | "hr_approved" | "hr_rejected" | "admin_approved" | "admin_rejected" | "reimbursed" | "cancelled"; appliedAt: string; hrReviewedBy?: string | null; hrReviewedAt?: string | null; hrReviewComment?: string | null; adminReviewedBy?: string | null; adminReviewedAt?: string | null; adminReviewComment?: string | null; reimbursedBy?: string | null; reimbursedAt?: string | null; cancelledBy?: string | null; cancelledAt?: string | null;
 }
 export interface Activity {
   id: string; employeeId: string; time: string; label: string; type: string;
@@ -276,7 +276,8 @@ export const api = {
   async hrReviewExpense(expenseId: string, action: "approve" | "reject", comment: string) { const user = getCurrentUser(); if (!user) return; const e = await hrReviewExpense(expenseId, action, comment, user.employeeId || user.id, user.role); currentDB.expenses = currentDB.expenses.map(x => x.id === expenseId ? e : x); notify(); },
   async adminReviewExpense(expenseId: string, action: "approve" | "reject", comment: string) { const user = getCurrentUser(); if (!user) return; const e = await adminReviewExpense(expenseId, action, comment, user.employeeId || user.id, user.role); currentDB.expenses = currentDB.expenses.map(x => x.id === expenseId ? e : x); notify(); },
   async markExpenseReimbursed(expenseId: string) { const user = getCurrentUser(); if (!user) return; const e = await markExpenseReimbursed(expenseId, user.employeeId || user.id, user.role); currentDB.expenses = currentDB.expenses.map(x => x.id === expenseId ? e : x); notify(); },
-  async deleteExpense(id: string) { const user = getCurrentUser(); if (!user) return; await deleteExpense(id, user.role); currentDB.expenses = currentDB.expenses.filter(x => x.id !== id); notify(); },
+  async updateExpense(id: string, data: any) { const user = getCurrentUser(); if (!user) return; const e = await updateExpense(id, data, user.role, user.employeeId || user.id); currentDB.expenses = currentDB.expenses.map(x => x.id === id ? e : x); notify(); },
+  async deleteExpense(id: string) { const user = getCurrentUser(); if (!user) return; await deleteExpense(id, user.role, user.employeeId || user.id); currentDB.expenses = currentDB.expenses.filter(x => x.id !== id); notify(); },
 
   async deleteAttendance(id: string) { const user = getCurrentUser(); if (!user) return; await deleteAttendance(id, user.role); currentDB.attendance = currentDB.attendance.filter(x => x.id !== id); notify(); },
   async deleteActivity(id: string) { const user = getCurrentUser(); if (!user) return; try { await deleteActivityAction(id, user.role); currentDB.activities = currentDB.activities.filter(x => x.id !== id); notify(); } catch (error: any) { console.error("Delete activity error:", error); throw error; } },

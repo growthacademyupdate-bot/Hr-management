@@ -1135,10 +1135,18 @@ export async function addExpense(data: any, authorId: string) {
   }
   const id = `EXP${String(max + 1).padStart(3, "0")}`;
 
-  let receiptUrl = data.receiptUrl || null;
-  if (receiptUrl && typeof receiptUrl === "string" && receiptUrl.startsWith("data:image")) {
-    const uploadRes = await uploadImageToCloudinary(receiptUrl);
-    if (uploadRes.success) receiptUrl = uploadRes.url;
+  let uploadedReceiptUrls: string[] = [];
+  if (data.receiptUrls && Array.isArray(data.receiptUrls)) {
+    for (const b64 of data.receiptUrls) {
+      if (b64 && typeof b64 === "string" && b64.startsWith("data:image")) {
+        const uploadRes = await uploadImageToCloudinary(b64);
+        if (uploadRes.success && uploadRes.url) {
+          uploadedReceiptUrls.push(uploadRes.url);
+        }
+      } else if (b64 && typeof b64 === "string") {
+        uploadedReceiptUrls.push(b64); // already a URL
+      }
+    }
   }
 
   const targetId = data.targetEmployeeId || authorId;
@@ -1147,7 +1155,7 @@ export async function addExpense(data: any, authorId: string) {
     ...data,
     id,
     employeeId: targetId,
-    receiptUrl,
+    receiptUrls: uploadedReceiptUrls,
     amount: Number(data.amount),
     appliedAt: new Date().toISOString(),
     status: "pending"
@@ -1328,11 +1336,44 @@ export async function markExpenseReimbursed(expenseId: string, reviewerId: strin
   return serialize(expense);
 }
 
-export async function deleteExpense(id: string, userRole: string) {
+export async function deleteExpense(id: string, userRole: string, userId: string) {
   await connectDB();
-  if (userRole !== "admin") throw new Error("Only Admin can delete expense records");
+  const expense = await Expense.findOne({ id });
+  if (!expense) throw new Error("Expense not found");
+  if (userRole === "employee" && expense.employeeId !== userId) throw new Error("Unauthorized to delete this expense");
+  if (userRole === "employee" && expense.status !== "pending") throw new Error("Can only delete pending expenses");
   await Expense.findOneAndDelete({ id });
   return { success: true };
+}
+
+export async function updateExpense(id: string, data: any, userRole: string, userId: string) {
+  await connectDB();
+  const expense = await Expense.findOne({ id });
+  if (!expense) throw new Error("Expense not found");
+  if (userRole === "employee" && expense.employeeId !== userId) throw new Error("Unauthorized");
+
+  let uploadedReceiptUrls: string[] = expense.receiptUrls || [];
+  if (data.receiptUrls && Array.isArray(data.receiptUrls)) {
+    uploadedReceiptUrls = [];
+    for (const b64 of data.receiptUrls) {
+      if (b64 && typeof b64 === "string" && b64.startsWith("data:image")) {
+        const uploadRes = await uploadImageToCloudinary(b64);
+        if (uploadRes.success && uploadRes.url) {
+          uploadedReceiptUrls.push(uploadRes.url);
+        }
+      } else if (b64 && typeof b64 === "string") {
+        uploadedReceiptUrls.push(b64);
+      }
+    }
+  }
+
+  const updated = await Expense.findOneAndUpdate(
+    { id },
+    { $set: { ...data, receiptUrls: uploadedReceiptUrls, amount: Number(data.amount) } },
+    { new: true }
+  ).lean();
+  
+  return serialize(updated);
 }
 
 export async function getDailyReports(role?: string, employeeId?: string) {

@@ -16,8 +16,8 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { useDataTable } from "@/hooks/useDataTable";
 import { SortableHeader } from "@/components/SortableHeader";
 import { DataTablePagination } from "@/components/DataTablePagination";
-import { 
-  Receipt, Plus, Search, CheckCircle2, XCircle, Clock, DollarSign, Wallet, FileText, Image as ImageIcon, Check, X, ShieldCheck, Eye, Trash2, Printer
+import {
+  Receipt, Plus, Search, CheckCircle2, XCircle, Clock, DollarSign, Wallet, FileText, Image as ImageIcon, Check, X, ShieldCheck, Eye, Trash2, Printer, Pencil
 } from "lucide-react";
 import Image from "next/image";
 import { format } from "date-fns";
@@ -49,7 +49,7 @@ export default function ExpensesPage() {
     amount: "",
     expenseDate: new Date().toISOString().slice(0, 10),
     description: "",
-    receiptUrl: "",
+    receiptUrls: [] as string[],
     gstPercent: "0",
     bankHolderName: "",
     bankName: "",
@@ -62,7 +62,9 @@ export default function ExpensesPage() {
     vehicleNumber: "",
     targetEmployeeId: "",
   });
+  const [editExpenseId, setEditExpenseId] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [previewImage, setPreviewImage] = useState<string | null>(null);
 
   // Filters State
   const [statusFilter, setStatusFilter] = useState("all");
@@ -145,19 +147,29 @@ export default function ExpensesPage() {
   if (!user) return null;
 
   // File Upload Handler (Base64 conversion)
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      if (file.size > 5 * 1024 * 1024) {
-        toast.error("File size must be under 5MB");
-        return;
-      }
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setFormData((prev) => ({ ...prev, receiptUrl: reader.result as string }));
-      };
-      reader.readAsDataURL(file);
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+    
+    let totalSize = files.reduce((acc, f) => acc + f.size, 0);
+    if (totalSize > 15 * 1024 * 1024) {
+      toast.error("Total file size must be under 15MB");
+      return;
     }
+
+    const readFiles = files.map((file) => {
+      return new Promise<string>((resolve) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result as string);
+        reader.readAsDataURL(file);
+      });
+    });
+
+    const newUrls = await Promise.all(readFiles);
+    setFormData((prev) => ({ ...prev, receiptUrls: prev.receiptUrls ? [...prev.receiptUrls, ...newUrls] : newUrls }));
+    
+    // Reset file input so user can add more files one by one if they don't select them all at once
+    e.target.value = "";
   };
 
   // Submit Expense Form Handler
@@ -169,13 +181,13 @@ export default function ExpensesPage() {
     }
     setIsSubmitting(true);
     try {
-      await api.addExpense({
+      const payload = {
         title: formData.title,
         category: formData.category === "Other" && formData.customCategory.trim() ? formData.customCategory : formData.category,
         amount: Number(formData.amount),
         expenseDate: formData.expenseDate,
         description: formData.description,
-        receiptUrl: formData.receiptUrl || null,
+        receiptUrls: formData.receiptUrls,
         gstPercent: Number(formData.gstPercent) || 0,
         bankHolderName: formData.bankHolderName || null,
         bankName: formData.bankName || null,
@@ -186,8 +198,15 @@ export default function ExpensesPage() {
         vehicleType: formData.vehicleType || null,
         vehicleNumber: formData.vehicleNumber || null,
         targetEmployeeId: (!isEmployee && formData.targetEmployeeId) ? formData.targetEmployeeId : currentUserId,
-      });
-      toast.success("Expense claim submitted successfully!");
+      };
+
+      if (editExpenseId) {
+        await api.updateExpense(editExpenseId, payload);
+        toast.success("Expense claim updated successfully!");
+      } else {
+        await api.addExpense(payload);
+        toast.success("Expense claim submitted successfully!");
+      }
       setOpenAddModal(false);
       setFormData({
         title: "",
@@ -195,7 +214,7 @@ export default function ExpensesPage() {
         amount: "",
         expenseDate: new Date().toISOString().slice(0, 10),
         description: "",
-        receiptUrl: "",
+        receiptUrls: [],
         gstPercent: "0",
         bankHolderName: "",
         bankName: "",
@@ -208,6 +227,7 @@ export default function ExpensesPage() {
         vehicleNumber: "",
         targetEmployeeId: "",
       });
+      setEditExpenseId(null);
     } catch (err: any) {
       toast.error(err.message || "Failed to submit expense claim");
     } finally {
@@ -306,7 +326,15 @@ export default function ExpensesPage() {
           title="Expense & Reimbursement Oversight" 
           description="Manage employee out-of-pocket work expenses, approval flows, and salary payout reimbursements." 
         />
-        <Button onClick={() => setOpenAddModal(true)} className="gap-2 shadow-sm">
+        <Button onClick={() => {
+          setEditExpenseId(null);
+          setFormData({
+            title: "", category: "Travel", amount: "", expenseDate: new Date().toISOString().slice(0, 10),
+            description: "", receiptUrls: [], gstPercent: "0", bankHolderName: "", bankName: "", branch: "",
+            accountNo: "", ifscCode: "", upiId: "", customCategory: "", vehicleType: "", vehicleNumber: "", targetEmployeeId: ""
+          });
+          setOpenAddModal(true);
+        }} className="gap-2 shadow-sm">
           <Plus className="h-4 w-4" /> Claim New Expense
         </Button>
       </div>
@@ -567,8 +595,43 @@ export default function ExpensesPage() {
                           </Button>
                         )}
 
-                        {/* Delete Expense (Admin only) */}
-                        {isAdmin && (
+                        {/* Edit Expense */}
+                        {((isEmployee && item.status === "pending") || isAdmin || isHR) && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 hover:bg-slate-100"
+                            title="Edit Expense Record"
+                            onClick={() => {
+                              setEditExpenseId(item.id);
+                              setFormData({
+                                title: item.title,
+                                category: item.category as any,
+                                amount: item.amount.toString(),
+                                expenseDate: item.expenseDate,
+                                description: item.description,
+                                receiptUrls: item.receiptUrls || [],
+                                gstPercent: (item.gstPercent || 0).toString(),
+                                bankHolderName: item.bankHolderName || "",
+                                bankName: item.bankName || "",
+                                branch: item.branch || "",
+                                accountNo: item.accountNo || "",
+                                ifscCode: item.ifscCode || "",
+                                upiId: item.upiId || "",
+                                customCategory: "",
+                                vehicleType: item.vehicleType || "",
+                                vehicleNumber: item.vehicleNumber || "",
+                                targetEmployeeId: item.employeeId || "",
+                              });
+                              setOpenAddModal(true);
+                            }}
+                          >
+                            <Pencil className="h-4 w-4 text-slate-600" />
+                          </Button>
+                        )}
+
+                        {/* Delete Expense */}
+                        {((isEmployee && item.status === "pending") || isAdmin || isHR) && (
                           <Button
                             variant="ghost"
                             size="icon"
@@ -576,8 +639,12 @@ export default function ExpensesPage() {
                             title="Delete Expense Record"
                             onClick={async () => {
                               if (confirm(`Are you sure you want to delete expense record ${item.id}?`)) {
-                                await api.deleteExpense(item.id);
-                                toast.success("Expense record deleted");
+                                try {
+                                  await api.deleteExpense(item.id);
+                                  toast.success("Expense record deleted");
+                                } catch (e: any) {
+                                  toast.error(e.message || "Failed to delete expense");
+                                }
                               }
                             }}
                           >
@@ -612,10 +679,10 @@ export default function ExpensesPage() {
           <form onSubmit={handleCreateExpense}>
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2 text-xl font-bold">
-                <Receipt className="h-5 w-5 text-primary" /> Claim Office Expense
+                <Receipt className="h-5 w-5 text-primary" /> {editExpenseId ? "Edit Office Expense" : "Claim Office Expense"}
               </DialogTitle>
               <DialogDescription>
-                Submit out-of-pocket expenses for official reimbursement (e.g. on salary day).
+                {editExpenseId ? "Modify an existing expense record." : "Submit out-of-pocket expenses for official reimbursement."}
               </DialogDescription>
             </DialogHeader>
 
@@ -776,26 +843,38 @@ export default function ExpensesPage() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="receipt" className="text-sm font-semibold">Attach Receipt (Optional)</Label>
+                <Label htmlFor="receipt" className="text-sm font-semibold">Attach Receipts (Optional)</Label>
                 <Input
                   id="receipt"
                   type="file"
                   accept="image/*"
+                  multiple
                   onChange={handleFileChange}
                   className="cursor-pointer text-xs"
                 />
-                {formData.receiptUrl && (
-                  <div className="mt-2 p-2 border rounded-lg bg-muted/30 flex items-center justify-between">
-                    <span className="text-xs text-muted-foreground flex items-center gap-1">
-                      <ImageIcon className="h-4 w-4 text-primary" /> Receipt Attached
-                    </span>
-                    <button
-                      type="button"
-                      className="text-xs text-rose-600 hover:underline"
-                      onClick={() => setFormData({ ...formData, receiptUrl: "" })}
-                    >
-                      Remove
-                    </button>
+                {formData.receiptUrls && formData.receiptUrls.length > 0 && (
+                  <div className="mt-2 space-y-2">
+                    {formData.receiptUrls.map((url, idx) => (
+                      <div key={idx} className="p-2 border rounded-lg bg-muted/30 flex items-center justify-between">
+                        <span 
+                          className="text-xs text-muted-foreground flex items-center gap-1 truncate max-w-[80%] cursor-pointer hover:text-primary transition-colors hover:underline"
+                          onClick={() => setPreviewImage(url)}
+                        >
+                          <ImageIcon className="h-4 w-4 text-primary shrink-0" /> Receipt #{idx + 1} Attached
+                        </span>
+                        <button
+                          type="button"
+                          className="text-xs text-rose-600 hover:underline shrink-0"
+                          onClick={() => {
+                            const newUrls = [...formData.receiptUrls];
+                            newUrls.splice(idx, 1);
+                            setFormData({ ...formData, receiptUrls: newUrls });
+                          }}
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    ))}
                   </div>
                 )}
               </div>
@@ -806,7 +885,7 @@ export default function ExpensesPage() {
                 Cancel
               </Button>
               <Button type="submit" disabled={isSubmitting}>
-                {isSubmitting ? "Submitting..." : "Submit Claim"}
+                {isSubmitting ? "Submitting..." : editExpenseId ? "Save Changes" : "Submit Claim"}
               </Button>
             </DialogFooter>
           </form>
@@ -861,21 +940,25 @@ export default function ExpensesPage() {
 
                 {/* Receipt Image */}
                 <div>
-                  <div className="font-semibold text-xs text-muted-foreground uppercase tracking-wider mb-2">Receipt Attachment</div>
-                  {selectedExpense.receiptUrl ? (
-                    <div className="border rounded-lg overflow-hidden max-h-[300px] flex justify-center bg-black/5">
-                      <Image
-                        src={selectedExpense.receiptUrl}
-                        alt="Receipt"
-                        width={400}
-                        height={300}
-                        className="object-contain max-h-[300px] w-full"
-                        unoptimized
-                      />
+                  <div className="font-semibold text-xs text-muted-foreground uppercase tracking-wider mb-2">Receipt Attachments</div>
+                  {selectedExpense.receiptUrls && selectedExpense.receiptUrls.length > 0 ? (
+                    <div className="space-y-4">
+                      {selectedExpense.receiptUrls.map((url, idx) => (
+                        <div key={idx} className="border rounded-lg overflow-hidden max-h-[300px] flex justify-center bg-black/5">
+                          <Image
+                            src={url}
+                            alt={`Receipt ${idx + 1}`}
+                            width={400}
+                            height={300}
+                            className="object-contain max-h-[300px] w-full"
+                            unoptimized
+                          />
+                        </div>
+                      ))}
                     </div>
                   ) : (
                     <div className="p-8 text-center border border-dashed rounded-lg text-muted-foreground text-xs">
-                      No receipt image attached to this claim.
+                      No receipt images attached to this claim.
                     </div>
                   )}
                 </div>
@@ -937,6 +1020,15 @@ export default function ExpensesPage() {
           numberToWords={numberToWords}
         />
       )}
+      {/* --- IMAGE PREVIEW MODAL --- */}
+      <Dialog open={!!previewImage} onOpenChange={(v) => !v && setPreviewImage(null)}>
+        <DialogContent className="max-w-3xl border-none bg-transparent shadow-none p-0 flex justify-center items-center">
+          {previewImage && (
+            <img src={previewImage} alt="Receipt Preview" className="max-w-full max-h-[90vh] object-contain rounded-lg shadow-2xl" />
+          )}
+        </DialogContent>
+      </Dialog>
+
     </div>
   );
 }
@@ -1108,7 +1200,6 @@ function PrintExpenseBillModal({ expense, employee, onClose, numberToWords }: { 
           </div>
           
           <div className="text-center font-bold text-xs mt-2 text-gray-600">Thank You For Business With US!</div>
-
         </div>
       </DialogContent>
     </Dialog>
