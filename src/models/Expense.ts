@@ -11,7 +11,7 @@ const ExpenseSchema = new mongoose.Schema({
   amount: { type: Number, required: true },
   expenseDate: { type: String, required: true },
   description: { type: String, required: true },
-  receiptUrl: { type: String, default: null },
+  receiptUrls: { type: [String], default: [] },
   gstPercent: { type: Number, default: 0 },
   vehicleType: { type: String, default: null },
   vehicleNumber: { type: String, default: null },
