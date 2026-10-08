@@ -278,6 +278,12 @@ export async function POST(req: NextRequest) {
       currentY = addY + 5;
     }
 
+    // Ensure we have enough space for terms header and at least one term
+    if (currentY > doc.page.height - 120) {
+      doc.addPage();
+      currentY = 40;
+    }
+
     let footerY = currentY + 15;
     let bankDetailsDrawn = false;
     let bankBoxBottom = 0;

@@ -135,6 +135,22 @@ Basic performance optimization.
 Website testing and bug fixing before deployment.
 Production deployment and basic configuration.
 6 Months Free Support for minor bug fixes and technical assistance.`
+  },
+  maintenance: {
+    description: 'Maintenance & Support Services',
+    serviceDetails: `Regular maintenance and monitoring of the website to ensure smooth and reliable operation.
+Fixing bugs, errors, broken functionality, and UI issues identified during website usage.
+Updating website content, text, images, banners, and other existing information as required.
+Maintaining existing website pages, forms, components, and functionalities.
+Performance optimization and troubleshooting of website-related issues.
+Ensuring the website remains responsive and compatible across desktop, tablet, and mobile devices.
+Monitoring and resolving issues related to website hosting, deployment, and configuration within the existing setup.
+Making minor UI/UX improvements and layout adjustments wherever required.
+Maintaining existing integrations and APIs and resolving issues related to their existing functionality.
+Regular technical support for website-related issues and maintenance requirements.
+Testing changes before deployment to ensure existing functionality is not affected.
+Deployment of approved maintenance updates and bug fixes to the live website.
+Note: Maintenance covers the existing website functionality and structure. Any major new module, feature, third-party API, redesign, or functionality outside the existing scope will be considered separately and may be charged additionally.`
   }
 };
 
@@ -355,6 +371,7 @@ export default function QuotationGenerator() {
                   <SelectItem value="billing">3. Billing S/W</SelectItem>
                   <SelectItem value="erp">4. ERP/CRM</SelectItem>
                   <SelectItem value="portfolio">5. Portfolio</SelectItem>
+                  <SelectItem value="maintenance">6. Maintenance & Support</SelectItem>
                 </SelectContent>
               </Select>
             </div>
