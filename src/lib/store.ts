@@ -10,7 +10,8 @@ import {
   getNotifications, markNotificationAsRead, markAllNotificationsAsRead, deleteNotification as deleteNotificationAction, broadcastNotification, editBroadcastNotification, deleteBroadcastNotification,
   getDailyReports, addDailyReport, deleteDailyReport,
   getLeads, addLead, updateLead, deleteLead,
-  getDataScrapings, addDataScraping, deleteDataScraping
+  getDataScrapings, addDataScraping, deleteDataScraping,
+  getInvoices, createInvoice, deleteInvoice
 } from "@/app/actions";
 
 export type Role = "admin" | "hr" | "employee";
@@ -18,7 +19,7 @@ export interface User {
   id: string; username: string; password?: string; role: Role; jobRole?: string; name: string; email: string; avatar?: string; employeeId?: string; loginDate?: string;
 }
 export interface Employee {
-  id: string; name: string; email: string; mobile: string; department: string; designation: string; jobRole?: string; joiningDate: string; salary: number; status: string; avatar?: string; password?: string; emergencyContact?: string; documents?: any;
+  id: string; name: string; email: string; mobile: string; department: string; designation: string; jobRole?: string; joiningDate: string; salary: number; status: string; avatar?: string; password?: string; emergencyContact?: string; documents?: any; gstin?: string; address?: string; state?: string;
 }
 export interface AttendanceSession {
   loginAt: string;
@@ -35,7 +36,7 @@ export interface Leave {
   id: string; employeeId: string; type: "Casual Leave" | "Sick Leave" | "Earned Leave" | "Emergency Leave" | "Other"; startDate: string; endDate: string; numberOfDays: number; reason: string; status: "pending" | "hr_approved" | "hr_rejected" | "admin_approved" | "admin_rejected" | "cancelled"; appliedAt: string; hrReviewedBy?: string | null; hrReviewedAt?: string | null; hrReviewComment?: string | null; adminReviewedBy?: string | null; adminReviewedAt?: string | null; adminReviewComment?: string | null; cancelledBy?: string | null; cancelledAt?: string | null;
 }
 export interface Expense {
-  id: string; employeeId: string; title: string; category: "Travel" | "Office Supplies" | "Client Meeting" | "Food & Dining" | "Equipment" | "Other"; amount: number; expenseDate: string; description: string; receiptUrl?: string | null; status: "pending" | "hr_approved" | "hr_rejected" | "admin_approved" | "admin_rejected" | "reimbursed" | "cancelled"; appliedAt: string; hrReviewedBy?: string | null; hrReviewedAt?: string | null; hrReviewComment?: string | null; adminReviewedBy?: string | null; adminReviewedAt?: string | null; adminReviewComment?: string | null; reimbursedBy?: string | null; reimbursedAt?: string | null; cancelledBy?: string | null; cancelledAt?: string | null;
+  id: string; employeeId: string; title: string; category: string; amount: number; expenseDate: string; description: string; receiptUrl?: string | null; gstPercent?: number; vehicleType?: string; vehicleNumber?: string; bankHolderName?: string; bankName?: string; branch?: string; accountNo?: string; ifscCode?: string; upiId?: string; status: "pending" | "hr_approved" | "hr_rejected" | "admin_approved" | "admin_rejected" | "reimbursed" | "cancelled"; appliedAt: string; hrReviewedBy?: string | null; hrReviewedAt?: string | null; hrReviewComment?: string | null; adminReviewedBy?: string | null; adminReviewedAt?: string | null; adminReviewComment?: string | null; reimbursedBy?: string | null; reimbursedAt?: string | null; cancelledBy?: string | null; cancelledAt?: string | null;
 }
 export interface Activity {
   id: string; employeeId: string; time: string; label: string; type: string;
@@ -93,13 +94,20 @@ export interface DataScrapingRecord {
   updatedAt: string;
 }
 
+export interface Invoice {
+  id: string; employeeId: string; invoiceDate: string; paymentMode: string; reverseCharge: string;
+  buyerOrderNo?: string; supplierRef?: string; vehicleNumber?: string; deliveryDate?: string; transportDetails?: string; termsOfDelivery?: string;
+  items: any[]; totalQuantity: number; subTotal: number; cgst: number; sgst: number; igst: number; roundOff: number; totalAmount: number;
+  status: string; createdBy: string; createdAt: string;
+}
+
 interface DB {
-  employees: Employee[]; attendance: AttendanceRecord[]; tasks: Task[]; leaves: Leave[]; expenses: Expense[]; activities: Activity[]; holidays: Holiday[]; notifications: Notification[]; dailyReports: DailyReport[]; leads: Lead[]; dataScrapings: DataScrapingRecord[];
+  employees: Employee[]; attendance: AttendanceRecord[]; tasks: Task[]; leaves: Leave[]; expenses: Expense[]; activities: Activity[]; holidays: Holiday[]; notifications: Notification[]; dailyReports: DailyReport[]; leads: Lead[]; dataScrapings: DataScrapingRecord[]; invoices: Invoice[];
   isLoading: boolean;
 }
 
 const AUTH_KEY = "ems_auth_v1";
-let currentDB: DB = { employees: [], attendance: [], tasks: [], leaves: [], expenses: [], activities: [], holidays: [], notifications: [], dailyReports: [], leads: [], dataScrapings: [], isLoading: true };
+let currentDB: DB = { employees: [], attendance: [], tasks: [], leaves: [], expenses: [], activities: [], holidays: [], notifications: [], dailyReports: [], leads: [], dataScrapings: [], invoices: [], isLoading: true };
 let globalSearch = "";
 const listeners = new Set<() => void>();
 
@@ -121,7 +129,7 @@ export async function refreshDB(force = false) {
   try {
     const user = getCurrentUser();
     const userId = user?.employeeId || user?.id;
-    const [emps, atts, ts, lvs, exps, acts, hols, notifs, dReports, leadsData, dScrapings] = await Promise.all([
+    const [emps, atts, ts, lvs, exps, acts, hols, notifs, dReports, leadsData, dScrapings, invs] = await Promise.all([
       getEmployees(),
       getAttendance(),
       getTasks(user?.role, userId),
@@ -132,7 +140,8 @@ export async function refreshDB(force = false) {
       userId ? getNotifications(userId) : Promise.resolve([]),
       getDailyReports(user?.role, userId),
       getLeads(user?.role, userId),
-      getDataScrapings(user?.role, userId)
+      getDataScrapings(user?.role, userId),
+      user?.role === "admin" ? getInvoices() : Promise.resolve([])
     ]);
     currentDB = {
       employees: emps || [],
@@ -146,6 +155,7 @@ export async function refreshDB(force = false) {
       dailyReports: dReports || [],
       leads: leadsData || [],
       dataScrapings: dScrapings || [],
+      invoices: invs || [],
       isLoading: false
     };
 
@@ -353,6 +363,22 @@ export const api = {
     await deleteDataScraping(id, user.role);
     currentDB.dataScrapings = currentDB.dataScrapings.filter(x => x.id !== id);
     notify();
+  },
+
+  async createInvoice(data: any) {
+    const user = getCurrentUser();
+    if (!user || user.role !== "admin") return;
+    const inv = await createInvoice(data, user.employeeId || user.id, user.role);
+    currentDB.invoices = [inv, ...currentDB.invoices];
+    notify();
+    return inv;
+  },
+  async deleteInvoice(id: string) {
+    const user = getCurrentUser();
+    if (!user || user.role !== "admin") return;
+    await deleteInvoice(id, user.role);
+    currentDB.invoices = currentDB.invoices.filter(x => x.id !== id);
+    notify();
   }
 };
 
@@ -413,6 +439,7 @@ export const ROLE_MENUS: Record<Role, { label: string; to: string; icon: string 
     { label: "Settings", to: "/settings", icon: "Settings" },
     { label: "Profile", to: "/profile", icon: "User" },
     { label: "Quotations", to: "/quotations", icon: "FileText" },
+    { label: "Invoices", to: "/invoices", icon: "ReceiptText" },
     { label: "Data Scraping Report", to: "/data-scraping-report", icon: "Activity" },
   ],
   hr: [

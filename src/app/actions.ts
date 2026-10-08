@@ -16,6 +16,7 @@ import { Expense } from "@/models/Expense";
 import { DailyReport } from "@/models/DailyReport";
 import { Lead } from "@/models/Lead";
 import { DataScraping } from "@/models/DataScraping";
+import { Invoice } from "@/models/Invoice";
 
 // Helper to serialize Mongoose documents
 function serialize(doc: any) {
@@ -841,16 +842,37 @@ async function logLoginActivity(employeeId: string) {
   
   const activeSession = existing.sessions?.find((s: any) => !s.logoutAt);
   if (!activeSession) {
-    existing.sessions.push({ loginAt: now });
-    if (!existing.firstLoginAt) existing.firstLoginAt = now;
-    existing.loginTime = time; 
-    await existing.save();
-    
-    await createActivity({
-      employeeId, actorId: employeeId, actorRole: "employee",
-      activityType: "ATTENDANCE_LOGIN", module: "ATTENDANCE", referenceId: existing.id,
-      message: time > "09:45" ? "You logged in Late." : "You logged in successfully."
-    });
+    if (existing.sessions && existing.sessions.length > 0) {
+      // Reopen the first session to make it a single continuous session
+      const firstSession = existing.sessions[0];
+      const oldDuration = firstSession.durationSeconds || 0;
+      
+      existing.totalWorkingSeconds = Math.max(0, (existing.totalWorkingSeconds || 0) - oldDuration);
+      firstSession.logoutAt = undefined;
+      firstSession.durationSeconds = 0;
+      
+      // Keep only the first session
+      existing.sessions = [firstSession];
+
+      await existing.save();
+      
+      await createActivity({
+        employeeId, actorId: employeeId, actorRole: "employee",
+        activityType: "ATTENDANCE_LOGIN", module: "ATTENDANCE", referenceId: existing.id,
+        message: "You resumed your session."
+      });
+    } else {
+      existing.sessions.push({ loginAt: now });
+      if (!existing.firstLoginAt) existing.firstLoginAt = now;
+      existing.loginTime = time; 
+      await existing.save();
+      
+      await createActivity({
+        employeeId, actorId: employeeId, actorRole: "employee",
+        activityType: "ATTENDANCE_LOGIN", module: "ATTENDANCE", referenceId: existing.id,
+        message: time > "09:45" ? "You logged in Late." : "You logged in successfully."
+      });
+    }
   }
 }
 
@@ -1082,6 +1104,7 @@ export async function uploadImageToCloudinary(base64Image: string) {
   try {
     const result = await cloudinary.uploader.upload(base64Image, {
       folder: "ems_avatars",
+      timeout: 120000, // 2 minutes
     });
     return { success: true, url: result.secure_url };
   } catch (error: any) {
@@ -1102,7 +1125,7 @@ export async function getExpenses(userRole?: string, userId?: string) {
   return serialize(expenses);
 }
 
-export async function addExpense(data: any, userId: string) {
+export async function addExpense(data: any, authorId: string) {
   await connectDB();
   const all = await Expense.find({}, { id: 1 }).lean();
   let max = 0;
@@ -1118,10 +1141,12 @@ export async function addExpense(data: any, userId: string) {
     if (uploadRes.success) receiptUrl = uploadRes.url;
   }
 
+  const targetId = data.targetEmployeeId || authorId;
+
   const expense = await Expense.create({
     ...data,
     id,
-    employeeId: userId,
+    employeeId: targetId,
     receiptUrl,
     amount: Number(data.amount),
     appliedAt: new Date().toISOString(),
@@ -1129,18 +1154,18 @@ export async function addExpense(data: any, userId: string) {
   });
 
   await createActivity({
-    employeeId: userId, actorId: userId, actorRole: "employee",
+    employeeId: targetId, actorId: authorId, actorRole: authorId === targetId ? "employee" : "hr",
     activityType: "EXPENSE_SUBMITTED", module: "EXPENSE", referenceId: id,
     message: `Expense claim submitted for ₹${data.amount} (${data.category}).`
   });
 
-  const empDoc = await Employee.findOne({ id: userId }, { name: 1 }).lean();
+  const empDoc = await Employee.findOne({ id: targetId }, { name: 1 }).lean();
   const empName = (empDoc as any)?.name || "An employee";
   const expMsg = `${empName} submitted an expense claim of ₹${data.amount} (${data.category}).`;
 
   await createNotification({
     recipientId: "u_hr",
-    senderId: userId,
+    senderId: authorId,
     senderRole: "employee",
     title: "New Expense Claim",
     message: expMsg,
@@ -1152,7 +1177,7 @@ export async function addExpense(data: any, userId: string) {
 
   await createNotification({
     recipientId: "u_admin",
-    senderId: userId,
+    senderId: authorId,
     senderRole: "employee",
     title: "New Expense Claim",
     message: expMsg,
@@ -1411,6 +1436,7 @@ export async function uploadFileToCloudinary(base64File: string, filename: strin
       folder: "ems_documents",
       resource_type: "auto",
       public_id: filename.split('.').slice(0, -1).join('.') || filename,
+      timeout: 120000, // 2 minutes
     });
     return { success: true, url: result.secure_url };
   } catch (error: any) {
@@ -1596,3 +1622,37 @@ export async function deleteDataScraping(id: string, userRole: string) {
   return { success: true };
 }
 
+// ---------------- Invoices ----------------
+export async function getInvoices() {
+  await connectDB();
+  const invoices = await Invoice.find({}).sort({ createdAt: -1 }).lean();
+  return serialize(invoices);
+}
+
+export async function createInvoice(data: any, adminId: string, userRole: string) {
+  await connectDB();
+  if (userRole !== "admin") throw new Error("Only Admin can create invoices");
+
+  const all = await Invoice.find({}, { id: 1 }).lean();
+  let max = 0;
+  for (const doc of all) {
+    const num = parseInt((doc as any).id.replace("Inv-", ""), 10);
+    if (!isNaN(num) && num > max) max = num;
+  }
+  const id = `Inv-${max + 1}`;
+
+  const invoice = await Invoice.create({
+    ...data,
+    id,
+    createdBy: adminId,
+  });
+
+  return serialize(invoice);
+}
+
+export async function deleteInvoice(id: string, userRole: string) {
+  await connectDB();
+  if (userRole !== "admin") throw new Error("Only Admin can delete invoices");
+  await Invoice.findOneAndDelete({ id });
+  return { success: true };
+}

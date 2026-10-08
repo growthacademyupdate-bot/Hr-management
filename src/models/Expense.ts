@@ -6,13 +6,21 @@ const ExpenseSchema = new mongoose.Schema({
   title: { type: String, required: true },
   category: { 
     type: String, 
-    enum: ["Travel", "Office Supplies", "Client Meeting", "Food & Dining", "Equipment", "Other"], 
     required: true 
   },
   amount: { type: Number, required: true },
   expenseDate: { type: String, required: true },
   description: { type: String, required: true },
   receiptUrl: { type: String, default: null },
+  gstPercent: { type: Number, default: 0 },
+  vehicleType: { type: String, default: null },
+  vehicleNumber: { type: String, default: null },
+  bankHolderName: { type: String, default: null },
+  bankName: { type: String, default: null },
+  branch: { type: String, default: null },
+  accountNo: { type: String, default: null },
+  ifscCode: { type: String, default: null },
+  upiId: { type: String, default: null },
   status: { 
     type: String, 
     enum: ["pending", "hr_approved", "hr_rejected", "admin_approved", "admin_rejected", "reimbursed", "cancelled"], 

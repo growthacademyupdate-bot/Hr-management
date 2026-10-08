@@ -16,6 +16,9 @@ const EmployeeSchema = new mongoose.Schema({
   password: { type: String, required: true }, // Simple plain text for now, could hash in real app
   emergencyContact: { type: String },
   documents: { type: Object, default: {} },
+  gstin: { type: String },
+  address: { type: String },
+  state: { type: String },
 }, { timestamps: true });
 
 EmployeeSchema.index({ email: 1 });

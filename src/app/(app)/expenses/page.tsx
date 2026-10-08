@@ -17,11 +17,13 @@ import { useDataTable } from "@/hooks/useDataTable";
 import { SortableHeader } from "@/components/SortableHeader";
 import { DataTablePagination } from "@/components/DataTablePagination";
 import { 
-  Receipt, Plus, Search, CheckCircle2, XCircle, Clock, DollarSign, Wallet, FileText, Image as ImageIcon, Check, X, ShieldCheck, Eye, Trash2
+  Receipt, Plus, Search, CheckCircle2, XCircle, Clock, DollarSign, Wallet, FileText, Image as ImageIcon, Check, X, ShieldCheck, Eye, Trash2, Printer
 } from "lucide-react";
 import Image from "next/image";
 import { format } from "date-fns";
 import { toast } from "sonner";
+import { useReactToPrint } from "react-to-print";
+import { useRef } from "react";
 
 const CATEGORIES = ["Travel", "Office Supplies", "Client Meeting", "Food & Dining", "Equipment", "Other"] as const;
 
@@ -38,6 +40,7 @@ export default function ExpensesPage() {
   const [reviewAction, setReviewAction] = useState<"approve" | "reject">("approve");
   const [reviewComment, setReviewComment] = useState("");
   const [reviewTargetStage, setReviewTargetStage] = useState<"hr" | "admin">("hr");
+  const [printExpense, setPrintExpense] = useState<Expense | null>(null);
 
   // Form State for New Expense Claim
   const [formData, setFormData] = useState({
@@ -47,6 +50,17 @@ export default function ExpensesPage() {
     expenseDate: new Date().toISOString().slice(0, 10),
     description: "",
     receiptUrl: "",
+    gstPercent: "0",
+    bankHolderName: "",
+    bankName: "",
+    branch: "",
+    accountNo: "",
+    ifscCode: "",
+    upiId: "",
+    customCategory: "",
+    vehicleType: "",
+    vehicleNumber: "",
+    targetEmployeeId: "",
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -157,11 +171,21 @@ export default function ExpensesPage() {
     try {
       await api.addExpense({
         title: formData.title,
-        category: formData.category,
+        category: formData.category === "Other" && formData.customCategory.trim() ? formData.customCategory : formData.category,
         amount: Number(formData.amount),
         expenseDate: formData.expenseDate,
         description: formData.description,
         receiptUrl: formData.receiptUrl || null,
+        gstPercent: Number(formData.gstPercent) || 0,
+        bankHolderName: formData.bankHolderName || null,
+        bankName: formData.bankName || null,
+        branch: formData.branch || null,
+        accountNo: formData.accountNo || null,
+        ifscCode: formData.ifscCode || null,
+        upiId: formData.upiId || null,
+        vehicleType: formData.vehicleType || null,
+        vehicleNumber: formData.vehicleNumber || null,
+        targetEmployeeId: (!isEmployee && formData.targetEmployeeId) ? formData.targetEmployeeId : currentUserId,
       });
       toast.success("Expense claim submitted successfully!");
       setOpenAddModal(false);
@@ -172,6 +196,17 @@ export default function ExpensesPage() {
         expenseDate: new Date().toISOString().slice(0, 10),
         description: "",
         receiptUrl: "",
+        gstPercent: "0",
+        bankHolderName: "",
+        bankName: "",
+        branch: "",
+        accountNo: "",
+        ifscCode: "",
+        upiId: "",
+        customCategory: "",
+        vehicleType: "",
+        vehicleNumber: "",
+        targetEmployeeId: "",
       });
     } catch (err: any) {
       toast.error(err.message || "Failed to submit expense claim");
@@ -247,6 +282,22 @@ export default function ExpensesPage() {
     }
   };
 
+  const numberToWords = (num: number): string => {
+    const a = ['', 'One ', 'Two ', 'Three ', 'Four ', 'Five ', 'Six ', 'Seven ', 'Eight ', 'Nine ', 'Ten ', 'Eleven ', 'Twelve ', 'Thirteen ', 'Fourteen ', 'Fifteen ', 'Sixteen ', 'Seventeen ', 'Eighteen ', 'Nineteen '];
+    const b = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
+    const numStr = num.toString();
+    if (numStr.length > 9) return 'overflow';
+    const n = ('000000000' + numStr).substr(-9).match(/^(\d{2})(\d{2})(\d{2})(\d{1})(\d{2})$/);
+    if (!n) return '';
+    let str = '';
+    str += (Number(n[1]) != 0) ? (a[Number(n[1])] || b[Number(n[1][0])] + ' ' + a[Number(n[1][1])]) + 'Crore ' : '';
+    str += (Number(n[2]) != 0) ? (a[Number(n[2])] || b[Number(n[2][0])] + ' ' + a[Number(n[2][1])]) + 'Lakh ' : '';
+    str += (Number(n[3]) != 0) ? (a[Number(n[3])] || b[Number(n[3][0])] + ' ' + a[Number(n[3][1])]) + 'Thousand ' : '';
+    str += (Number(n[4]) != 0) ? (a[Number(n[4])] || b[Number(n[4][0])] + ' ' + a[Number(n[4][1])]) + 'Hundred ' : '';
+    str += (Number(n[5]) != 0) ? ((str != '') ? 'and ' : '') + (a[Number(n[5])] || b[Number(n[5][0])] + ' ' + a[Number(n[5][1])]) : '';
+    return str.trim() + ' Rupees Only';
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -255,11 +306,9 @@ export default function ExpensesPage() {
           title="Expense & Reimbursement Oversight" 
           description="Manage employee out-of-pocket work expenses, approval flows, and salary payout reimbursements." 
         />
-        {isEmployee && (
-          <Button onClick={() => setOpenAddModal(true)} className="gap-2 shadow-sm">
-            <Plus className="h-4 w-4" /> Claim New Expense
-          </Button>
-        )}
+        <Button onClick={() => setOpenAddModal(true)} className="gap-2 shadow-sm">
+          <Plus className="h-4 w-4" /> Claim New Expense
+        </Button>
       </div>
 
       {/* Metric Cards */}
@@ -420,6 +469,15 @@ export default function ExpensesPage() {
                         >
                           <Eye className="h-4 w-4 text-muted-foreground" />
                         </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 text-indigo-600 hover:bg-indigo-50"
+                          title="Print Expense Bill"
+                          onClick={() => setPrintExpense(item)}
+                        >
+                          <FileText className="h-4 w-4" />
+                        </Button>
 
                         {/* HR Approval Action */}
                         {isHR && item.status === "pending" && (
@@ -550,7 +608,7 @@ export default function ExpensesPage() {
 
       {/* --- MODAL 1: ADD NEW EXPENSE --- */}
       <Dialog open={openAddModal} onOpenChange={setOpenAddModal}>
-        <DialogContent className="sm:max-w-[500px]">
+        <DialogContent className="sm:max-w-[500px] max-h-[90vh] overflow-y-auto">
           <form onSubmit={handleCreateExpense}>
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2 text-xl font-bold">
@@ -562,6 +620,25 @@ export default function ExpensesPage() {
             </DialogHeader>
 
             <div className="space-y-4 py-4">
+              {!isEmployee && (
+                <div className="space-y-2">
+                  <Label htmlFor="targetEmployee" className="text-sm font-semibold">Employee *</Label>
+                  <Select
+                    value={formData.targetEmployeeId}
+                    onValueChange={(val: string) => setFormData({ ...formData, targetEmployeeId: val })}
+                    required
+                  >
+                    <SelectTrigger id="targetEmployee">
+                      <SelectValue placeholder="Select Employee" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {db.employees.map((emp) => (
+                        <SelectItem key={emp.id} value={emp.id}>{emp.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
               <div className="space-y-2">
                 <Label htmlFor="title" className="text-sm font-semibold">Expense Title / Purpose *</Label>
                 <Input
@@ -589,6 +666,15 @@ export default function ExpensesPage() {
                       ))}
                     </SelectContent>
                   </Select>
+                  {formData.category === "Other" && (
+                    <Input 
+                      placeholder="Please specify category" 
+                      value={formData.customCategory}
+                      onChange={(e) => setFormData({ ...formData, customCategory: e.target.value })}
+                      required
+                      className="mt-2"
+                    />
+                  )}
                 </div>
 
                 <div className="space-y-2">
@@ -606,15 +692,29 @@ export default function ExpensesPage() {
                 </div>
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="expenseDate" className="text-sm font-semibold">Expense Date *</Label>
-                <Input
-                  id="expenseDate"
-                  type="date"
-                  value={formData.expenseDate}
-                  onChange={(e) => setFormData({ ...formData, expenseDate: e.target.value })}
-                  required
-                />
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="expenseDate" className="text-sm font-semibold">Expense Date *</Label>
+                  <Input
+                    id="expenseDate"
+                    type="date"
+                    value={formData.expenseDate}
+                    onChange={(e) => setFormData({ ...formData, expenseDate: e.target.value })}
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="gstPercent" className="text-sm font-semibold">GST %</Label>
+                  <Input
+                    id="gstPercent"
+                    type="number"
+                    min="0"
+                    max="100"
+                    placeholder="e.g. 18"
+                    value={formData.gstPercent}
+                    onChange={(e) => setFormData({ ...formData, gstPercent: e.target.value })}
+                  />
+                </div>
               </div>
 
               <div className="space-y-2">
@@ -626,6 +726,53 @@ export default function ExpensesPage() {
                   onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                   rows={3}
                 />
+              </div>
+
+              {(formData.category === "Travel" || /bike|car|scooter|vehicle|fuel|petrol/i.test(formData.category === "Other" ? formData.customCategory : formData.category)) && (
+                <div className="space-y-3 p-4 border rounded-lg bg-orange-50/50 border-orange-100">
+                  <div className="font-semibold text-sm text-orange-900">Vehicle Details</div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-1">
+                      <Label className="text-xs">Vehicle Type</Label>
+                      <Input className="h-8 text-xs" placeholder="e.g. Bike, Car" value={formData.vehicleType} onChange={e => setFormData({...formData, vehicleType: e.target.value})} />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Vehicle Number</Label>
+                      <Input className="h-8 text-xs" placeholder="e.g. MH 12 AB 1234" value={formData.vehicleNumber} onChange={e => setFormData({...formData, vehicleNumber: e.target.value})} />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <div className="space-y-3 p-4 border rounded-lg bg-slate-50/50">
+                <div className="font-semibold text-sm text-slate-800">Bank Details (Optional)</div>
+                <div className="text-xs text-muted-foreground mb-2">If filled, these will appear on your generated Expense Bill.</div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1">
+                    <Label className="text-xs">Account Holder Name</Label>
+                    <Input className="h-8 text-xs" placeholder="e.g. John Doe" value={formData.bankHolderName} onChange={e => setFormData({...formData, bankHolderName: e.target.value})} />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Bank Name</Label>
+                    <Input className="h-8 text-xs" placeholder="e.g. HDFC Bank" value={formData.bankName} onChange={e => setFormData({...formData, bankName: e.target.value})} />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Branch</Label>
+                    <Input className="h-8 text-xs" placeholder="e.g. Connaught Place" value={formData.branch} onChange={e => setFormData({...formData, branch: e.target.value})} />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Account No</Label>
+                    <Input className="h-8 text-xs" placeholder="e.g. 1234567890" value={formData.accountNo} onChange={e => setFormData({...formData, accountNo: e.target.value})} />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">IFSC Code</Label>
+                    <Input className="h-8 text-xs" placeholder="e.g. HDFC0001234" value={formData.ifscCode} onChange={e => setFormData({...formData, ifscCode: e.target.value})} />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">UPI ID</Label>
+                    <Input className="h-8 text-xs" placeholder="e.g. yourname@upi" value={formData.upiId} onChange={e => setFormData({...formData, upiId: e.target.value})} />
+                  </div>
+                </div>
               </div>
 
               <div className="space-y-2">
@@ -723,6 +870,7 @@ export default function ExpensesPage() {
                         width={400}
                         height={300}
                         className="object-contain max-h-[300px] w-full"
+                        unoptimized
                       />
                     </div>
                   ) : (
@@ -779,6 +927,194 @@ export default function ExpensesPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* --- MODAL 4: PRINT BILL MODAL --- */}
+      {printExpense && (
+        <PrintExpenseBillModal 
+          expense={printExpense} 
+          employee={db.employees.find(e => e.id === printExpense.employeeId)}
+          onClose={() => setPrintExpense(null)} 
+          numberToWords={numberToWords}
+        />
+      )}
     </div>
+  );
+}
+
+function PrintExpenseBillModal({ expense, employee, onClose, numberToWords }: { expense: Expense, employee: any, onClose: () => void, numberToWords: (n: number) => string }) {
+  const contentRef = useRef<HTMLDivElement>(null);
+  const handlePrint = useReactToPrint({
+    // @ts-ignore
+    content: () => contentRef.current,
+    documentTitle: `Expense_Bill_${expense.id}`,
+  });
+
+  const gstPercent = expense.gstPercent || 0;
+  const taxableAmount = expense.amount;
+  const gstAmount = taxableAmount * (gstPercent / 100);
+  const cgst = gstAmount / 2;
+  const sgst = gstAmount / 2;
+  const totalAmount = taxableAmount + gstAmount;
+
+  return (
+    <Dialog open={true} onOpenChange={(v) => !v && onClose()}>
+      <DialogContent className="max-w-4xl max-h-[95vh] overflow-y-auto bg-gray-50 p-6">
+        <DialogHeader className="flex flex-row justify-between items-center print:hidden mb-4">
+          <DialogTitle>Print Expense Bill</DialogTitle>
+          <Button onClick={handlePrint} className="mr-6"><Printer className="h-4 w-4 mr-2" /> Print Bill</Button>
+        </DialogHeader>
+
+        {/* Printable Area */}
+        <div ref={contentRef} className="p-8 bg-white text-black min-h-[1056px] w-full font-sans text-[13px] border relative">
+          
+          <div className="flex justify-between items-start mb-6">
+            <div className="flex items-center gap-4">
+              <img src="/logo.png" alt="AL-MAWA Logo" className="max-h-16 max-w-[120px] object-contain" />
+              <div>
+                <div className="text-xs font-semibold text-gray-500">GSTIN : 27ABDCA0474D1Z1</div>
+                <h1 className="text-2xl font-bold uppercase tracking-tight text-blue-900 mt-1">AL-MAWA INTERNATIONAL</h1>
+                <div className="text-xs text-gray-600 mt-1">
+                  Office No. 102-103 (Nexus Work Spaces), 1st Floor, Pride Icon Building, above Athithi Restaurant<br/>
+                  Kharadi-Mundhwa Road, Kharadi, Pune, Maharashtra, PIN Code 411014<br/>
+                  Contact No. : 📞 +91 95611 79693 | 📞 +91 95611 06693 | 📞 +91 90283 22363
+                </div>
+              </div>
+            </div>
+            <div className="text-right">
+              <div className="text-lg font-bold text-gray-400 uppercase tracking-widest">Tax Invoice</div>
+              <div className="text-xs text-gray-500 mt-1">Original / Duplicate Bill</div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-3 border border-black mb-4">
+            <div className="col-span-1 border-r border-black p-2 space-y-1">
+              <div className="font-bold text-xs bg-gray-100 -m-2 mb-2 p-1 border-b border-black">Bill To</div>
+              <div className="font-bold">{employee?.name}</div>
+              <div className="w-48 break-words text-xs">{employee?.address || "Address not provided"}</div>
+              <div className="text-xs">State: {employee?.state || "N/A"}</div>
+              <div className="text-xs">GSTIN: {employee?.gstin || "URD"}</div>
+            </div>
+            <div className="col-span-1 border-r border-black p-2 space-y-1">
+              <div className="font-bold text-xs bg-gray-100 -m-2 mb-2 p-1 border-b border-black">Shipp To</div>
+              <div className="font-bold">{employee?.name}</div>
+            </div>
+            <div className="col-span-1 text-xs flex flex-col justify-between">
+              <div className="grid grid-cols-2 border-b border-black p-2 gap-y-1">
+                <span className="font-semibold">Inv. No. :</span><span>{expense.id}</span>
+                <span className="font-semibold">Inv. Date :</span><span>{new Date(expense.expenseDate).toLocaleDateString()}</span>
+              </div>
+              <div className="grid grid-cols-2 p-2 gap-y-1 h-full">
+                <span className="font-semibold">Vehicle Number :</span><span>{expense.vehicleNumber || "N/A"}</span>
+              </div>
+            </div>
+          </div>
+
+          <table className="w-full border-collapse border border-black text-xs text-center mb-0">
+            <thead className="bg-blue-50/50">
+              <tr>
+                <th className="border border-black p-1 w-8">Sr</th>
+                <th className="border border-black p-1 text-left">Goods & Service Description</th>
+                <th className="border border-black p-1">HSN</th>
+                <th className="border border-black p-1">Quantity</th>
+                <th className="border border-black p-1">Rate</th>
+                <th className="border border-black p-1 bg-blue-100/30">Taxable</th>
+                <th className="border border-black p-0">
+                  <div className="border-b border-black">GST</div>
+                  <div className="flex"><div className="w-1/2 border-r border-black">%</div><div className="w-1/2">Amt.</div></div>
+                </th>
+                <th className="border border-black p-1 bg-blue-100/30">Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr className="align-top h-8">
+                <td className="border-l border-r border-black p-1">1</td>
+                <td className="border-l border-r border-black p-1 text-left font-medium text-gray-800">
+                  {expense.title} ({expense.category})
+                  {(expense.vehicleType || expense.vehicleNumber) && (
+                    <div className="text-xs text-gray-500 mt-1 font-normal">
+                      Vehicle: {expense.vehicleType} {expense.vehicleNumber ? `- ${expense.vehicleNumber}` : ''}
+                    </div>
+                  )}
+                </td>
+                <td className="border-l border-r border-black p-1 text-gray-600">-</td>
+                <td className="border-l border-r border-black p-1">1 Nos</td>
+                <td className="border-l border-r border-black p-1">{taxableAmount.toFixed(2)}</td>
+                <td className="border-l border-r border-black p-1 bg-blue-50/30 text-blue-900 font-medium">{taxableAmount.toFixed(2)}</td>
+                <td className="border-l border-r border-black p-0 text-gray-600 flex justify-center">
+                  <div className="w-1/2 p-1 border-r border-black">{gstPercent}%</div>
+                  <div className="w-1/2 p-1">{gstAmount.toFixed(2)}</div>
+                </td>
+                <td className="border-l border-r border-black p-1 bg-blue-50/30 text-blue-900 font-bold">{totalAmount.toFixed(2)}</td>
+              </tr>
+              {/* Fill empty space */}
+              {Array.from({ length: 9 }).map((_, i) => (
+                <tr key={`empty-${i}`} className="h-8">
+                  <td className="border-l border-r border-black"></td>
+                  <td className="border-l border-r border-black"></td>
+                  <td className="border-l border-r border-black"></td>
+                  <td className="border-l border-r border-black"></td>
+                  <td className="border-l border-r border-black"></td>
+                  <td className="border-l border-r border-black bg-blue-50/30"></td>
+                  <td className="border-l border-r border-black">
+                     <div className="flex h-full"><div className="w-1/2 border-r border-black"></div><div className="w-1/2"></div></div>
+                  </td>
+                  <td className="border-l border-r border-black bg-blue-50/30"></td>
+                </tr>
+              ))}
+              <tr className="border border-black font-bold text-gray-800">
+                <td colSpan={3} className="text-right p-1 pr-4">Sub-Total:</td>
+                <td className="border-l border-r border-black p-1">1</td>
+                <td className="border-l border-r border-black p-1"></td>
+                <td className="border-l border-r border-black p-1 bg-blue-100/50">{taxableAmount.toFixed(2)}</td>
+                <td className="border-l border-r border-black p-0">
+                  <div className="flex h-full"><div className="w-1/2 border-r border-black"></div><div className="w-1/2 p-1 bg-blue-100/50">{gstAmount.toFixed(2)}</div></div>
+                </td>
+                <td className="border-l border-r border-black p-1 bg-blue-100/50 text-blue-900">{totalAmount.toFixed(2)}</td>
+              </tr>
+            </tbody>
+          </table>
+
+          <div className="flex border-l border-r border-b border-black text-xs">
+            <div className="w-[60%] p-2 border-r border-black">
+              <div className="font-bold mb-1">Our Bank Details</div>
+              <div className="grid grid-cols-3 gap-1">
+                <span className="font-medium text-gray-600">Holder Name :</span><span className="col-span-2 font-bold">{expense.bankHolderName || employee?.name || "AL-MAWA INTERNATIONAL"}</span>
+                <span className="font-medium text-gray-600">Bank Name :</span><span className="col-span-2 font-bold">{expense.bankName || "STATE BANK OF INDIA"}</span>
+                <span className="font-medium text-gray-600">Branch :</span><span className="col-span-2">{expense.branch || "Delhi"}</span>
+                <span className="font-medium text-gray-600">Account No :</span><span className="col-span-2 font-bold">{expense.accountNo || "20412XXXX05"}</span>
+                <span className="font-medium text-gray-600">IFSC Code :</span><span className="col-span-2">{expense.ifscCode || "SBIN003XXXX"}</span>
+                <span className="font-medium text-gray-600">UPI ID :</span><span className="col-span-2">{expense.upiId || "yourid@upi"}</span>
+              </div>
+              <div className="mt-4">
+                <span className="font-medium text-gray-600">Invoice Total in Word</span><br/>
+                <span className="font-bold">Rupees {totalAmount.toFixed(2)} Only</span>
+              </div>
+            </div>
+            <div className="w-[40%] text-right font-medium text-gray-700">
+               <div className="flex border-b border-black"><div className="w-2/3 p-1 border-r border-black bg-gray-50">CGST Amt :</div><div className="w-1/3 p-1">{cgst.toFixed(2)}</div></div>
+               <div className="flex border-b border-black"><div className="w-2/3 p-1 border-r border-black bg-gray-50">SGST Amt :</div><div className="w-1/3 p-1">{sgst.toFixed(2)}</div></div>
+               <div className="flex border-b border-black"><div className="w-2/3 p-1 border-r border-black bg-gray-50">IGST Amt :</div><div className="w-1/3 p-1">0.00</div></div>
+               <div className="flex border-b border-black"><div className="w-2/3 p-1 border-r border-black bg-gray-50">Freight Packing Charges :</div><div className="w-1/3 p-1">0.00</div></div>
+               <div className="flex border-b border-black"><div className="w-2/3 p-1 border-r border-black bg-gray-50">Round off :</div><div className="w-1/3 p-1">0.00</div></div>
+               <div className="flex text-sm font-bold text-blue-900"><div className="w-2/3 p-1 border-r border-black bg-blue-50/50">Total Amount :</div><div className="w-1/3 p-1 bg-blue-50/50">{totalAmount.toFixed(2)}</div></div>
+            </div>
+          </div>
+
+          <div className="border-l border-r border-b border-black p-2 flex justify-between text-[11px] h-32 relative">
+            <div>
+              {/* Removed Declaration block */}
+            </div>
+            <div className="flex flex-col justify-between items-end h-full pt-1">
+              <div className="font-bold text-xs uppercase tracking-wide">For, AL-MAWA INTERNATIONAL</div>
+              <img src="/signature.png" alt="Signature" className="h-16 object-contain mt-auto mb-1 mr-4 mix-blend-multiply" />
+              <div className="font-bold border-t border-black pt-1 px-4 text-center mt-auto">Authorised Signatory</div>
+            </div>
+          </div>
+          
+          <div className="text-center font-bold text-xs mt-2 text-gray-600">Thank You For Business With US!</div>
+
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
