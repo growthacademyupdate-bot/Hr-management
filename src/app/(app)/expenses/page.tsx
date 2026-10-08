@@ -199,7 +199,39 @@ export default function ExpensesPage() {
     const readFiles = files.map((file) => {
       return new Promise<string>((resolve) => {
         const reader = new FileReader();
-        reader.onloadend = () => resolve(reader.result as string);
+        reader.onloadend = () => {
+          const img = new window.Image();
+          img.onload = () => {
+            const canvas = document.createElement("canvas");
+            const MAX_WIDTH = 1200;
+            const MAX_HEIGHT = 1200;
+            let width = img.width;
+            let height = img.height;
+
+            if (width > height) {
+              if (width > MAX_WIDTH) {
+                height *= MAX_WIDTH / width;
+                width = MAX_WIDTH;
+              }
+            } else {
+              if (height > MAX_HEIGHT) {
+                width *= MAX_HEIGHT / height;
+                height = MAX_HEIGHT;
+              }
+            }
+
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext("2d");
+            if (ctx) {
+              ctx.drawImage(img, 0, 0, width, height);
+              resolve(canvas.toDataURL("image/webp", 0.7));
+            } else {
+              resolve(reader.result as string);
+            }
+          };
+          img.src = reader.result as string;
+        };
         reader.readAsDataURL(file);
       });
     });
@@ -210,8 +242,8 @@ export default function ExpensesPage() {
     const currentSize = formData.receiptUrls ? formData.receiptUrls.join("").length : 0;
     const newSize = newUrls.join("").length;
     
-    if (currentSize + newSize > 10 * 1024 * 1024) { // ~10MB total base64 limit to safely fit in MongoDB 16MB limit
-      toast.error("Total accumulated receipt size is too large! Please remove some images or upload smaller ones.");
+    if (currentSize + newSize > 4 * 1024 * 1024) { // Vercel has a hard 4.5MB Serverless Function payload limit!
+      toast.error("Total accumulated receipt size is still too large! Please attach fewer images at once.");
       e.target.value = "";
       return;
     }
