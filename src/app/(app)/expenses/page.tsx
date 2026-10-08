@@ -205,6 +205,17 @@ export default function ExpensesPage() {
     });
 
     const newUrls = await Promise.all(readFiles);
+    
+    // Calculate total accumulated string size in bytes (approximate)
+    const currentSize = formData.receiptUrls ? formData.receiptUrls.join("").length : 0;
+    const newSize = newUrls.join("").length;
+    
+    if (currentSize + newSize > 10 * 1024 * 1024) { // ~10MB total base64 limit to safely fit in MongoDB 16MB limit
+      toast.error("Total accumulated receipt size is too large! Please remove some images or upload smaller ones.");
+      e.target.value = "";
+      return;
+    }
+
     setFormData((prev) => ({ ...prev, receiptUrls: prev.receiptUrls ? [...prev.receiptUrls, ...newUrls] : newUrls }));
     
     // Reset file input so user can add more files one by one if they don't select them all at once
