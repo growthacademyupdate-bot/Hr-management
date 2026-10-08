@@ -212,7 +212,7 @@ function AddEmployeeDialog({ onClose }: { onClose: () => void }) {
     }
   }
   return (
-    <DialogContent className="max-w-lg">
+    <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
       <DialogHeader><DialogTitle>Add New Employee</DialogTitle></DialogHeader>
       <div className="grid grid-cols-2 gap-3">
         {/* Photo Upload Row */}
@@ -346,7 +346,7 @@ function EditEmployeeDialog({ employee, open, onClose }: { employee: Employee; o
   }
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader><DialogTitle>Edit Employee</DialogTitle></DialogHeader>
         <div className="grid grid-cols-2 gap-3">
           {/* Photo Upload Row */}
