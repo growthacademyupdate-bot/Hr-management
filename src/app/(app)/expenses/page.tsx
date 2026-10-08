@@ -24,6 +24,8 @@ import { format } from "date-fns";
 import { toast } from "sonner";
 import { useReactToPrint } from "react-to-print";
 import { useRef } from "react";
+// @ts-ignore
+import html2pdf from "html2pdf.js";
 
 const CATEGORIES = ["Travel", "Office Supplies", "Client Meeting", "Food & Dining", "Equipment", "Other"] as const;
 
@@ -1288,7 +1290,19 @@ function PrintExpenseBillModal({ expense, employee, onClose, numberToWords }: { 
       <DialogContent className="max-w-4xl max-h-[95vh] overflow-y-auto bg-gray-50 p-6">
         <DialogHeader className="flex flex-row justify-between items-center print:hidden mb-4">
           <DialogTitle>Print Expense Bill</DialogTitle>
-          <Button onClick={handlePrint} className="mr-6"><Printer className="h-4 w-4 mr-2" /> Print Bill</Button>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={() => {
+              const element = contentRef.current;
+              html2pdf().set({
+                margin: 0,
+                filename: `Expense_Bill_${expense.id}.pdf`,
+                image: { type: 'jpeg', quality: 0.98 },
+                html2canvas: { scale: 2, useCORS: true },
+                jsPDF: { unit: 'in', format: 'letter', orientation: 'portrait' }
+              }).from(element).save();
+            }}><FileText className="h-4 w-4 mr-2" /> Download PDF</Button>
+            <Button onClick={handlePrint} className="mr-6"><Printer className="h-4 w-4 mr-2" /> Print Bill</Button>
+          </div>
         </DialogHeader>
 
         {/* Printable Area */}
