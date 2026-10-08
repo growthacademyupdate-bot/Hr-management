@@ -210,7 +210,7 @@ export default function QuotationGenerator() {
   });
 
   const [items, setItems] = useState([
-    { description: '', unitPrice: '', quantity: '', sgstPercent: '', cgstPercent: '', includeGst: true, serviceDetails: '' }
+    { description: '', unitPrice: '', quantity: '1', sgstPercent: '9', cgstPercent: '9', includeGst: true, serviceDetails: '' }
   ]);
 
   const [additionalServices, setAdditionalServices] = useState<{ description: string, amount: string }[]>([]);
@@ -228,7 +228,7 @@ export default function QuotationGenerator() {
   };
 
   const addItem = () => {
-    setItems([...items, { description: '', unitPrice: '', quantity: '', sgstPercent: '', cgstPercent: '', includeGst: true, serviceDetails: '' }]);
+    setItems([...items, { description: '', unitPrice: '', quantity: '1', sgstPercent: '9', cgstPercent: '9', includeGst: true, serviceDetails: '' }]);
   };
 
   const removeItem = (index: number) => {
@@ -281,12 +281,13 @@ export default function QuotationGenerator() {
 
   const calculations = items.reduce(
     (acc, item) => {
-      const subtotal = Number(item.unitPrice) * Number(item.quantity);
+      const qty = item.quantity === '' ? 1 : Number(item.quantity);
+      const subtotal = Number(item.unitPrice) * qty;
       acc.subtotal += subtotal;
       
       if (item.includeGst) {
-        const sgst = (subtotal * Number(item.sgstPercent)) / 100;
-        const cgst = (subtotal * Number(item.cgstPercent)) / 100;
+        const sgst = (subtotal * (item.sgstPercent === '' ? 0 : Number(item.sgstPercent))) / 100;
+        const cgst = (subtotal * (item.cgstPercent === '' ? 0 : Number(item.cgstPercent))) / 100;
         acc.sgst += sgst;
         acc.cgst += cgst;
       }
