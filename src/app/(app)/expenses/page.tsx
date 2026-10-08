@@ -1022,9 +1022,16 @@ export default function ExpensesPage() {
       )}
       {/* --- IMAGE PREVIEW MODAL --- */}
       <Dialog open={!!previewImage} onOpenChange={(v) => !v && setPreviewImage(null)}>
-        <DialogContent className="max-w-3xl border-none bg-transparent shadow-none p-0 flex justify-center items-center">
+        <DialogContent className="max-w-4xl border-none bg-transparent shadow-none p-0 flex flex-col justify-center items-center">
+          <div className="w-full flex justify-start mb-2 px-4">
+            <Button variant="secondary" onClick={() => setPreviewImage(null)} className="shadow-md bg-white text-black hover:bg-gray-100 font-semibold px-6">
+               ← Back
+            </Button>
+          </div>
           {previewImage && (
-            <img src={previewImage} alt="Receipt Preview" className="max-w-full max-h-[90vh] object-contain rounded-lg shadow-2xl" />
+            <div className="bg-black/40 p-2 rounded-xl">
+              <img src={previewImage} alt="Receipt Preview" className="max-w-full max-h-[85vh] object-contain rounded-lg shadow-2xl border-4 border-white/10" />
+            </div>
           )}
         </DialogContent>
       </Dialog>
