@@ -24,8 +24,6 @@ import { format } from "date-fns";
 import { toast } from "sonner";
 import { useReactToPrint } from "react-to-print";
 import { useRef } from "react";
-// @ts-ignore
-import html2pdf from "html2pdf.js";
 
 const CATEGORIES = ["Travel", "Office Supplies", "Client Meeting", "Food & Dining", "Equipment", "Other"] as const;
 
@@ -1291,16 +1289,25 @@ function PrintExpenseBillModal({ expense, employee, onClose, numberToWords }: { 
         <DialogHeader className="flex flex-row justify-between items-center print:hidden mb-4">
           <DialogTitle>Print Expense Bill</DialogTitle>
           <div className="flex gap-2">
-            <Button variant="outline" onClick={() => {
-              const element = contentRef.current;
-              if (!element) return;
-              html2pdf().set({
-                margin: 0,
-                filename: `Expense_Bill_${expense.id}.pdf`,
-                image: { type: 'jpeg', quality: 0.98 },
-                html2canvas: { scale: 2, useCORS: true },
-                jsPDF: { unit: 'in', format: 'letter', orientation: 'portrait' }
-              }).from(element).save();
+            <Button variant="outline" onClick={async () => {
+              try {
+                const element = contentRef.current;
+                if (!element) return;
+                
+                // Dynamically import to prevent Next.js SSR issues
+                const html2pdfModule = (await import('html2pdf.js')).default;
+                
+                html2pdfModule().set({
+                  margin: 0,
+                  filename: `Expense_Bill_${expense.id}.pdf`,
+                  image: { type: 'jpeg', quality: 0.98 },
+                  html2canvas: { scale: 2, useCORS: true },
+                  jsPDF: { unit: 'in', format: 'letter', orientation: 'portrait' }
+                }).from(element).save();
+              } catch (err) {
+                console.error(err);
+                toast.error("Failed to generate PDF. Please try printing instead.");
+              }
             }}><FileText className="h-4 w-4 mr-2" /> Download PDF</Button>
             <Button onClick={handlePrint} className="mr-6"><Printer className="h-4 w-4 mr-2" /> Print Bill</Button>
           </div>
