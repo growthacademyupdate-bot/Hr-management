@@ -980,10 +980,6 @@ function PrintExpenseBillModal({ expense, employee, onClose, numberToWords }: { 
                 </div>
               </div>
             </div>
-            <div className="text-right">
-              <div className="text-lg font-bold text-gray-400 uppercase tracking-widest">Tax Invoice</div>
-              <div className="text-xs text-gray-500 mt-1">Original / Duplicate Bill</div>
-            </div>
           </div>
 
           <div className="grid grid-cols-3 border border-black mb-4">
