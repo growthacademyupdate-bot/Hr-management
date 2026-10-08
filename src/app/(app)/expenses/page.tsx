@@ -1198,9 +1198,18 @@ export default function ExpensesPage() {
       )}
       {/* --- IMAGE PREVIEW MODAL --- */}
       <Dialog open={!!previewImage} onOpenChange={(v) => !v && setPreviewImage(null)}>
-        <DialogContent className="max-w-4xl border-none bg-transparent shadow-none p-0 flex flex-col justify-center items-center">
+        <DialogContent 
+          className="max-w-4xl border-none bg-transparent shadow-none p-0 flex flex-col justify-center items-center"
+          onInteractOutside={(e) => e.preventDefault()}
+          onCloseAutoFocus={(e) => e.preventDefault()}
+        >
           <div className="w-full flex justify-start mb-2 px-4">
-            <Button variant="secondary" onClick={() => setPreviewImage(null)} className="shadow-md bg-white text-black hover:bg-gray-100 font-semibold px-6">
+            <Button 
+              type="button" 
+              variant="secondary" 
+              onClick={(e) => { e.preventDefault(); e.stopPropagation(); setPreviewImage(null); }} 
+              className="shadow-md bg-white text-black hover:bg-gray-100 font-semibold px-6"
+            >
                ← Back
             </Button>
           </div>
