@@ -193,7 +193,7 @@ export default function EmployeesPage() {
 function AddEmployeeDialog({ onClose }: { onClose: () => void }) {
   const JOB_ROLES = ["Sales", "Marketing", "Developer", "Accountant", "Support", "Other"];
   const [form, setForm] = useState({
-    customId: "", name: "", email: "", mobile: "", department: "Design", designation: "", jobRole: "", joiningDate: new Date().toISOString().slice(0,10), salary: 60000, password: "", avatar: "",
+    customId: "", name: "", email: "", mobile: "", department: "Design", designation: "", jobRole: "", joiningDate: new Date().toISOString().slice(0,10), salary: 60000, password: "", avatar: "", gstin: "", address: "", state: "",
   });
   const [showPw, setShowPw] = useState(false);
   async function submit() {
@@ -282,6 +282,9 @@ function AddEmployeeDialog({ onClose }: { onClose: () => void }) {
           </Select>
         </div>
         <div className="space-y-1"><Label>Designation</Label><Input value={form.designation} onChange={(e) => setForm({...form, designation: e.target.value})} placeholder="e.g. Frontend Developer" /></div>
+        <div className="space-y-1"><Label>GSTIN</Label><Input value={form.gstin} onChange={(e) => setForm({...form, gstin: e.target.value})} placeholder="e.g. 22AAAAA0000A1Z5" /></div>
+        <div className="space-y-1"><Label>State</Label><Input value={form.state} onChange={(e) => setForm({...form, state: e.target.value})} placeholder="e.g. Delhi - 07" /></div>
+        <div className="col-span-2 space-y-1"><Label>Address</Label><Input value={form.address} onChange={(e) => setForm({...form, address: e.target.value})} placeholder="e.g. 123 Main St, City" /></div>
         <div className="space-y-1">
           <Label>Job Role <span className="text-muted-foreground text-xs">(optional)</span></Label>
           <Select value={form.jobRole} onValueChange={(v) => setForm({...form, jobRole: v})}>
@@ -325,6 +328,9 @@ function EditEmployeeDialog({ employee, open, onClose }: { employee: Employee; o
     salary: employee.salary,
     password: employee.password,
     avatar: employee.avatar || "",
+    gstin: employee.gstin || "",
+    address: employee.address || "",
+    state: employee.state || "",
   });
   const [showPw, setShowPw] = useState(false);
   async function submit() {
@@ -396,6 +402,9 @@ function EditEmployeeDialog({ employee, open, onClose }: { employee: Employee; o
             </Select>
           </div>
           <div className="space-y-1"><Label>Designation</Label><Input value={form.designation} onChange={(e) => setForm({...form, designation: e.target.value})} /></div>
+          <div className="space-y-1"><Label>GSTIN</Label><Input value={form.gstin} onChange={(e) => setForm({...form, gstin: e.target.value})} /></div>
+          <div className="space-y-1"><Label>State</Label><Input value={form.state} onChange={(e) => setForm({...form, state: e.target.value})} /></div>
+          <div className="col-span-2 space-y-1"><Label>Address</Label><Input value={form.address} onChange={(e) => setForm({...form, address: e.target.value})} /></div>
           <div className="space-y-1">
             <Label>Job Role <span className="text-muted-foreground text-xs">(optional)</span></Label>
             <Select value={form.jobRole} onValueChange={(v) => setForm({...form, jobRole: v})}>

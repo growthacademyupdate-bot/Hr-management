@@ -392,6 +392,7 @@ export default function ProfilePage() {
                 width={200}
                 height={200}
                 className="max-h-[50vh] max-w-full object-contain rounded-lg shadow-sm"
+                unoptimized
               />
             ) : (
               <Avatar className="h-48 w-48">
