@@ -18,6 +18,13 @@ const ExpenseSchema = new mongoose.Schema({
   distanceKm: { type: Number, default: null },
   vehicleAverage: { type: Number, default: null },
   petrolRate: { type: Number, default: null },
+  trips: [{
+    date: { type: String },
+    distanceKm: { type: Number },
+    vehicleAverage: { type: Number },
+    petrolRate: { type: Number },
+    amount: { type: Number }
+  }],
   bankHolderName: { type: String, default: null },
   bankName: { type: String, default: null },
   branch: { type: String, default: null },

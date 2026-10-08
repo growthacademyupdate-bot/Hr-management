@@ -63,6 +63,7 @@ export default function ExpensesPage() {
     distanceKm: "",
     vehicleAverage: "",
     petrolRate: "",
+    trips: [] as { date: string, distanceKm: string, vehicleAverage: string, petrolRate: string, amount: number }[],
     targetEmployeeId: "",
   });
   const [editExpenseId, setEditExpenseId] = useState<string | null>(null);
@@ -82,16 +83,37 @@ export default function ExpensesPage() {
   // Auto-calculate amount for fuel/travel
   useEffect(() => {
     const isFuelCategory = formData.category === "Travel" || /bike|car|scooter|vehicle|fuel|petrol/i.test(formData.category === "Other" ? formData.customCategory : formData.category);
-    if (isFuelCategory && formData.distanceKm && formData.vehicleAverage && formData.petrolRate) {
-      const d = parseFloat(formData.distanceKm);
-      const a = parseFloat(formData.vehicleAverage);
-      const r = parseFloat(formData.petrolRate);
-      if (!isNaN(d) && !isNaN(a) && !isNaN(r) && a > 0) {
-        const calculatedAmount = (d / a) * r;
-        setFormData(prev => ({ ...prev, amount: calculatedAmount.toFixed(2) }));
+    if (isFuelCategory) {
+      let total = 0;
+      let hasValidTrip = false;
+      
+      // Calculate from trips array if present
+      if (formData.trips && formData.trips.length > 0) {
+        formData.trips.forEach(trip => {
+          const d = parseFloat(trip.distanceKm);
+          const a = parseFloat(trip.vehicleAverage);
+          const r = parseFloat(trip.petrolRate);
+          if (!isNaN(d) && !isNaN(a) && !isNaN(r) && a > 0) {
+            total += (d / a) * r;
+            hasValidTrip = true;
+          }
+        });
+      } else if (formData.distanceKm && formData.vehicleAverage && formData.petrolRate) {
+        // Calculate from top-level fields
+        const d = parseFloat(formData.distanceKm);
+        const a = parseFloat(formData.vehicleAverage);
+        const r = parseFloat(formData.petrolRate);
+        if (!isNaN(d) && !isNaN(a) && !isNaN(r) && a > 0) {
+          total = (d / a) * r;
+          hasValidTrip = true;
+        }
+      }
+
+      if (hasValidTrip) {
+        setFormData(prev => ({ ...prev, amount: total.toFixed(2) }));
       }
     }
-  }, [formData.distanceKm, formData.vehicleAverage, formData.petrolRate, formData.category, formData.customCategory]);
+  }, [formData.distanceKm, formData.vehicleAverage, formData.petrolRate, formData.trips, formData.category, formData.customCategory]);
 
   // Filtered dataset
   const expensesData = useMemo(() => {
@@ -217,6 +239,12 @@ export default function ExpensesPage() {
         distanceKm: formData.distanceKm || null,
         vehicleAverage: formData.vehicleAverage || null,
         petrolRate: formData.petrolRate || null,
+        trips: formData.trips.map(t => ({
+          ...t,
+          distanceKm: Number(t.distanceKm),
+          vehicleAverage: Number(t.vehicleAverage),
+          petrolRate: Number(t.petrolRate)
+        })),
         targetEmployeeId: (!isEmployee && formData.targetEmployeeId) ? formData.targetEmployeeId : currentUserId,
       };
 
@@ -248,6 +276,7 @@ export default function ExpensesPage() {
         distanceKm: "",
         vehicleAverage: "",
         petrolRate: "",
+        trips: [],
         targetEmployeeId: "",
       });
       setEditExpenseId(null);
@@ -355,7 +384,7 @@ export default function ExpensesPage() {
             title: "", category: "Travel", amount: "", expenseDate: new Date().toISOString().slice(0, 10),
             description: "", receiptUrls: [], gstPercent: "0", bankHolderName: "", bankName: "", branch: "",
             accountNo: "", ifscCode: "", upiId: "", customCategory: "", vehicleType: "", vehicleNumber: "",
-            distanceKm: "", vehicleAverage: "", petrolRate: "", targetEmployeeId: ""
+            distanceKm: "", vehicleAverage: "", petrolRate: "", trips: [], targetEmployeeId: ""
           });
           setOpenAddModal(true);
         }} className="gap-2 shadow-sm">
@@ -648,6 +677,13 @@ export default function ExpensesPage() {
                                 distanceKm: item.distanceKm ? item.distanceKm.toString() : "",
                                 vehicleAverage: item.vehicleAverage ? item.vehicleAverage.toString() : "",
                                 petrolRate: item.petrolRate ? item.petrolRate.toString() : "",
+                                trips: item.trips ? item.trips.map((t: any) => ({
+                                  date: t.date || "",
+                                  distanceKm: t.distanceKm?.toString() || "",
+                                  vehicleAverage: t.vehicleAverage?.toString() || "",
+                                  petrolRate: t.petrolRate?.toString() || "",
+                                  amount: t.amount || 0
+                                })) : [],
                                 targetEmployeeId: item.employeeId || "",
                               });
                               setOpenAddModal(true);
@@ -840,20 +876,94 @@ export default function ExpensesPage() {
                       <Input className="h-8 text-xs" placeholder="e.g. MH 12 AB 1234" value={formData.vehicleNumber} onChange={e => setFormData({...formData, vehicleNumber: e.target.value})} />
                     </div>
                   </div>
-                  <div className="grid grid-cols-3 gap-3 pt-2 border-t border-orange-200">
-                    <div className="space-y-1">
-                      <Label className="text-xs">Distance (KM)</Label>
-                      <Input type="number" step="any" className="h-8 text-xs bg-white" placeholder="e.g. 50" value={formData.distanceKm} onChange={e => setFormData({...formData, distanceKm: e.target.value})} />
+                  {formData.trips.length === 0 ? (
+                    <>
+                      <div className="grid grid-cols-3 gap-3 pt-2 border-t border-orange-200">
+                        <div className="space-y-1">
+                          <Label className="text-xs">Distance (KM)</Label>
+                          <Input type="number" step="any" className="h-8 text-xs bg-white" placeholder="e.g. 50" value={formData.distanceKm} onChange={e => setFormData({...formData, distanceKm: e.target.value})} />
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-xs">Vehicle Avg (KM/L)</Label>
+                          <Input type="number" step="any" className="h-8 text-xs bg-white" placeholder="e.g. 45" value={formData.vehicleAverage} onChange={e => setFormData({...formData, vehicleAverage: e.target.value})} />
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-xs">Petrol Rate (₹/L)</Label>
+                          <Input type="number" step="any" className="h-8 text-xs bg-white" placeholder="e.g. 106.5" value={formData.petrolRate} onChange={e => setFormData({...formData, petrolRate: e.target.value})} />
+                        </div>
+                      </div>
+                      <div className="flex justify-end pt-1">
+                        <Button type="button" variant="ghost" size="sm" className="h-7 text-xs text-orange-700 hover:bg-orange-100" onClick={() => {
+                          setFormData({
+                            ...formData,
+                            trips: [{
+                              date: formData.expenseDate,
+                              distanceKm: formData.distanceKm,
+                              vehicleAverage: formData.vehicleAverage,
+                              petrolRate: formData.petrolRate,
+                              amount: 0
+                            }],
+                            distanceKm: "", vehicleAverage: "", petrolRate: ""
+                          })
+                        }}>
+                          + Add Multi-Day Logs
+                        </Button>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="space-y-3 pt-2 border-t border-orange-200">
+                      <div className="flex justify-between items-center">
+                        <Label className="text-xs font-semibold text-orange-900">Multi-Day Fuel Logs</Label>
+                        <Button type="button" variant="outline" size="sm" className="h-7 text-xs bg-white" onClick={() => {
+                          const lastTrip = formData.trips[formData.trips.length - 1];
+                          setFormData({
+                            ...formData, 
+                            trips: [...formData.trips, { 
+                              date: new Date().toISOString().slice(0, 10), 
+                              distanceKm: "", 
+                              vehicleAverage: lastTrip?.vehicleAverage || "", 
+                              petrolRate: lastTrip?.petrolRate || "", 
+                              amount: 0 
+                            }]
+                          })
+                        }}>
+                          <Plus className="h-3 w-3 mr-1" /> Add Day
+                        </Button>
+                      </div>
+                      
+                      {formData.trips.map((trip, idx) => (
+                        <div key={idx} className="p-2 border bg-white rounded-md relative flex gap-2 items-end shadow-sm">
+                          <div className="flex-1 grid grid-cols-4 gap-2">
+                            <div className="space-y-1">
+                              <Label className="text-[10px]">Date</Label>
+                              <Input type="date" className="h-7 text-[10px]" value={trip.date} onChange={e => { const t = [...formData.trips]; t[idx].date = e.target.value; setFormData({...formData, trips: t}); }} />
+                            </div>
+                            <div className="space-y-1">
+                              <Label className="text-[10px]">Distance (KM)</Label>
+                              <Input type="number" step="any" className="h-7 text-[10px]" placeholder="KM" value={trip.distanceKm} onChange={e => { const t = [...formData.trips]; t[idx].distanceKm = e.target.value; setFormData({...formData, trips: t}); }} />
+                            </div>
+                            <div className="space-y-1">
+                              <Label className="text-[10px]">Avg (KM/L)</Label>
+                              <Input type="number" step="any" className="h-7 text-[10px]" placeholder="Avg" value={trip.vehicleAverage} onChange={e => { const t = [...formData.trips]; t[idx].vehicleAverage = e.target.value; setFormData({...formData, trips: t}); }} />
+                            </div>
+                            <div className="space-y-1">
+                              <Label className="text-[10px]">Rate (₹/L)</Label>
+                              <Input type="number" step="any" className="h-7 text-[10px]" placeholder="Rate" value={trip.petrolRate} onChange={e => { const t = [...formData.trips]; t[idx].petrolRate = e.target.value; setFormData({...formData, trips: t}); }} />
+                            </div>
+                            <div className="col-span-4 mt-1 text-right text-[10px] font-bold text-orange-700 bg-orange-50/50 p-1 rounded-sm">
+                              Daily Amount: ₹{(!isNaN(parseFloat(trip.distanceKm)) && !isNaN(parseFloat(trip.vehicleAverage)) && !isNaN(parseFloat(trip.petrolRate)) && parseFloat(trip.vehicleAverage) > 0) ? ((parseFloat(trip.distanceKm) / parseFloat(trip.vehicleAverage)) * parseFloat(trip.petrolRate)).toFixed(2) : "0.00"}
+                            </div>
+                          </div>
+                          <Button type="button" variant="ghost" size="icon" className="h-7 w-7 text-rose-500 hover:bg-rose-50" onClick={() => {
+                            const t = [...formData.trips]; t.splice(idx, 1);
+                            setFormData({...formData, trips: t});
+                          }}>
+                            <X className="h-3 w-3" />
+                          </Button>
+                        </div>
+                      ))}
                     </div>
-                    <div className="space-y-1">
-                      <Label className="text-xs">Vehicle Avg (KM/L)</Label>
-                      <Input type="number" step="any" className="h-8 text-xs bg-white" placeholder="e.g. 45" value={formData.vehicleAverage} onChange={e => setFormData({...formData, vehicleAverage: e.target.value})} />
-                    </div>
-                    <div className="space-y-1">
-                      <Label className="text-xs">Petrol Rate (₹/L)</Label>
-                      <Input type="number" step="any" className="h-8 text-xs bg-white" placeholder="e.g. 106.5" value={formData.petrolRate} onChange={e => setFormData({...formData, petrolRate: e.target.value})} />
-                    </div>
-                  </div>
+                  )}
                 </div>
               )}
 
@@ -968,6 +1078,19 @@ export default function ExpensesPage() {
                       </span>
                     )}
                   </div>
+                  {selectedExpense.trips && selectedExpense.trips.length > 0 && (
+                    <div className="mt-3 p-3 bg-white rounded-lg border shadow-sm text-xs text-slate-700">
+                      <div className="font-semibold mb-2 text-slate-900 border-b pb-1">Multi-Day Fuel Logs:</div>
+                      <div className="max-h-32 overflow-y-auto space-y-1 pr-1">
+                        {selectedExpense.trips.map((t, i) => (
+                          <div key={i} className="flex justify-between items-center border-b border-slate-100 last:border-0 pb-1 last:pb-0">
+                            <span className="font-medium">{new Date(t.date).toLocaleDateString()}</span>
+                            <span>{t.distanceKm} KM @ ₹{t.petrolRate}/L (Avg {t.vehicleAverage}) <strong className="text-primary ml-1">= ₹{((parseFloat(t.distanceKm.toString()) / parseFloat(t.vehicleAverage.toString())) * parseFloat(t.petrolRate.toString()) || 0).toFixed(2)}</strong></span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 {selectedExpense.description && (
@@ -1184,10 +1307,21 @@ function PrintExpenseBillModal({ expense, employee, onClose, numberToWords }: { 
                     </div>
                   )}
                   {(expense.distanceKm && expense.petrolRate && expense.vehicleAverage) ? (
-                    <div className="text-xs text-gray-500 font-normal">
+                    <div className="text-[10px] text-gray-500 font-normal">
                       Calculation: {expense.distanceKm} KM / {expense.vehicleAverage} KM/L × ₹{expense.petrolRate}/L
                     </div>
                   ) : null}
+                  {expense.trips && expense.trips.length > 0 && (
+                    <div className="mt-2">
+                      <div className="text-xs font-semibold text-gray-700 underline mb-1">Multi-Day Logs:</div>
+                      {expense.trips.map((t, i) => (
+                        <div key={i} className="text-xs text-gray-600 flex justify-between w-full max-w-[320px] mb-0.5">
+                          <span>{t.date}:</span>
+                          <span>{t.distanceKm}KM (Avg {t.vehicleAverage}, ₹{t.petrolRate}/L) = <strong className="text-gray-800">₹{((parseFloat(t.distanceKm.toString()) / parseFloat(t.vehicleAverage.toString())) * parseFloat(t.petrolRate.toString()) || 0).toFixed(2)}</strong></span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </td>
                 <td className="border-l border-r border-black p-1 text-gray-600">-</td>
                 <td className="border-l border-r border-black p-1">1 Nos</td>

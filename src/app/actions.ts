@@ -1160,6 +1160,7 @@ export async function addExpense(data: any, authorId: string) {
     distanceKm: data.distanceKm ? Number(data.distanceKm) : null,
     vehicleAverage: data.vehicleAverage ? Number(data.vehicleAverage) : null,
     petrolRate: data.petrolRate ? Number(data.petrolRate) : null,
+    trips: data.trips || [],
     appliedAt: new Date().toISOString(),
     status: "pending"
   });
@@ -1379,6 +1380,7 @@ export async function updateExpense(id: string, data: any, userRole: string, use
         distanceKm: data.distanceKm ? Number(data.distanceKm) : null,
         vehicleAverage: data.vehicleAverage ? Number(data.vehicleAverage) : null,
         petrolRate: data.petrolRate ? Number(data.petrolRate) : null,
+        trips: data.trips || [],
       } 
     },
     { new: true }
