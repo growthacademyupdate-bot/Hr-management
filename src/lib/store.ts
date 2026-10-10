@@ -11,7 +11,8 @@ import {
   getDailyReports, addDailyReport, deleteDailyReport,
   getLeads, addLead, updateLead, deleteLead,
   getDataScrapings, addDataScraping, deleteDataScraping,
-  getInvoices, createInvoice, deleteInvoice
+  getInvoices, createInvoice, deleteInvoice,
+  getGroomingRecords, addGrooming, updateGrooming, deleteGrooming
 } from "@/app/actions";
 
 export type Role = "admin" | "hr" | "employee";
@@ -19,7 +20,7 @@ export interface User {
   id: string; username: string; password?: string; role: Role; jobRole?: string; name: string; email: string; avatar?: string; employeeId?: string; loginDate?: string;
 }
 export interface Employee {
-  id: string; name: string; email: string; mobile: string; department: string; designation: string; jobRole?: string; joiningDate: string; salary: number; status: string; avatar?: string; password?: string; emergencyContact?: string; documents?: any; gstin?: string; address?: string; state?: string;
+  id: string; name: string; email: string; mobile: string; department: string; designation: string; jobRole?: string; joiningDate: string; salary: number; status: string; avatar?: string; password?: string; emergencyContact?: string; documents?: any; gstin?: string; address?: string; state?: string; notes?: string;
 }
 export interface AttendanceSession {
   loginAt: string;
@@ -51,8 +52,9 @@ export interface Notification {
 }
 
 export interface Lead {
-  id: string; customerName: string; company?: string; mobile: string; alternateMobile?: string; email?: string; address?: string; city?: string; state?: string; pincode?: string; leadSource?: string; productService?: string; leadStatus: string; followUpDate?: string; remarks?: string; notes?: string; requirement?: string; expectedValue?: number; employeeId: string; createdBy?: string; createdAt?: string; updatedAt?: string;
+  id: string; leadType?: string; leadDate?: string; clientId?: string; customerName: string; company?: string; mobile: string; alternateMobile?: string; email?: string; address?: string; city?: string; state?: string; pincode?: string; leadSource?: string; productService?: string; leadStatus: string; followUpDate?: string; remarks?: string; notes?: string; requirement?: string; expectedValue?: number; employeeId: string; createdBy?: string; createdAt?: string; updatedAt?: string;
   callOutcome?: string; clientFollowUp?: string; constructionInteriorWork?: boolean; gmbProfileWork?: boolean; logoWork?: boolean; websiteWork?: boolean; documentationWork?: boolean;
+  lastFollowUpNote?: string; lastFollowUpDate?: string; followUpRequired?: string;
 }
 
 export interface DailyReport {
@@ -101,13 +103,17 @@ export interface Invoice {
   status: string; createdBy: string; createdAt: string;
 }
 
+export interface GroomingRecord {
+  id: string; employeeId: string; date: string; checkedBy: string; score: number; totalPoints: number; status: string; items: any[]; createdAt: string; updatedAt: string;
+}
+
 interface DB {
-  employees: Employee[]; attendance: AttendanceRecord[]; tasks: Task[]; leaves: Leave[]; expenses: Expense[]; activities: Activity[]; holidays: Holiday[]; notifications: Notification[]; dailyReports: DailyReport[]; leads: Lead[]; dataScrapings: DataScrapingRecord[]; invoices: Invoice[];
+  employees: Employee[]; attendance: AttendanceRecord[]; tasks: Task[]; leaves: Leave[]; expenses: Expense[]; activities: Activity[]; holidays: Holiday[]; notifications: Notification[]; dailyReports: DailyReport[]; leads: Lead[]; dataScrapings: DataScrapingRecord[]; invoices: Invoice[]; grooming: GroomingRecord[];
   isLoading: boolean;
 }
 
 const AUTH_KEY = "ems_auth_v1";
-let currentDB: DB = { employees: [], attendance: [], tasks: [], leaves: [], expenses: [], activities: [], holidays: [], notifications: [], dailyReports: [], leads: [], dataScrapings: [], invoices: [], isLoading: true };
+let currentDB: DB = { employees: [], attendance: [], tasks: [], leaves: [], expenses: [], activities: [], holidays: [], notifications: [], dailyReports: [], leads: [], dataScrapings: [], invoices: [], grooming: [], isLoading: true };
 let globalSearch = "";
 const listeners = new Set<() => void>();
 
@@ -129,7 +135,7 @@ export async function refreshDB(force = false) {
   try {
     const user = getCurrentUser();
     const userId = user?.employeeId || user?.id;
-    const [emps, atts, ts, lvs, exps, acts, hols, notifs, dReports, leadsData, dScrapings, invs] = await Promise.all([
+    const [emps, atts, ts, lvs, exps, acts, hols, notifs, dReports, leadsData, dScrapings, invs, grms] = await Promise.all([
       getEmployees(),
       getAttendance(),
       getTasks(user?.role, userId),
@@ -141,7 +147,8 @@ export async function refreshDB(force = false) {
       getDailyReports(user?.role, userId),
       getLeads(user?.role, userId),
       getDataScrapings(user?.role, userId),
-      user?.role === "admin" ? getInvoices() : Promise.resolve([])
+      user?.role === "admin" ? getInvoices() : Promise.resolve([]),
+      getGroomingRecords()
     ]);
     currentDB = {
       employees: emps || [],
@@ -156,6 +163,7 @@ export async function refreshDB(force = false) {
       leads: leadsData || [],
       dataScrapings: dScrapings || [],
       invoices: invs || [],
+      grooming: grms || [],
       isLoading: false
     };
 
@@ -380,6 +388,24 @@ export const api = {
     await deleteInvoice(id, user.role);
     currentDB.invoices = currentDB.invoices.filter(x => x.id !== id);
     notify();
+  },
+
+  async addGrooming(data: any) {
+    const record = await addGrooming(data);
+    currentDB.grooming = [record, ...currentDB.grooming];
+    notify();
+    return record;
+  },
+  async updateGrooming(id: string, data: any) {
+    const record = await updateGrooming(id, data);
+    currentDB.grooming = currentDB.grooming.map((g) => g.id === id ? record : g);
+    notify();
+    return record;
+  },
+  async deleteGrooming(id: string) {
+    await deleteGrooming(id);
+    currentDB.grooming = currentDB.grooming.filter(x => x.id !== id);
+    notify();
   }
 };
 
@@ -435,6 +461,7 @@ export const ROLE_MENUS: Record<Role, { label: string; to: string; icon: string 
     { label: "Expenses", to: "/expenses", icon: "Receipt" },
     { label: "Salary Slips", to: "/salary-slips", icon: "WalletCards" },
     { label: "Holidays", to: "/holidays", icon: "CalendarDays" },
+    { label: "Grooming", to: "/grooming", icon: "CheckSquare" },
     { label: "Reports", to: "/reports", icon: "BarChart3" },
     { label: "Notifications", to: "/notifications", icon: "Bell" },
     { label: "Settings", to: "/settings", icon: "Settings" },
@@ -452,6 +479,7 @@ export const ROLE_MENUS: Record<Role, { label: string; to: string; icon: string 
     { label: "Expenses", to: "/expenses", icon: "Receipt" },
     { label: "Salary Slips", to: "/salary-slips", icon: "WalletCards" },
     { label: "Holidays", to: "/holidays", icon: "CalendarDays" },
+    { label: "Grooming", to: "/grooming", icon: "CheckSquare" },
     { label: "Reports", to: "/reports", icon: "BarChart3" },
     { label: "Notifications", to: "/notifications", icon: "Bell" },
     { label: "Profile", to: "/profile", icon: "User" },
@@ -468,6 +496,7 @@ export const ROLE_MENUS: Record<Role, { label: string; to: string; icon: string 
     { label: "Expenses", to: "/expenses", icon: "Receipt" },
     { label: "My Salary Slips", to: "/salary-slips", icon: "WalletCards" },
     { label: "Holidays", to: "/holidays", icon: "CalendarDays" },
+    { label: "Grooming", to: "/grooming", icon: "CheckSquare" },
     { label: "Notifications", to: "/notifications", icon: "Bell" },
     { label: "Profile", to: "/profile", icon: "User" },
     { label: "Quotations", to: "/quotations", icon: "FileText" },

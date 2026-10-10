@@ -19,6 +19,7 @@ const EmployeeSchema = new mongoose.Schema({
   gstin: { type: String },
   address: { type: String },
   state: { type: String },
+  notes: { type: String },
 }, { timestamps: true });
 
 EmployeeSchema.index({ email: 1 });
