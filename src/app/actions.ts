@@ -17,6 +17,7 @@ import { DailyReport } from "@/models/DailyReport";
 import { Lead } from "@/models/Lead";
 import { DataScraping } from "@/models/DataScraping";
 import { Invoice } from "@/models/Invoice";
+import { Grooming } from "@/models/Grooming";
 
 // Helper to serialize Mongoose documents
 function serialize(doc: any) {
@@ -1709,4 +1710,38 @@ export async function deleteInvoice(id: string, userRole: string) {
   if (userRole !== "admin") throw new Error("Only Admin can delete invoices");
   await Invoice.findOneAndDelete({ id });
   return { success: true };
+}
+
+// --- GROOMING ACTIONS ---
+export async function getGroomingRecords() {
+  await connectDB();
+  const records = await Grooming.find().sort({ createdAt: -1 }).lean();
+  return serialize(records);
+}
+
+export async function addGrooming(data: any) {
+  await connectDB();
+  const id = `GRM${Date.now()}`;
+  const record = await Grooming.create({ ...data, id });
+  
+  await createActivity({
+    employeeId: data.employeeId,
+    activityType: "creation",
+    module: "Grooming",
+    message: `Received a grooming review from HR`,
+  });
+
+  return serialize(record);
+}
+
+export async function updateGrooming(id: string, data: any) {
+  await connectDB();
+  const updated = await Grooming.findOneAndUpdate({ id }, data, { new: true });
+  return serialize(updated);
+}
+
+export async function deleteGrooming(id: string) {
+  await connectDB();
+  await Grooming.findOneAndDelete({ id });
+  return true;
 }

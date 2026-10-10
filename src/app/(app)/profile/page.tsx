@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth, useDB, api } from "@/lib/store";
 import { uploadImageToCloudinary } from "@/app/actions";
@@ -10,6 +10,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Dialog,
   DialogContent,
@@ -21,7 +22,7 @@ import {
   Mail, Phone, Calendar, Briefcase, IndianRupee, ShieldCheck,
   Camera, Loader2, Shield, Users, ListChecks, CheckCircle2,
   Clock, CalendarOff, Activity, TrendingUp, Star, Award,
-  Building2, Hash, UserCheck, Maximize2, FileText,
+  Building2, Hash, UserCheck, Maximize2, FileText, Save,
 } from "lucide-react";
 import Image from "next/image";
 import { format } from "date-fns";
@@ -80,11 +81,32 @@ export default function ProfilePage() {
   const router = useRouter();
   const [uploading, setUploading] = useState(false);
   const [isImageModalOpen, setIsImageModalOpen] = useState(false);
+  const [notes, setNotes] = useState("");
+  const [isSavingNotes, setIsSavingNotes] = useState(false);
+
+  const emp = user?.employeeId ? db.employees.find((e) => e.id === user.employeeId) : null;
+  const today = new Date().toISOString().slice(0, 10);
+
+  useEffect(() => {
+    if (emp && emp.notes) {
+      setNotes(emp.notes);
+    }
+  }, [emp]);
 
   if (!user) return null;
 
-  const emp = user.employeeId ? db.employees.find((e) => e.id === user.employeeId) : null;
-  const today = new Date().toISOString().slice(0, 10);
+  const handleSaveNotes = async () => {
+    if (!emp) return;
+    setIsSavingNotes(true);
+    try {
+      await api.updateEmployee(emp.id, { notes });
+      toast.success("Notes saved successfully");
+    } catch (error: any) {
+      toast.error(error.message || "Failed to save notes");
+    } finally {
+      setIsSavingNotes(false);
+    }
+  };
 
   // Stats for admin/hr
   const totalEmployees = db.employees.length;
@@ -257,9 +279,10 @@ export default function ProfilePage() {
       {/* BOTTOM: Details + Activity */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
-        {/* Profile Details */}
-        <Card className="border-0 shadow-sm lg:col-span-2">
-          <CardHeader>
+        {/* Profile Details + Notes */}
+        <div className="lg:col-span-2 space-y-6">
+          <Card className="border-0 shadow-sm">
+            <CardHeader>
             <CardTitle className="text-base">Profile Details</CardTitle>
           </CardHeader>
           <CardContent>
@@ -324,6 +347,26 @@ export default function ProfilePage() {
             )}
           </CardContent>
         </Card>
+
+        {emp && (
+          <Card className="border-0 shadow-sm">
+            <CardHeader className="flex flex-row items-center justify-between">
+              <CardTitle className="text-base">My Notes</CardTitle>
+              <Button size="sm" onClick={handleSaveNotes} disabled={isSavingNotes}>
+                <Save className="h-4 w-4 mr-2" /> {isSavingNotes ? "Saving..." : "Save Notes"}
+              </Button>
+            </CardHeader>
+            <CardContent>
+              <Textarea
+                placeholder="Add your personal notes here..."
+                className="min-h-[150px]"
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+              />
+            </CardContent>
+          </Card>
+        )}
+        </div>
 
         {/* Recent Activity */}
         <Card className="border-0 shadow-sm lg:col-span-1">

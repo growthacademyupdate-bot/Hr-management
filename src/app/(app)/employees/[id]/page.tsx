@@ -2,13 +2,15 @@
 
 import { use, useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { useDB } from "@/lib/store";
+import { useDB, api } from "@/lib/store";
 import { PageHeader } from "@/components/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Mail, Phone, Calendar, Briefcase, IndianRupee, ShieldCheck, FileText } from "lucide-react";
+import { ArrowLeft, Mail, Phone, Calendar, Briefcase, IndianRupee, ShieldCheck, FileText, Save } from "lucide-react";
 import { StatusBadge } from "@/components/dashboard/SharedDashboardComponents";
+import { Textarea } from "@/components/ui/textarea";
+import { toast } from "sonner";
 
 export default function EmployeeDetailsPage({ params }: { params: Promise<{ id: string }> }) {
   const router = useRouter();
@@ -18,6 +20,27 @@ export default function EmployeeDetailsPage({ params }: { params: Promise<{ id: 
   const { id } = use(params);
   
   const emp = db.employees.find((e) => e.id === id);
+  const [notes, setNotes] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
+
+  useEffect(() => {
+    if (emp && emp.notes) {
+      setNotes(emp.notes);
+    }
+  }, [emp]);
+
+  const handleSaveNotes = async () => {
+    if (!emp) return;
+    setIsSaving(true);
+    try {
+      await api.updateEmployee(emp.id, { notes });
+      toast.success("Notes saved successfully");
+    } catch (error: any) {
+      toast.error(error.message || "Failed to save notes");
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
   if (!emp) {
     return (
@@ -115,6 +138,23 @@ export default function EmployeeDetailsPage({ params }: { params: Promise<{ id: 
           </CardContent>
         </Card>
       </div>
+
+      <Card className="border-0 shadow-sm">
+        <CardHeader className="flex flex-row items-center justify-between">
+          <CardTitle>Employee Notes</CardTitle>
+          <Button size="sm" onClick={handleSaveNotes} disabled={isSaving}>
+            <Save className="h-4 w-4 mr-2" /> {isSaving ? "Saving..." : "Save Notes"}
+          </Button>
+        </CardHeader>
+        <CardContent>
+          <Textarea
+            placeholder="Add notes about this employee here..."
+            className="min-h-[150px]"
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+          />
+        </CardContent>
+      </Card>
     </div>
   );
 }

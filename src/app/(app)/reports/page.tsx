@@ -63,11 +63,28 @@ export default function ReportsPage() {
   const handleExportAttendanceCSV = () => {
     const header = ["Employee", "Date", "Login", "Logout", "Hours", "Status", "Productivity"];
     const rows = db.attendance.filter(a => filterByDate(a.date)).map(a => {
+      let dynamicWorkingSeconds = a.totalWorkingSeconds || 0;
+      const activeSession = a.sessions?.find((s: any) => !s.logoutAt);
+      if (activeSession) {
+        const loginTime = new Date(activeSession.loginAt).getTime();
+        const now = new Date().getTime();
+        dynamicWorkingSeconds += Math.floor((now - loginTime) / 1000);
+      }
+      let displayWorkingHours = a.totalWorkingHours || a.workingHours || 0;
+      if (activeSession || dynamicWorkingSeconds > 0) {
+        displayWorkingHours = Number((dynamicWorkingSeconds / 3600).toFixed(2));
+      }
+
+      let calculatedProductivity = a.productivity || 0;
+      if (displayWorkingHours > 0) {
+        calculatedProductivity = Math.min(100, Math.round((displayWorkingHours / 8) * 100));
+      }
+
       const emp = db.employees.find(e => e.id === a.employeeId);
       return [
         emp?.name || a.employeeId, a.date,
         a.loginTime || "—", a.logoutTime || "—",
-        String(a.workingHours), a.status, `${a.productivity}%`
+        String(displayWorkingHours), a.status, `${calculatedProductivity}%`
       ];
     });
     exportCSV([header, ...rows], "attendance_report.csv");
@@ -686,10 +703,31 @@ function AttendanceExportReport({ filterByDate, onExportCSV }: any) {
   const data = useMemo(() => {
     return db.attendance
       .filter((a) => filterByDate(a.date))
-      .map((a) => ({
-        ...a,
-        empName: db.employees.find((e) => e.id === a.employeeId)?.name || a.employeeId,
-      }));
+      .map((a) => {
+        let dynamicWorkingSeconds = a.totalWorkingSeconds || 0;
+        const activeSession = a.sessions?.find((s: any) => !s.logoutAt);
+        if (activeSession) {
+          const loginTime = new Date(activeSession.loginAt).getTime();
+          const now = new Date().getTime();
+          dynamicWorkingSeconds += Math.floor((now - loginTime) / 1000);
+        }
+        let displayWorkingHours = a.totalWorkingHours || a.workingHours || 0;
+        if (activeSession || dynamicWorkingSeconds > 0) {
+          displayWorkingHours = Number((dynamicWorkingSeconds / 3600).toFixed(2));
+        }
+
+        let calculatedProductivity = a.productivity || 0;
+        if (displayWorkingHours > 0) {
+          calculatedProductivity = Math.min(100, Math.round((displayWorkingHours / 8) * 100));
+        }
+
+        return {
+          ...a,
+          workingHours: displayWorkingHours,
+          productivity: calculatedProductivity,
+          empName: db.employees.find((e) => e.id === a.employeeId)?.name || a.employeeId,
+        };
+      });
   }, [db.attendance, db.employees, filterByDate]);
 
   const { search, setSearch, sortField, sortOrder, toggleSort, page, setPage, pageSize, setPageSize, totalPages, totalItems, startIndex, endIndex, paginatedData } = useDataTable({

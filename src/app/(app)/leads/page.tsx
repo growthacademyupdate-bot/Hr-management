@@ -238,8 +238,9 @@ export default function LeadsPage() {
 
 function LeadFormDialog({ open, onClose, lead }: { open: boolean; onClose: () => void; lead?: any }) {
   const [form, setForm] = useState(lead || {
-    customerName: "", company: "", mobile: "", email: "", leadStatus: "NEW", remarks: "",
-    callOutcome: "", followUpDate: "", clientFollowUp: "",
+    leadType: "Almawa International", leadDate: new Date().toISOString().slice(0, 10), clientId: "",
+    customerName: "", company: "", mobile: "", email: "", leadStatus: "NEW", remarks: "", city: "", pincode: "",
+    callOutcome: "", followUpDate: "", clientFollowUp: "", lastFollowUpNote: "", lastFollowUpDate: "",
     constructionInteriorWork: false, gmbProfileWork: false, logoWork: false, websiteWork: false, documentationWork: false
   });
 
@@ -276,43 +277,72 @@ function LeadFormDialog({ open, onClose, lead }: { open: boolean; onClose: () =>
           <DialogTitle>{isEditing ? "Edit Lead" : "Add New Lead"}</DialogTitle>
         </DialogHeader>
         <div className="grid grid-cols-2 gap-4 py-4 max-h-[65vh] overflow-y-auto px-1">
-          <div className="col-span-2 space-y-2">
-            <Label>Customer Name *</Label>
-            <Input value={form.customerName} onChange={e => setForm({...form, customerName: e.target.value})} placeholder="Full name" />
-          </div>
-          <div className="space-y-2">
-            <Label>Company Name</Label>
-            <Input value={form.company} onChange={e => setForm({...form, company: e.target.value})} placeholder="Company" />
-          </div>
-          <div className="space-y-2">
-            <Label>Mobile Number *</Label>
-            <Input value={form.mobile} onChange={e => setForm({...form, mobile: e.target.value})} placeholder="10-digit number" />
-          </div>
-          <div className="space-y-2">
-            <Label>Email</Label>
-            <Input type="email" value={form.email} onChange={e => setForm({...form, email: e.target.value})} placeholder="Email address" />
-          </div>
-          <div className="space-y-2">
-            <Label>Lead Status</Label>
-            <Select value={form.leadStatus} onValueChange={v => setForm({...form, leadStatus: v})}>
+          <div className="col-span-2 space-y-2 mb-2">
+            <Label>Lead Type</Label>
+            <Select value={form.leadType || "Almawa International"} onValueChange={v => setForm({...form, leadType: v})}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
-                {["NEW", "CONTACTED", "FOLLOW_UP", "INTERESTED", "POSITIVE", "NOT_INTERESTED", "CONVERTED", "LOST"].map(s => (
-                  <SelectItem key={s} value={s}>{s.replace("_", " ")}</SelectItem>
-                ))}
+                <SelectItem value="Almawa International">Almawa International Lead</SelectItem>
+                <SelectItem value="Fortune Loan Service">Fortune Loan Service Lead</SelectItem>
               </SelectContent>
             </Select>
           </div>
-          <div className="space-y-2">
-            <Label>Call Outcome</Label>
-            <Input value={form.callOutcome} onChange={e => setForm({...form, callOutcome: e.target.value})} placeholder="Outcome" />
-          </div>
-          <div className="space-y-2">
-            <Label>Follow Up Date</Label>
-            <Input type="date" value={form.followUpDate} onChange={e => setForm({...form, followUpDate: e.target.value})} />
-          </div>
+
+          {form.leadType === "Fortune Loan Service" ? (
+            <>
+              <div className="space-y-2"><Label>Lead Date</Label><Input type="date" value={form.leadDate} onChange={e => setForm({...form, leadDate: e.target.value})} /></div>
+              <div className="space-y-2"><Label>Client ID</Label><Input value={form.clientId} onChange={e => setForm({...form, clientId: e.target.value})} /></div>
+              <div className="col-span-2 space-y-2"><Label>Client Name</Label><Input value={form.customerName} onChange={e => setForm({...form, customerName: e.target.value})} /></div>
+              <div className="col-span-2 space-y-2"><Label>Business Name</Label><Input value={form.company} onChange={e => setForm({...form, company: e.target.value})} /></div>
+              <div className="space-y-2"><Label>Client Contact Number</Label><Input value={form.mobile} onChange={e => setForm({...form, mobile: e.target.value})} /></div>
+              <div className="space-y-2"><Label>Call Outcome</Label><Input value={form.callOutcome} onChange={e => setForm({...form, callOutcome: e.target.value})} /></div>
+              <div className="col-span-2 space-y-2"><Label>Remarks</Label><Input value={form.remarks} onChange={e => setForm({...form, remarks: e.target.value})} /></div>
+              
+              <div className="space-y-2">
+                <Label>Follow-Up Required</Label>
+                <Select value={form.followUpRequired || ""} onValueChange={v => setForm({...form, followUpRequired: v})}>
+                  <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Yes">Yes</SelectItem>
+                    <SelectItem value="No">No</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2"><Label>Client Follow-Up Date</Label><Input type="date" value={form.followUpDate} onChange={e => setForm({...form, followUpDate: e.target.value})} /></div>
+              
+              <div className="space-y-2"><Label>Location / City</Label><Input value={form.city} onChange={e => setForm({...form, city: e.target.value})} /></div>
+              <div className="space-y-2"><Label>PIN Code</Label><Input value={form.pincode} onChange={e => setForm({...form, pincode: e.target.value})} /></div>
+              <div className="col-span-2 space-y-2"><Label>Last Follow-Up Note</Label><Input value={form.lastFollowUpNote} onChange={e => setForm({...form, lastFollowUpNote: e.target.value})} /></div>
+              <div className="space-y-2"><Label>Last Follow-Up Date</Label><Input type="date" value={form.lastFollowUpDate} onChange={e => setForm({...form, lastFollowUpDate: e.target.value})} /></div>
+
+
+            </>
+          ) : (
+            <>
+              <div className="col-span-2 space-y-2"><Label>Customer Name *</Label><Input value={form.customerName} onChange={e => setForm({...form, customerName: e.target.value})} placeholder="Full name" /></div>
+              <div className="space-y-2"><Label>Company Name</Label><Input value={form.company} onChange={e => setForm({...form, company: e.target.value})} placeholder="Company" /></div>
+              <div className="space-y-2"><Label>Mobile Number *</Label><Input value={form.mobile} onChange={e => setForm({...form, mobile: e.target.value})} placeholder="10-digit number" /></div>
+              <div className="space-y-2"><Label>Email</Label><Input type="email" value={form.email} onChange={e => setForm({...form, email: e.target.value})} placeholder="Email address" /></div>
+              <div className="space-y-2">
+                <Label>Lead Status</Label>
+                <Select value={form.leadStatus} onValueChange={v => setForm({...form, leadStatus: v})}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {["NEW", "CONTACTED", "FOLLOW_UP", "INTERESTED", "POSITIVE", "NOT_INTERESTED", "CONVERTED", "LOST"].map(s => (
+                      <SelectItem key={s} value={s}>{s.replace("_", " ")}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2"><Label>Call Outcome</Label><Input value={form.callOutcome} onChange={e => setForm({...form, callOutcome: e.target.value})} placeholder="Outcome" /></div>
+              <div className="space-y-2"><Label>Follow Up Date</Label><Input type="date" value={form.followUpDate} onChange={e => setForm({...form, followUpDate: e.target.value})} /></div>
+              <div className="col-span-2 space-y-2"><Label>Client Follow Up</Label><Input value={form.clientFollowUp} onChange={e => setForm({...form, clientFollowUp: e.target.value})} placeholder="Client follow up notes..." /></div>
+              <div className="col-span-2 space-y-2"><Label>Remarks</Label><Input value={form.remarks} onChange={e => setForm({...form, remarks: e.target.value})} placeholder="Notes..." /></div>
+            </>
+          )}
+
           {user?.role === "admin" && (
-            <div className="space-y-2">
+            <div className="col-span-2 space-y-2">
               <Label>Assign to Sales Employee</Label>
               <Select value={form.employeeId || ""} onValueChange={v => setForm({...form, employeeId: v})}>
                 <SelectTrigger><SelectValue placeholder="Select Employee" /></SelectTrigger>
@@ -324,15 +354,8 @@ function LeadFormDialog({ open, onClose, lead }: { open: boolean; onClose: () =>
               </Select>
             </div>
           )}
-          <div className="col-span-2 space-y-2">
-            <Label>Client Follow Up</Label>
-            <Input value={form.clientFollowUp} onChange={e => setForm({...form, clientFollowUp: e.target.value})} placeholder="Client follow up notes..." />
-          </div>
-          <div className="col-span-2 space-y-2">
-            <Label>Remarks</Label>
-            <Input value={form.remarks} onChange={e => setForm({...form, remarks: e.target.value})} placeholder="Notes..." />
-          </div>
-          <div className="col-span-2">
+
+          <div className="col-span-2 mt-2">
             <Label className="mb-2 block">Work Requirements</Label>
             <div className="grid grid-cols-2 gap-2 text-sm">
               <label className="flex items-center space-x-2">
@@ -341,15 +364,15 @@ function LeadFormDialog({ open, onClose, lead }: { open: boolean; onClose: () =>
               </label>
               <label className="flex items-center space-x-2">
                 <input type="checkbox" className="w-4 h-4" checked={form.gmbProfileWork} onChange={e => setForm({...form, gmbProfileWork: e.target.checked})} />
-                <span>GMB Profile Work</span>
+                <span>Google Business Profile (GMB) Work</span>
               </label>
               <label className="flex items-center space-x-2">
                 <input type="checkbox" className="w-4 h-4" checked={form.logoWork} onChange={e => setForm({...form, logoWork: e.target.checked})} />
-                <span>Logo Work</span>
+                <span>Logo Design Work</span>
               </label>
               <label className="flex items-center space-x-2">
                 <input type="checkbox" className="w-4 h-4" checked={form.websiteWork} onChange={e => setForm({...form, websiteWork: e.target.checked})} />
-                <span>Website Work</span>
+                <span>Website Development Work</span>
               </label>
               <label className="flex items-center space-x-2">
                 <input type="checkbox" className="w-4 h-4" checked={form.documentationWork} onChange={e => setForm({...form, documentationWork: e.target.checked})} />

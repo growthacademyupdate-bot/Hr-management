@@ -8,6 +8,7 @@ import { PageHeader } from "@/components/PageHeader";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -193,7 +194,7 @@ export default function EmployeesPage() {
 function AddEmployeeDialog({ onClose }: { onClose: () => void }) {
   const JOB_ROLES = ["Sales", "Marketing", "Developer", "Accountant", "Support", "Other"];
   const [form, setForm] = useState({
-    customId: "", name: "", email: "", mobile: "", department: "Design", designation: "", jobRole: "", joiningDate: new Date().toISOString().slice(0,10), salary: 60000, password: "", avatar: "", gstin: "", address: "", state: "",
+    customId: "", name: "", email: "", mobile: "", department: "Design", designation: "", jobRole: "", joiningDate: new Date().toISOString().slice(0,10), salary: 60000, password: "", avatar: "", gstin: "", address: "", state: "", notes: "",
   });
   const [showPw, setShowPw] = useState(false);
   async function submit() {
@@ -306,6 +307,15 @@ function AddEmployeeDialog({ onClose }: { onClose: () => void }) {
             </Button>
           </div>
         </div>
+        <div className="col-span-2 space-y-1">
+          <Label>Notes</Label>
+          <Textarea 
+            placeholder="Add notes about this employee..." 
+            value={form.notes} 
+            onChange={(e) => setForm({...form, notes: e.target.value})} 
+            className="min-h-[80px]"
+          />
+        </div>
       </div>
       <DialogFooter>
         <Button variant="outline" onClick={onClose}>Cancel</Button>
@@ -331,6 +341,7 @@ function EditEmployeeDialog({ employee, open, onClose }: { employee: Employee; o
     gstin: employee.gstin || "",
     address: employee.address || "",
     state: employee.state || "",
+    notes: employee.notes || "",
   });
   const [showPw, setShowPw] = useState(false);
   async function submit() {
@@ -425,6 +436,15 @@ function EditEmployeeDialog({ employee, open, onClose }: { employee: Employee; o
                 {showPw ? <EyeOff className="h-4 w-4 text-muted-foreground" /> : <Eye className="h-4 w-4 text-muted-foreground" />}
               </Button>
             </div>
+          </div>
+          <div className="col-span-2 space-y-1">
+            <Label>Notes</Label>
+            <Textarea 
+              placeholder="Add notes about this employee..." 
+              value={form.notes} 
+              onChange={(e) => setForm({...form, notes: e.target.value})} 
+              className="min-h-[80px]"
+            />
           </div>
         </div>
         <DialogFooter>

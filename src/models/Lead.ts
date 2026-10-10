@@ -3,6 +3,9 @@ import mongoose from "mongoose";
 const LeadSchema = new mongoose.Schema(
   {
     id: { type: String, required: true, unique: true },
+    leadType: { type: String, default: "Almawa International" },
+    leadDate: { type: String },
+    clientId: { type: String },
     customerName: { type: String, required: true },
     company: { type: String },
     mobile: { type: String, required: true },
@@ -40,6 +43,9 @@ const LeadSchema = new mongoose.Schema(
     logoWork: { type: Boolean, default: false },
     websiteWork: { type: Boolean, default: false },
     documentationWork: { type: Boolean, default: false },
+    lastFollowUpNote: { type: String },
+    lastFollowUpDate: { type: String },
+    followUpRequired: { type: String },
     employeeId: { type: String, required: true }, // The sales employee who created it
     createdBy: { type: String },
   },
