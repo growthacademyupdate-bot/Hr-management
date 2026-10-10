@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { Save } from "lucide-react";
 
@@ -14,6 +15,7 @@ export default function DataScrapingPage() {
   const [loading, setLoading] = useState(false);
   const [form, setForm] = useState({
     businessName: "",
+    cityNames: "",
     state: "",
     totalDataCollected: 0
   });
@@ -33,7 +35,7 @@ export default function DataScrapingPage() {
     try {
       await api.addDataScraping(form);
       toast.success("Data scraping information submitted successfully");
-      setForm({ businessName: "", state: "", totalDataCollected: 0 });
+      setForm({ businessName: "", cityNames: "", state: "", totalDataCollected: 0 });
     } catch (error: any) {
       toast.error(error.message || "Failed to submit data");
     } finally {
@@ -54,40 +56,56 @@ export default function DataScrapingPage() {
           <CardDescription>Enter the business and location details of your scraped data.</CardDescription>
         </CardHeader>
         <CardContent>
-          <form onSubmit={handleSubmit} className="flex flex-col md:flex-row gap-4 items-end">
-            <div className="space-y-2 flex-1 w-full">
-              <Label>Business Name *</Label>
-              <Input 
+          <form onSubmit={handleSubmit} className="flex flex-col gap-6">
+            <div className="space-y-2 w-full">
+              <Label>Business Name(s) *</Label>
+              <Textarea 
                 value={form.businessName} 
                 onChange={e => setForm({...form, businessName: e.target.value})} 
-                placeholder="e.g. XYZ Corp" 
+                placeholder="e.g. XYZ Corp, ABC Ltd (You can add multiple names here)" 
                 required 
-              />
-            </div>
-            <div className="space-y-2 flex-1 w-full">
-              <Label>State *</Label>
-              <Input 
-                value={form.state} 
-                onChange={e => setForm({...form, state: e.target.value})} 
-                placeholder="e.g. Maharashtra" 
-                required 
-              />
-            </div>
-            <div className="space-y-2 flex-1 w-full">
-              <Label>Total Collected *</Label>
-              <Input 
-                type="text" inputMode="numeric"
-                min="0"
-                value={form.totalDataCollected || ""} 
-                onChange={e => setForm({...form, totalDataCollected: parseInt(e.target.value) || 0})} 
-                required 
+                className="min-h-[120px] resize-y"
               />
             </div>
             
-            <Button type="submit" className="w-full md:w-auto h-10 shrink-0" disabled={loading}>
-              <Save className="h-4 w-4 mr-2" />
-              {loading ? "Submitting..." : "Submit Data"}
-            </Button>
+            <div className="space-y-2 w-full">
+              <Label>City Name(s)</Label>
+              <Textarea 
+                value={form.cityNames} 
+                onChange={e => setForm({...form, cityNames: e.target.value})} 
+                placeholder="e.g. Mumbai, Pune (Optional)" 
+                className="min-h-[80px] resize-y"
+              />
+            </div>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2 w-full">
+                <Label>State *</Label>
+                <Input 
+                  value={form.state} 
+                  onChange={e => setForm({...form, state: e.target.value})} 
+                  placeholder="e.g. Maharashtra" 
+                  required 
+                />
+              </div>
+              <div className="space-y-2 w-full">
+                <Label>Total Collected *</Label>
+                <Input 
+                  type="text" inputMode="numeric"
+                  min="0"
+                  value={form.totalDataCollected || ""} 
+                  onChange={e => setForm({...form, totalDataCollected: parseInt(e.target.value) || 0})} 
+                  required 
+                />
+              </div>
+            </div>
+            
+            <div className="flex justify-end">
+              <Button type="submit" className="w-full md:w-auto h-10" disabled={loading}>
+                <Save className="h-4 w-4 mr-2" />
+                {loading ? "Submitting..." : "Submit Data"}
+              </Button>
+            </div>
           </form>
         </CardContent>
       </Card>

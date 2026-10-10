@@ -51,7 +51,6 @@ Regular content updates based on marketing requirements.`
 Secure Admin Login & Role-Based Access.
 Admin Dashboard with sales, revenue, orders, and business statistics.
 Product Management – add, edit, delete, and manage products.
-Category Management for organizing products.
 Customer Management – maintain customer details and purchase history.
 Billing / POS Module for creating and processing bills.
 Generate GST/Tax Invoices with applicable tax calculations.
@@ -70,17 +69,12 @@ Invoice Print & PDF generation.
 User/Employee Management with role-based permissions.
 Responsive interface for Desktop, Tablet, and Mobile.
 REST API development using Node.js & Express.js.
-MongoDB database integration.
-React.js based frontend development.
-JWT Authentication and authorization.
-Basic security, validation, and error handling.
-Production deployment and configuration.
-Testing and bug fixing before final delivery.`
+MongoDB database integration.`
   },
   erp: {
     description: 'ERP/CRM',
     serviceDetails: `Development of a custom ERP/CRM software using the MERN Stack.
-Admin, Employee, and Customer modules.
+Admin, Employee, and Customer modules.Responsive UI for Desktop, Tablet, and Mobile.
 Secure Login & Role-Based Access Control.
 Admin dashboard with business overview and key statistics.
 Customer Management – add, edit, delete, and manage customer records.
@@ -95,14 +89,11 @@ Payment Management – track received and pending payments.
 Expense Management – record and manage business expenses.
 Reports & Analytics – generate business and performance reports.
 Notifications & Alerts for important activities and updates.
-Search, filter, sorting, and pagination functionality.
 Dashboard with charts, tables, and graphical reports.
-Responsive UI for Desktop, Tablet, and Mobile.
+
 REST API development using Node.js & Express.js.
 MongoDB database integration for data management.
-React.js frontend development.
-Authentication and authorization using JWT.
-API validation, error handling, and basic security implementation.
+JWT,API validation, error handling, and basic security implementation.
 Deployment and production configuration.
 Testing and bug fixing before final delivery.`
   },
@@ -121,13 +112,6 @@ Contact Us page with enquiry/contact form.
 Integration of WhatsApp, Email, Google Maps, and Social Media links.
 Admin Login with secure authentication.
 Admin dashboard to manage website content.
-Admin can Add, Edit, Delete, and Update Services.
-Admin can Add, Edit, Delete, and Update Projects/Portfolio.
-Admin can manage Team Members.
-Admin can manage Testimonials and Client Reviews.
-Admin can manage Gallery/Images.
-Admin can update About Company content.
-Admin can manage Contact/Enquiry details.
 Image upload and content management functionality.
 Fully responsive website for Desktop, Tablet, and Mobile.
 SEO-friendly website structure.
@@ -261,9 +245,9 @@ export default function QuotationGenerator() {
     if (digitalPackages[value as keyof typeof digitalPackages]) {
       const pkg = digitalPackages[value as keyof typeof digitalPackages];
       const newItems = [...items];
-      newItems[0] = { 
-        ...newItems[0], 
-        description: pkg.description, 
+      newItems[0] = {
+        ...newItems[0],
+        description: pkg.description,
         serviceDetails: pkg.serviceDetails,
         unitPrice: pkg.unitPrice,
         quantity: '1',
@@ -284,7 +268,7 @@ export default function QuotationGenerator() {
       const qty = item.quantity === '' ? 1 : Number(item.quantity);
       const subtotal = Number(item.unitPrice) * qty;
       acc.subtotal += subtotal;
-      
+
       if (item.includeGst) {
         const sgst = (subtotal * (item.sgstPercent === '' ? 0 : Number(item.sgstPercent))) / 100;
         const cgst = (subtotal * (item.cgstPercent === '' ? 0 : Number(item.cgstPercent))) / 100;
