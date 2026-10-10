@@ -316,7 +316,18 @@ export async function POST(req: NextRequest) {
           doc.font('Helvetica-Bold').fontSize(8).text('UPI ID: 9028346900m@pnb', 375, bY, { width: 175, align: 'center' });
         }
 
-        const authSignY = bY + 30;
+        const authSignY = bY + 110;
+
+        try {
+            const signaturePath = path.join(process.cwd(), 'public', 'signature2.png');
+            if (fs.existsSync(signaturePath)) {
+                // Draw the stamp right above the line
+                doc.image(signaturePath, 375 + (185 - 120) / 2, authSignY - 95, { width: 120 });
+            }
+        } catch (e) {
+            console.error('Error drawing signature', e);
+        }
+
         doc.moveTo(375, authSignY).lineTo(545, authSignY).stroke('#000000');
         doc.font('Helvetica-Bold').fontSize(9).text("CONCERNED AUTHORITY", 375, authSignY + 5);
 
@@ -329,8 +340,8 @@ export async function POST(req: NextRequest) {
     let isFirstTermsPage = true;
     let hasBankBoxThisPage = false;
     
-    // If Bank Details fit, draw it now. Needs ~285 points.
-    if (termsBoxY + 285 <= doc.page.height - 40) {
+    // If Bank Details fit, draw it now. Needs ~365 points now.
+    if (termsBoxY + 365 <= doc.page.height - 40) {
         bankBoxBottom = drawBankDetails(termsBoxY);
         bankDetailsDrawn = true;
         hasBankBoxThisPage = true;
@@ -452,12 +463,14 @@ export async function POST(req: NextRequest) {
         finalY = bankBoxBottom + 20;
     }
 
-    if (finalY + 20 > doc.page.height - 40) {
+    let sigYPos = finalY + 10;
+    // We only need space for the Thank You text (40px)
+    if (sigYPos + 40 > doc.page.height - 40) {
         doc.addPage();
-        doc.font('Helvetica-Bold').fontSize(14).fillColor('#0078D7').text('Thank You For The Opportunity!', 40, 40, { align: 'center', width: 515 });
-    } else {
-        doc.font('Helvetica-Bold').fontSize(14).fillColor('#0078D7').text('Thank You For The Opportunity!', 40, finalY, { align: 'center', width: 515 });
+        sigYPos = 40;
     }
+
+    doc.font('Helvetica-Bold').fontSize(14).fillColor('#0078D7').text('Thank You For The Opportunity!', 40, sigYPos, { align: 'center', width: 515 });
 
     doc.end();
 

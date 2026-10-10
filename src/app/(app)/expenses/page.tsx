@@ -17,7 +17,7 @@ import { useDataTable } from "@/hooks/useDataTable";
 import { SortableHeader } from "@/components/SortableHeader";
 import { DataTablePagination } from "@/components/DataTablePagination";
 import {
-  Receipt, Plus, Search, CheckCircle2, XCircle, Clock, DollarSign, Wallet, FileText, Image as ImageIcon, Check, X, ShieldCheck, Eye, Trash2, Printer, Pencil
+  Receipt, Plus, Search, CheckCircle2, XCircle, Clock, DollarSign, Wallet, FileText, Image as ImageIcon, Check, X, ShieldCheck, Eye, Trash2, Printer, Pencil, Info, ZoomIn, ZoomOut
 } from "lucide-react";
 import Image from "next/image";
 import { format } from "date-fns";
@@ -41,6 +41,9 @@ export default function ExpensesPage() {
   const [reviewComment, setReviewComment] = useState("");
   const [reviewTargetStage, setReviewTargetStage] = useState<"hr" | "admin">("hr");
   const [printExpense, setPrintExpense] = useState<Expense | null>(null);
+  const [galleryExpense, setGalleryExpense] = useState<Expense | null>(null);
+  const [previewZoom, setPreviewZoom] = useState(1);
+  const [employeeExpensesModal, setEmployeeExpensesModal] = useState<string | null>(null);
 
   // Form State for New Expense Claim
   const [formData, setFormData] = useState({
@@ -86,7 +89,7 @@ export default function ExpensesPage() {
     if (isFuelCategory) {
       let total = 0;
       let hasValidTrip = false;
-      
+
       // Calculate from trips array if present
       if (formData.trips && formData.trips.length > 0) {
         formData.trips.forEach(trip => {
@@ -139,6 +142,11 @@ export default function ExpensesPage() {
     });
   }, [db.expenses, db.employees, isEmployee, currentUserId, employeeFilter, statusFilter, categoryFilter]);
 
+  const employeeExpenses = useMemo(() => {
+    if (!employeeExpensesModal) return [];
+    return db.expenses.filter(e => e.employeeId === employeeExpensesModal);
+  }, [db.expenses, employeeExpensesModal]);
+
   // Data Table integration
   const {
     search,
@@ -189,7 +197,7 @@ export default function ExpensesPage() {
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
     if (!files.length) return;
-    
+
     let totalSize = files.reduce((acc, f) => acc + f.size, 0);
     if (totalSize > 15 * 1024 * 1024) {
       toast.error("Total file size must be under 15MB");
@@ -237,11 +245,11 @@ export default function ExpensesPage() {
     });
 
     const newUrls = await Promise.all(readFiles);
-    
+
     // Calculate total accumulated string size in bytes (approximate)
     const currentSize = formData.receiptUrls ? formData.receiptUrls.join("").length : 0;
     const newSize = newUrls.join("").length;
-    
+
     if (currentSize + newSize > 4 * 1024 * 1024) { // Vercel has a hard 4.5MB Serverless Function payload limit!
       toast.error("Total accumulated receipt size is still too large! Please attach fewer images at once.");
       e.target.value = "";
@@ -249,7 +257,7 @@ export default function ExpensesPage() {
     }
 
     setFormData((prev) => ({ ...prev, receiptUrls: prev.receiptUrls ? [...prev.receiptUrls, ...newUrls] : newUrls }));
-    
+
     // Reset file input so user can add more files one by one if they don't select them all at once
     e.target.value = "";
   };
@@ -417,9 +425,9 @@ export default function ExpensesPage() {
     <div className="space-y-6">
       {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <PageHeader 
-          title="Expense & Reimbursement Oversight" 
-          description="Manage employee out-of-pocket work expenses, approval flows, and salary payout reimbursements." 
+        <PageHeader
+          title="Expense & Reimbursement Oversight"
+          description="Manage employee out-of-pocket work expenses, approval flows, and salary payout reimbursements."
         />
         <Button onClick={() => {
           setEditExpenseId(null);
@@ -564,7 +572,12 @@ export default function ExpensesPage() {
                     <TableCell className="font-mono text-xs font-semibold text-primary">{item.id}</TableCell>
                     {!isEmployee && (
                       <TableCell>
-                        <div className="font-semibold text-sm">{item.employeeName}</div>
+                        <div 
+                          className="font-semibold text-sm cursor-pointer hover:underline text-primary transition-colors"
+                          onClick={() => setEmployeeExpensesModal(item.employeeId)}
+                        >
+                          {item.employeeName}
+                        </div>
                         <div className="text-[11px] text-muted-foreground">{item.department}</div>
                       </TableCell>
                     )}
@@ -580,18 +593,29 @@ export default function ExpensesPage() {
                     <TableCell>{renderStatusBadge(item.status)}</TableCell>
                     <TableCell className="text-right whitespace-nowrap">
                       <div className="flex items-center justify-end gap-1">
-                        {/* View Receipt / Details */}
+                        {/* View Images / Details */}
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 text-blue-600 hover:bg-blue-50"
+                          title="View Images"
+                          onClick={() => {
+                            setGalleryExpense(item);
+                          }}
+                        >
+                          <Eye className="h-4 w-4" />
+                        </Button>
                         <Button
                           variant="ghost"
                           size="icon"
                           className="h-8 w-8"
-                          title="View Details & Receipt"
+                          title="View Claim Details"
                           onClick={() => {
                             setSelectedExpense(item);
                             setOpenReceiptModal(true);
                           }}
                         >
-                          <Eye className="h-4 w-4 text-muted-foreground" />
+                          <Info className="h-4 w-4 text-muted-foreground" />
                         </Button>
                         <Button
                           variant="ghost"
@@ -840,8 +864,8 @@ export default function ExpensesPage() {
                     </SelectContent>
                   </Select>
                   {formData.category === "Other" && (
-                    <Input 
-                      placeholder="Please specify category" 
+                    <Input
+                      placeholder="Please specify category"
                       value={formData.customCategory}
                       onChange={(e) => setFormData({ ...formData, customCategory: e.target.value })}
                       required
@@ -912,11 +936,11 @@ export default function ExpensesPage() {
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-1">
                       <Label className="text-xs">Vehicle Type</Label>
-                      <Input className="h-8 text-xs" placeholder="e.g. Bike, Car" value={formData.vehicleType} onChange={e => setFormData({...formData, vehicleType: e.target.value})} />
+                      <Input className="h-8 text-xs" placeholder="e.g. Bike, Car" value={formData.vehicleType} onChange={e => setFormData({ ...formData, vehicleType: e.target.value })} />
                     </div>
                     <div className="space-y-1">
                       <Label className="text-xs">Vehicle Number</Label>
-                      <Input className="h-8 text-xs" placeholder="e.g. MH 12 AB 1234" value={formData.vehicleNumber} onChange={e => setFormData({...formData, vehicleNumber: e.target.value})} />
+                      <Input className="h-8 text-xs" placeholder="e.g. MH 12 AB 1234" value={formData.vehicleNumber} onChange={e => setFormData({ ...formData, vehicleNumber: e.target.value })} />
                     </div>
                   </div>
                   {formData.trips.length === 0 ? (
@@ -924,15 +948,15 @@ export default function ExpensesPage() {
                       <div className="grid grid-cols-3 gap-3 pt-2 border-t border-orange-200">
                         <div className="space-y-1">
                           <Label className="text-xs">Distance (KM)</Label>
-                          <Input type="number" step="any" className="h-8 text-xs bg-white" placeholder="e.g. 50" value={formData.distanceKm} onChange={e => setFormData({...formData, distanceKm: e.target.value})} />
+                          <Input type="number" step="any" className="h-8 text-xs bg-white" placeholder="e.g. 50" value={formData.distanceKm} onChange={e => setFormData({ ...formData, distanceKm: e.target.value })} />
                         </div>
                         <div className="space-y-1">
                           <Label className="text-xs">Vehicle Avg (KM/L)</Label>
-                          <Input type="number" step="any" className="h-8 text-xs bg-white" placeholder="e.g. 45" value={formData.vehicleAverage} onChange={e => setFormData({...formData, vehicleAverage: e.target.value})} />
+                          <Input type="number" step="any" className="h-8 text-xs bg-white" placeholder="e.g. 45" value={formData.vehicleAverage} onChange={e => setFormData({ ...formData, vehicleAverage: e.target.value })} />
                         </div>
                         <div className="space-y-1">
                           <Label className="text-xs">Petrol Rate (₹/L)</Label>
-                          <Input type="number" step="any" className="h-8 text-xs bg-white" placeholder="e.g. 106.5" value={formData.petrolRate} onChange={e => setFormData({...formData, petrolRate: e.target.value})} />
+                          <Input type="number" step="any" className="h-8 text-xs bg-white" placeholder="e.g. 106.5" value={formData.petrolRate} onChange={e => setFormData({ ...formData, petrolRate: e.target.value })} />
                         </div>
                       </div>
                       <div className="flex justify-end pt-1">
@@ -960,38 +984,38 @@ export default function ExpensesPage() {
                         <Button type="button" variant="outline" size="sm" className="h-7 text-xs bg-white" onClick={() => {
                           const lastTrip = formData.trips[formData.trips.length - 1];
                           setFormData({
-                            ...formData, 
-                            trips: [...formData.trips, { 
-                              date: new Date().toISOString().slice(0, 10), 
-                              distanceKm: "", 
-                              vehicleAverage: lastTrip?.vehicleAverage || "", 
-                              petrolRate: lastTrip?.petrolRate || "", 
-                              amount: 0 
+                            ...formData,
+                            trips: [...formData.trips, {
+                              date: new Date().toISOString().slice(0, 10),
+                              distanceKm: "",
+                              vehicleAverage: lastTrip?.vehicleAverage || "",
+                              petrolRate: lastTrip?.petrolRate || "",
+                              amount: 0
                             }]
                           })
                         }}>
                           <Plus className="h-3 w-3 mr-1" /> Add Day
                         </Button>
                       </div>
-                      
+
                       {formData.trips.map((trip, idx) => (
                         <div key={idx} className="p-2 border bg-white rounded-md relative flex gap-2 items-end shadow-sm">
                           <div className="flex-1 grid grid-cols-4 gap-2">
                             <div className="space-y-1">
                               <Label className="text-[10px]">Date</Label>
-                              <Input type="date" className="h-7 text-[10px]" value={trip.date} onChange={e => { const t = [...formData.trips]; t[idx].date = e.target.value; setFormData({...formData, trips: t}); }} />
+                              <Input type="date" className="h-7 text-[10px]" value={trip.date} onChange={e => { const t = [...formData.trips]; t[idx].date = e.target.value; setFormData({ ...formData, trips: t }); }} />
                             </div>
                             <div className="space-y-1">
                               <Label className="text-[10px]">Distance (KM)</Label>
-                              <Input type="number" step="any" className="h-7 text-[10px]" placeholder="KM" value={trip.distanceKm} onChange={e => { const t = [...formData.trips]; t[idx].distanceKm = e.target.value; setFormData({...formData, trips: t}); }} />
+                              <Input type="number" step="any" className="h-7 text-[10px]" placeholder="KM" value={trip.distanceKm} onChange={e => { const t = [...formData.trips]; t[idx].distanceKm = e.target.value; setFormData({ ...formData, trips: t }); }} />
                             </div>
                             <div className="space-y-1">
                               <Label className="text-[10px]">Avg (KM/L)</Label>
-                              <Input type="number" step="any" className="h-7 text-[10px]" placeholder="Avg" value={trip.vehicleAverage} onChange={e => { const t = [...formData.trips]; t[idx].vehicleAverage = e.target.value; setFormData({...formData, trips: t}); }} />
+                              <Input type="number" step="any" className="h-7 text-[10px]" placeholder="Avg" value={trip.vehicleAverage} onChange={e => { const t = [...formData.trips]; t[idx].vehicleAverage = e.target.value; setFormData({ ...formData, trips: t }); }} />
                             </div>
                             <div className="space-y-1">
                               <Label className="text-[10px]">Rate (₹/L)</Label>
-                              <Input type="number" step="any" className="h-7 text-[10px]" placeholder="Rate" value={trip.petrolRate} onChange={e => { const t = [...formData.trips]; t[idx].petrolRate = e.target.value; setFormData({...formData, trips: t}); }} />
+                              <Input type="number" step="any" className="h-7 text-[10px]" placeholder="Rate" value={trip.petrolRate} onChange={e => { const t = [...formData.trips]; t[idx].petrolRate = e.target.value; setFormData({ ...formData, trips: t }); }} />
                             </div>
                             <div className="col-span-4 mt-1 text-right text-[10px] font-bold text-orange-700 bg-orange-50/50 p-1 rounded-sm">
                               Daily Amount: ₹{(!isNaN(parseFloat(trip.distanceKm)) && !isNaN(parseFloat(trip.vehicleAverage)) && !isNaN(parseFloat(trip.petrolRate)) && parseFloat(trip.vehicleAverage) > 0) ? ((parseFloat(trip.distanceKm) / parseFloat(trip.vehicleAverage)) * parseFloat(trip.petrolRate)).toFixed(2) : "0.00"}
@@ -999,7 +1023,7 @@ export default function ExpensesPage() {
                           </div>
                           <Button type="button" variant="ghost" size="icon" className="h-7 w-7 text-rose-500 hover:bg-rose-50" onClick={() => {
                             const t = [...formData.trips]; t.splice(idx, 1);
-                            setFormData({...formData, trips: t});
+                            setFormData({ ...formData, trips: t });
                           }}>
                             <X className="h-3 w-3" />
                           </Button>
@@ -1016,27 +1040,27 @@ export default function ExpensesPage() {
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-1">
                     <Label className="text-xs">Account Holder Name</Label>
-                    <Input className="h-8 text-xs" placeholder="e.g. John Doe" value={formData.bankHolderName} onChange={e => setFormData({...formData, bankHolderName: e.target.value})} />
+                    <Input className="h-8 text-xs" placeholder="e.g. John Doe" value={formData.bankHolderName} onChange={e => setFormData({ ...formData, bankHolderName: e.target.value })} />
                   </div>
                   <div className="space-y-1">
                     <Label className="text-xs">Bank Name</Label>
-                    <Input className="h-8 text-xs" placeholder="e.g. HDFC Bank" value={formData.bankName} onChange={e => setFormData({...formData, bankName: e.target.value})} />
+                    <Input className="h-8 text-xs" placeholder="e.g. HDFC Bank" value={formData.bankName} onChange={e => setFormData({ ...formData, bankName: e.target.value })} />
                   </div>
                   <div className="space-y-1">
                     <Label className="text-xs">Branch</Label>
-                    <Input className="h-8 text-xs" placeholder="e.g. Connaught Place" value={formData.branch} onChange={e => setFormData({...formData, branch: e.target.value})} />
+                    <Input className="h-8 text-xs" placeholder="e.g. Connaught Place" value={formData.branch} onChange={e => setFormData({ ...formData, branch: e.target.value })} />
                   </div>
                   <div className="space-y-1">
                     <Label className="text-xs">Account No</Label>
-                    <Input className="h-8 text-xs" placeholder="e.g. 1234567890" value={formData.accountNo} onChange={e => setFormData({...formData, accountNo: e.target.value})} />
+                    <Input className="h-8 text-xs" placeholder="e.g. 1234567890" value={formData.accountNo} onChange={e => setFormData({ ...formData, accountNo: e.target.value })} />
                   </div>
                   <div className="space-y-1">
                     <Label className="text-xs">IFSC Code</Label>
-                    <Input className="h-8 text-xs" placeholder="e.g. HDFC0001234" value={formData.ifscCode} onChange={e => setFormData({...formData, ifscCode: e.target.value})} />
+                    <Input className="h-8 text-xs" placeholder="e.g. HDFC0001234" value={formData.ifscCode} onChange={e => setFormData({ ...formData, ifscCode: e.target.value })} />
                   </div>
                   <div className="space-y-1">
                     <Label className="text-xs">UPI ID</Label>
-                    <Input className="h-8 text-xs" placeholder="e.g. yourname@upi" value={formData.upiId} onChange={e => setFormData({...formData, upiId: e.target.value})} />
+                    <Input className="h-8 text-xs" placeholder="e.g. yourname@upi" value={formData.upiId} onChange={e => setFormData({ ...formData, upiId: e.target.value })} />
                   </div>
                 </div>
               </div>
@@ -1055,7 +1079,7 @@ export default function ExpensesPage() {
                   <div className="mt-2 space-y-2">
                     {formData.receiptUrls.map((url, idx) => (
                       <div key={idx} className="p-2 border rounded-lg bg-muted/30 flex items-center justify-between">
-                        <span 
+                        <span
                           className="text-xs text-muted-foreground flex items-center gap-1 truncate max-w-[80%] cursor-pointer hover:text-primary transition-colors hover:underline"
                           onClick={() => setPreviewImage(url)}
                         >
@@ -1232,35 +1256,354 @@ export default function ExpensesPage() {
 
       {/* --- MODAL 4: PRINT BILL MODAL --- */}
       {printExpense && (
-        <PrintExpenseBillModal 
-          expense={printExpense} 
+        <PrintExpenseBillModal
+          expense={printExpense}
           employee={db.employees.find(e => e.id === printExpense.employeeId)}
-          onClose={() => setPrintExpense(null)} 
+          onClose={() => setPrintExpense(null)}
           numberToWords={numberToWords}
         />
       )}
       {/* --- IMAGE PREVIEW MODAL --- */}
-      <Dialog open={!!previewImage} onOpenChange={(v) => !v && setPreviewImage(null)}>
-        <DialogContent 
-          className="max-w-4xl border-none bg-transparent shadow-none p-0 flex flex-col justify-center items-center"
+      <Dialog open={!!previewImage} onOpenChange={(v) => {
+        if (!v) {
+          setPreviewImage(null);
+          setPreviewZoom(1);
+        }
+      }}>
+        <DialogContent
+          className="max-w-5xl h-[95vh] border-none bg-transparent shadow-none p-0 flex flex-col justify-center items-center overflow-hidden"
           onInteractOutside={(e) => e.preventDefault()}
           onCloseAutoFocus={(e) => e.preventDefault()}
         >
-          <div className="w-full flex justify-start mb-2 px-4">
-            <Button 
-              type="button" 
-              variant="secondary" 
-              onClick={(e) => { e.preventDefault(); e.stopPropagation(); setPreviewImage(null); }} 
+          <div className="w-full flex justify-between items-center mb-2 px-4 absolute top-4 z-10">
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={(e) => { e.preventDefault(); e.stopPropagation(); setPreviewImage(null); setPreviewZoom(1); }}
               className="shadow-md bg-white text-black hover:bg-gray-100 font-semibold px-6"
             >
-               ← Back
+              ← Back
             </Button>
+            <div className="flex gap-2">
+              <Button 
+                type="button" 
+                variant="secondary" 
+                onClick={() => setPreviewZoom(prev => Math.max(0.5, prev - 0.25))} 
+                className="shadow-md bg-white text-black hover:bg-gray-100 px-3"
+                title="Zoom Out"
+              >
+                <ZoomOut className="h-5 w-5" />
+              </Button>
+              <Button 
+                type="button" 
+                variant="secondary" 
+                onClick={() => setPreviewZoom(prev => Math.min(4, prev + 0.25))} 
+                className="shadow-md bg-white text-black hover:bg-gray-100 px-3"
+                title="Zoom In"
+              >
+                <ZoomIn className="h-5 w-5" />
+              </Button>
+            </div>
           </div>
           {previewImage && (
-            <div className="bg-black/40 p-2 rounded-xl">
-              <img src={previewImage} alt="Receipt Preview" className="max-w-full max-h-[85vh] object-contain rounded-lg shadow-2xl border-4 border-white/10" />
+            <div className="bg-black/80 w-full h-full p-4 rounded-xl flex justify-center items-center overflow-auto mt-16">
+              <img 
+                src={previewImage} 
+                alt="Preview" 
+                className="transition-transform duration-200"
+                style={{ 
+                  transform: `scale(${previewZoom})`,
+                  transformOrigin: 'center center',
+                  maxHeight: previewZoom <= 1 ? '100%' : 'none',
+                  maxWidth: previewZoom <= 1 ? '100%' : 'none',
+                  objectFit: 'contain'
+                }} 
+              />
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* --- IMAGE GALLERY MODAL --- */}
+      <Dialog open={!!galleryExpense} onOpenChange={(v) => {
+        if (!v) {
+          setGalleryExpense(null);
+        }
+      }}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Expense Images</DialogTitle>
+          </DialogHeader>
+          <div className="flex flex-col gap-6 items-center w-full mt-4">
+            {galleryExpense?.receiptUrls && galleryExpense.receiptUrls.length > 0 ? (
+              galleryExpense.receiptUrls.map((url, idx) => (
+                <div key={idx} className="w-full relative group">
+                  <img 
+                    src={url} 
+                    alt={`Receipt ${idx + 1}`} 
+                    className="w-full rounded-lg border shadow-sm cursor-pointer transition-all hover:opacity-90"
+                    onClick={() => {
+                      setPreviewImage(url);
+                      setPreviewZoom(1);
+                    }}
+                  />
+                  <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-black/60 text-white px-4 py-2 rounded-full opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity flex items-center gap-2">
+                    <ZoomIn className="w-4 h-4" /> Click to Zoom
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div className="w-full text-center text-muted-foreground p-8">No images available for this claim.</div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* --- EMPLOYEE EXPENSES MODAL --- */}
+      <Dialog open={!!employeeExpensesModal} onOpenChange={(open) => !open && setEmployeeExpensesModal(null)}>
+        <DialogContent className="max-w-[95vw] max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>
+              {db.employees.find(e => e.id === employeeExpensesModal)?.name}&apos;s Expenses
+            </DialogTitle>
+          </DialogHeader>
+          <div className="mt-4 border rounded-md max-h-[45vh] overflow-y-scroll custom-scrollbar">
+            <Table>
+              <TableHeader className="bg-muted/50">
+                <TableRow>
+                  <TableHead>Claim ID</TableHead>
+                  <TableHead>Title</TableHead>
+                  <TableHead>Category</TableHead>
+                  <TableHead>Date</TableHead>
+                  <TableHead>Amount</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {employeeExpenses.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={7} className="text-center py-4 text-muted-foreground">
+                      No expenses found for this employee.
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  employeeExpenses.map(exp => (
+                    <TableRow key={exp.id}>
+                      <TableCell className="font-mono text-xs">{exp.id}</TableCell>
+                      <TableCell>
+                        <div className="font-medium text-sm">{exp.title}</div>
+                        <div className="text-xs text-muted-foreground truncate max-w-[200px]">{exp.description}</div>
+                      </TableCell>
+                      <TableCell><Badge variant="secondary" className="font-normal">{exp.category}</Badge></TableCell>
+                      <TableCell className="text-xs">{new Date(exp.expenseDate).toLocaleDateString()}</TableCell>
+                      <TableCell className="font-bold text-sm">₹{exp.amount.toLocaleString()}</TableCell>
+                      <TableCell>{renderStatusBadge(exp.status)}</TableCell>
+                      <TableCell className="text-right whitespace-nowrap">
+                        <div className="flex items-center justify-end gap-1">
+                          {/* View Images / Details */}
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-blue-600 hover:bg-blue-50"
+                            title="View Images"
+                            onClick={() => {
+                              setGalleryExpense(exp);
+                            }}
+                          >
+                            <Eye className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8"
+                            title="View Claim Details"
+                            onClick={() => {
+                              setSelectedExpense(exp);
+                              setOpenReceiptModal(true);
+                            }}
+                          >
+                            <Info className="h-4 w-4 text-muted-foreground" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-indigo-600 hover:bg-indigo-50"
+                            title="Print Expense Bill"
+                            onClick={() => setPrintExpense(exp)}
+                          >
+                            <FileText className="h-4 w-4" />
+                          </Button>
+
+                          {/* HR Approval Action */}
+                          {isHR && exp.status === "pending" && (
+                            <div className="flex items-center gap-1">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="h-7 text-xs bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100"
+                                onClick={() => {
+                                  setSelectedExpense(exp);
+                                  setReviewAction("approve");
+                                  setReviewTargetStage("hr");
+                                  setOpenReviewModal(true);
+                                }}
+                              >
+                                <Check className="h-3 w-3 mr-1" /> Approve
+                              </Button>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="h-7 text-xs bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100"
+                                onClick={() => {
+                                  setSelectedExpense(exp);
+                                  setReviewAction("reject");
+                                  setReviewTargetStage("hr");
+                                  setOpenReviewModal(true);
+                                }}
+                              >
+                                <X className="h-3 w-3 mr-1" /> Reject
+                              </Button>
+                            </div>
+                          )}
+
+                          {/* Admin Approval Action */}
+                          {isAdmin && (exp.status === "pending" || exp.status === "hr_approved") && (
+                            <div className="flex items-center gap-1">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="h-7 text-xs bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100"
+                                onClick={() => {
+                                  setSelectedExpense(exp);
+                                  setReviewAction("approve");
+                                  setReviewTargetStage("admin");
+                                  setOpenReviewModal(true);
+                                }}
+                              >
+                                <Check className="h-3 w-3 mr-1" /> Approve
+                              </Button>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="h-7 text-xs bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100"
+                                onClick={() => {
+                                  setSelectedExpense(exp);
+                                  setReviewAction("reject");
+                                  setReviewTargetStage("admin");
+                                  setOpenReviewModal(true);
+                                }}
+                              >
+                                <X className="h-3 w-3 mr-1" /> Reject
+                              </Button>
+                            </div>
+                          )}
+
+                          {/* Mark as Reimbursed Action (Admin or HR on approved expenses) */}
+                          {(isAdmin || isHR) && (exp.status === "admin_approved" || exp.status === "hr_approved") && (
+                            <Button
+                              variant="default"
+                              size="sm"
+                              className="h-7 text-xs bg-emerald-600 hover:bg-emerald-700 text-white"
+                              onClick={() => handleMarkReimbursed(exp)}
+                            >
+                              <Wallet className="h-3 w-3 mr-1" /> Mark Paid
+                            </Button>
+                          )}
+
+                          {/* Employee Cancel Action */}
+                          {isEmployee && exp.status === "pending" && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 text-xs text-rose-600 hover:bg-rose-50"
+                              onClick={() => handleCancelExpense(exp.id)}
+                            >
+                              Cancel
+                            </Button>
+                          )}
+
+                          {/* Edit Expense */}
+                          {((isEmployee && exp.status === "pending") || isAdmin || isHR) && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 hover:bg-slate-100"
+                              title="Edit Expense Record"
+                              onClick={() => {
+                                setEditExpenseId(exp.id);
+                                setFormData({
+                                  title: exp.title,
+                                  category: exp.category as any,
+                                  amount: exp.amount.toString(),
+                                  expenseDate: exp.expenseDate,
+                                  description: exp.description,
+                                  receiptUrls: exp.receiptUrls || [],
+                                  gstPercent: (exp.gstPercent || 0).toString(),
+                                  bankHolderName: exp.bankHolderName || "",
+                                  bankName: exp.bankName || "",
+                                  branch: exp.branch || "",
+                                  accountNo: exp.accountNo || "",
+                                  ifscCode: exp.ifscCode || "",
+                                  upiId: exp.upiId || "",
+                                  customCategory: "",
+                                  vehicleType: exp.vehicleType || "",
+                                  vehicleNumber: exp.vehicleNumber || "",
+                                  distanceKm: exp.distanceKm ? exp.distanceKm.toString() : "",
+                                  vehicleAverage: exp.vehicleAverage ? exp.vehicleAverage.toString() : "",
+                                  petrolRate: exp.petrolRate ? exp.petrolRate.toString() : "",
+                                  trips: exp.trips ? exp.trips.map((t: any) => ({
+                                    date: t.date || "",
+                                    distanceKm: t.distanceKm?.toString() || "",
+                                    vehicleAverage: t.vehicleAverage?.toString() || "",
+                                    petrolRate: t.petrolRate?.toString() || "",
+                                    amount: t.amount || 0
+                                  })) : [],
+                                  targetEmployeeId: exp.employeeId || "",
+                                });
+                                setOpenAddModal(true);
+                              }}
+                            >
+                              <Pencil className="h-4 w-4 text-slate-600" />
+                            </Button>
+                          )}
+
+                          {/* Delete Expense */}
+                          {((isEmployee && exp.status === "pending") || isAdmin || isHR) && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 text-rose-600 hover:bg-rose-50"
+                              title="Delete Expense Record"
+                              onClick={async () => {
+                                if (confirm(`Are you sure you want to delete expense record ${exp.id}?`)) {
+                                  try {
+                                    await api.deleteExpense(exp.id);
+                                    toast.success("Expense record deleted");
+                                  } catch (e: any) {
+                                    toast.error(e.message || "Failed to delete expense");
+                                  }
+                                }
+                              }}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          )}
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </div>
+          
+          <div className="mt-4 p-4 bg-emerald-50 rounded-lg flex justify-between items-center border border-emerald-100">
+            <span className="font-semibold text-lg text-emerald-800">Total Expenses:</span>
+            <span className="font-bold text-xl text-emerald-600">
+              ₹{employeeExpenses.reduce((sum, exp) => sum + exp.amount, 0).toLocaleString()}
+            </span>
+          </div>
         </DialogContent>
       </Dialog>
 
@@ -1293,10 +1636,10 @@ function PrintExpenseBillModal({ expense, employee, onClose, numberToWords }: { 
               try {
                 const element = contentRef.current;
                 if (!element) return;
-                
+
                 // Dynamically import to prevent Next.js SSR issues
                 const html2pdfModule = (await import('html2pdf.js')).default;
-                
+
                 html2pdfModule().set({
                   margin: 0,
                   filename: `Expense_Bill_${expense.id}.pdf`,
@@ -1315,7 +1658,7 @@ function PrintExpenseBillModal({ expense, employee, onClose, numberToWords }: { 
 
         {/* Printable Area */}
         <div ref={contentRef} className="p-8 bg-white text-black min-h-[1056px] w-full font-sans text-[13px] border relative">
-          
+
           <div className="flex justify-between items-start mb-6">
             <div className="flex items-center gap-4">
               <img src="/logo.png" alt="AL-MAWA Logo" className="max-h-16 max-w-[120px] object-contain" />
@@ -1323,8 +1666,8 @@ function PrintExpenseBillModal({ expense, employee, onClose, numberToWords }: { 
                 <div className="text-xs font-semibold text-gray-500">GSTIN : 27ABDCA0474D1Z1</div>
                 <h1 className="text-2xl font-bold uppercase tracking-tight text-blue-900 mt-1">AL-MAWA INTERNATIONAL</h1>
                 <div className="text-xs text-gray-600 mt-1">
-                  Office No. 102-103 (Nexus Work Spaces), 1st Floor, Pride Icon Building, above Athithi Restaurant<br/>
-                  Kharadi-Mundhwa Road, Kharadi, Pune, Maharashtra, PIN Code 411014<br/>
+                  Office No. 102-103 (Nexus Work Spaces), 1st Floor, Pride Icon Building, above Athithi Restaurant<br />
+                  Kharadi-Mundhwa Road, Kharadi, Pune, Maharashtra, PIN Code 411014<br />
                   Contact No. : 📞 +91 95611 79693 | 📞 +91 95611 06693 | 📞 +91 90283 22363
                 </div>
               </div>
@@ -1417,7 +1760,7 @@ function PrintExpenseBillModal({ expense, employee, onClose, numberToWords }: { 
                   <td className="border-l border-r border-black"></td>
                   <td className="border-l border-r border-black bg-blue-50/30"></td>
                   <td className="border-l border-r border-black">
-                     <div className="flex h-full"><div className="w-1/2 border-r border-black"></div><div className="w-1/2"></div></div>
+                    <div className="flex h-full"><div className="w-1/2 border-r border-black"></div><div className="w-1/2"></div></div>
                   </td>
                   <td className="border-l border-r border-black bg-blue-50/30"></td>
                 </tr>
@@ -1447,17 +1790,17 @@ function PrintExpenseBillModal({ expense, employee, onClose, numberToWords }: { 
                 <span className="font-medium text-gray-600">UPI ID :</span><span className="col-span-2">{expense.upiId || "yourid@upi"}</span>
               </div>
               <div className="mt-4">
-                <span className="font-medium text-gray-600">Invoice Total in Word</span><br/>
+                <span className="font-medium text-gray-600">Invoice Total in Word</span><br />
                 <span className="font-bold">Rupees {totalAmount.toFixed(2)} Only</span>
               </div>
             </div>
             <div className="w-[40%] text-right font-medium text-gray-700">
-               <div className="flex border-b border-black"><div className="w-2/3 p-1 border-r border-black bg-gray-50">CGST Amt :</div><div className="w-1/3 p-1">{cgst.toFixed(2)}</div></div>
-               <div className="flex border-b border-black"><div className="w-2/3 p-1 border-r border-black bg-gray-50">SGST Amt :</div><div className="w-1/3 p-1">{sgst.toFixed(2)}</div></div>
-               <div className="flex border-b border-black"><div className="w-2/3 p-1 border-r border-black bg-gray-50">IGST Amt :</div><div className="w-1/3 p-1">0.00</div></div>
-               <div className="flex border-b border-black"><div className="w-2/3 p-1 border-r border-black bg-gray-50">Freight Packing Charges :</div><div className="w-1/3 p-1">0.00</div></div>
-               <div className="flex border-b border-black"><div className="w-2/3 p-1 border-r border-black bg-gray-50">Round off :</div><div className="w-1/3 p-1">0.00</div></div>
-               <div className="flex text-sm font-bold text-blue-900"><div className="w-2/3 p-1 border-r border-black bg-blue-50/50">Total Amount :</div><div className="w-1/3 p-1 bg-blue-50/50">{totalAmount.toFixed(2)}</div></div>
+              <div className="flex border-b border-black"><div className="w-2/3 p-1 border-r border-black bg-gray-50">CGST Amt :</div><div className="w-1/3 p-1">{cgst.toFixed(2)}</div></div>
+              <div className="flex border-b border-black"><div className="w-2/3 p-1 border-r border-black bg-gray-50">SGST Amt :</div><div className="w-1/3 p-1">{sgst.toFixed(2)}</div></div>
+              <div className="flex border-b border-black"><div className="w-2/3 p-1 border-r border-black bg-gray-50">IGST Amt :</div><div className="w-1/3 p-1">0.00</div></div>
+              <div className="flex border-b border-black"><div className="w-2/3 p-1 border-r border-black bg-gray-50">Freight Packing Charges :</div><div className="w-1/3 p-1">0.00</div></div>
+              <div className="flex border-b border-black"><div className="w-2/3 p-1 border-r border-black bg-gray-50">Round off :</div><div className="w-1/3 p-1">0.00</div></div>
+              <div className="flex text-sm font-bold text-blue-900"><div className="w-2/3 p-1 border-r border-black bg-blue-50/50">Total Amount :</div><div className="w-1/3 p-1 bg-blue-50/50">{totalAmount.toFixed(2)}</div></div>
             </div>
           </div>
 
@@ -1471,7 +1814,7 @@ function PrintExpenseBillModal({ expense, employee, onClose, numberToWords }: { 
               <div className="font-bold border-t border-black pt-1 px-4 text-center mt-auto">Authorised Signatory</div>
             </div>
           </div>
-          
+
           <div className="text-center font-bold text-xs mt-2 text-gray-600">Thank You For Business With US!</div>
         </div>
       </DialogContent>
