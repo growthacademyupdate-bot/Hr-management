@@ -5,6 +5,7 @@ export interface IDataScraping extends Document {
   employeeId: string;
   employeeName: string;
   businessName: string;
+  cityNames?: string;
   state: string;
   totalDataCollected: number;
   createdAt: string;
@@ -17,6 +18,7 @@ const DataScrapingSchema = new Schema<IDataScraping>(
     employeeId: { type: String, required: true },
     employeeName: { type: String, required: true },
     businessName: { type: String, required: true },
+    cityNames: { type: String, required: false, default: '' },
     state: { type: String, required: true },
     totalDataCollected: { type: Number, required: true, default: 0 },
     createdAt: { type: String, default: () => new Date().toISOString() },
