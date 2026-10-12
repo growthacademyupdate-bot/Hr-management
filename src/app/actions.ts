@@ -190,6 +190,14 @@ export async function loginAction(usernameOrId: string, password: string) {
       };
     }
 
+    // If maintenance mode is active, block non-admin users from logging in
+    if (isMaintenanceMode) {
+      return {
+        success: false,
+        error: "System is currently under maintenance. Only administrators can log in at this time."
+      };
+    }
+
     // Check against env HR credentials
     if (usernameOrId === process.env.HR_USERNAME && password === process.env.HR_PASSWORD) {
       const avatarSetting = await Setting.findOne({ key: "hr_avatar" });
