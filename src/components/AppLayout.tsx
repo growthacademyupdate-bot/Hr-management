@@ -5,7 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useAuth, logout, ROLE_MENUS, useGlobalSearch, api, useDB } from "@/lib/store";
 import {
   LayoutDashboard, Users, CalendarCheck, ListTodo, CalendarOff, BarChart3, Settings, Activity, User as UserIcon,
-  Bell, LogOut, Menu, Search, Sun, CalendarDays, Receipt, WalletCards, X, ClipboardList, FileText
+  Bell, LogOut, Menu, Search, Sun, CalendarDays, Receipt, WalletCards, X, ClipboardList, FileText, AlertTriangle
 } from "lucide-react";
 import { useEffect, useState, useMemo } from "react";
 import { Button } from "@/components/ui/button";
@@ -117,6 +117,20 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
     if (user === null) router.push("/login");
   }, [user, router]);
 
+  // Listen for maintenance mode changes
+  useEffect(() => {
+    const handleMaintenanceChange = (e: any) => {
+      if (typeof e.detail?.enabled === 'boolean') {
+        setMaintenanceMode(e.detail.enabled);
+        if (e.detail.enabled && user?.role !== 'admin' && pathname !== '/maintenance') {
+          router.push('/maintenance');
+        }
+      }
+    };
+    window.addEventListener("ems_maintenance_change", handleMaintenanceChange);
+    return () => window.removeEventListener("ems_maintenance_change", handleMaintenanceChange);
+  }, [user, router, pathname]);
+
   // Show loading state while checking maintenance
   if (checkingMaintenance) {
     return (
@@ -127,6 +141,11 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
         </div>
       </div>
     );
+  }
+
+  // If on maintenance page or non-admin in maintenance mode, show content cleanly without dashboard chrome
+  if (pathname === '/maintenance' || (maintenanceMode && user?.role !== 'admin')) {
+    return <>{children}</>;
   }
 
   if (!user) return null;
@@ -510,6 +529,27 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
             <Button variant="ghost" size="icon"><Sun className="h-5 w-5" /></Button>
           </div>
         </header>
+
+        {maintenanceMode && user?.role === 'admin' && (
+          <div className="bg-amber-500/15 border-b border-amber-500/30 px-4 sm:px-6 py-2.5 text-amber-900 dark:text-amber-200 text-xs sm:text-sm flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-2.5">
+              <span className="relative flex h-2.5 w-2.5 shrink-0">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-500"></span>
+              </span>
+              <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0" />
+              <span>
+                <strong>Maintenance Mode Active:</strong> System is offline for Employees & HR. Only Admins can log in.
+              </span>
+            </div>
+            <Link 
+              href="/settings" 
+              className="text-xs font-semibold px-2.5 py-1 bg-amber-500/20 hover:bg-amber-500/30 text-amber-950 dark:text-amber-100 rounded-md border border-amber-500/40 transition-colors whitespace-nowrap ml-auto"
+            >
+              Manage in Settings
+            </Link>
+          </div>
+        )}
 
         <main className="flex-1 p-4 lg:p-8 max-w-[1600px] w-full mx-auto">
           {children}

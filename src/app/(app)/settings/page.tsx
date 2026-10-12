@@ -20,8 +20,11 @@ import {
   Phone,
   MapPin,
   Coffee,
-  HelpCircle
-  ,Calculator
+  HelpCircle,
+  Calculator,
+  ShieldAlert,
+  CheckCircle2,
+  AlertTriangle
 } from "lucide-react";
 
 export default function SettingsPage() {
@@ -85,12 +88,50 @@ export default function SettingsPage() {
     setSaving(true);
     try {
       await api.updateSystemSettings(settings);
+      window.dispatchEvent(
+        new CustomEvent("ems_maintenance_change", {
+          detail: { enabled: settings.maintenance_mode === "true" }
+        })
+      );
       toast.success("Settings saved successfully!");
     } catch (err) {
       console.error("Failed to save settings:", err);
       toast.error("Failed to save settings");
     } finally {
       setSaving(false);
+    }
+  };
+
+  const [togglingMaintenance, setTogglingMaintenance] = useState(false);
+  const handleToggleMaintenance = async (targetState: boolean) => {
+    setTogglingMaintenance(true);
+    try {
+      const res = await fetch("/api/maintenance", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ enabled: targetState }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        updateKey("maintenance_mode", targetState ? "true" : "false");
+        window.dispatchEvent(
+          new CustomEvent("ems_maintenance_change", {
+            detail: { enabled: targetState }
+          })
+        );
+        if (targetState) {
+          toast.warning("Maintenance Mode activated! System is offline for Employee and HR logins.");
+        } else {
+          toast.success("Maintenance Mode deactivated! System is online for all users.");
+        }
+      } else {
+        toast.error("Failed to update maintenance mode");
+      }
+    } catch (err) {
+      console.error("Failed to toggle maintenance mode:", err);
+      toast.error("Failed to toggle maintenance mode");
+    } finally {
+      setTogglingMaintenance(false);
     }
   };
 
@@ -385,17 +426,80 @@ export default function SettingsPage() {
                       />
                     </div>
 
-                    <div className="flex items-center justify-between p-4 rounded-lg border border-destructive/20 bg-destructive/5">
-                      <div className="space-y-0.5">
-                        <Label className="text-base font-semibold text-destructive">Maintenance Mode</Label>
-                        <p className="text-sm text-muted-foreground">
-                          Take the system offline for updates. Only Administrators will be able to log in.
-                        </p>
+                    <div className={`p-5 rounded-xl border transition-all duration-200 ${
+                      settings.maintenance_mode === "true" 
+                        ? "border-amber-500/40 bg-amber-500/5 dark:bg-amber-950/20" 
+                        : "border-border bg-card"
+                    }`}>
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                        <div className="space-y-1.5 flex-1">
+                          <div className="flex items-center gap-2.5">
+                            <span className="text-base font-semibold text-foreground flex items-center gap-2">
+                              <ShieldAlert className={`h-5 w-5 ${
+                                settings.maintenance_mode === "true" ? "text-amber-600" : "text-muted-foreground"
+                              }`} />
+                              Maintenance Mode
+                            </span>
+                            {settings.maintenance_mode === "true" ? (
+                              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-800 dark:bg-amber-900/60 dark:text-amber-200 border border-amber-300 dark:border-amber-700">
+                                <span className="h-1.5 w-1.5 rounded-full bg-amber-600 animate-ping" />
+                                Active (Offline)
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800 dark:bg-emerald-900/60 dark:text-emerald-200 border border-emerald-300 dark:border-emerald-700">
+                                <CheckCircle2 className="h-3 w-3 text-emerald-600" />
+                                Operational (Online)
+                              </span>
+                            )}
+                          </div>
+                          
+                          <p className="text-sm text-muted-foreground leading-relaxed max-w-xl">
+                            {settings.maintenance_mode === "true" ? (
+                              <span className="text-amber-800 dark:text-amber-300 font-medium">
+                                The system is currently taken offline for maintenance. Non-administrator logins (Employees & HR) are blocked, and active users are redirected to the maintenance notice page.
+                              </span>
+                            ) : (
+                              <span>
+                                Temporarily take the system offline for updates or database maintenance. When enabled, only Administrators can log in.
+                              </span>
+                            )}
+                          </p>
+                        </div>
+
+                        <div className="flex items-center gap-3 sm:self-center shrink-0">
+                          <Button
+                            type="button"
+                            variant={settings.maintenance_mode === "true" ? "destructive" : "outline"}
+                            size="sm"
+                            disabled={togglingMaintenance}
+                            onClick={() => handleToggleMaintenance(settings.maintenance_mode !== "true")}
+                            className="font-medium text-xs"
+                          >
+                            {togglingMaintenance ? (
+                              <>
+                                <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+                                Updating...
+                              </>
+                            ) : settings.maintenance_mode === "true" ? (
+                              "Deactivate Now"
+                            ) : (
+                              "Activate Now"
+                            )}
+                          </Button>
+                          <Switch 
+                            checked={settings.maintenance_mode === "true"} 
+                            disabled={togglingMaintenance}
+                            onCheckedChange={(checked) => handleToggleMaintenance(checked)} 
+                          />
+                        </div>
                       </div>
-                      <Switch 
-                        checked={settings.maintenance_mode === "true"} 
-                        onCheckedChange={(checked) => updateKey("maintenance_mode", checked ? "true" : "false")} 
-                      />
+
+                      {settings.maintenance_mode === "true" && (
+                        <div className="mt-4 pt-3 border-t border-amber-500/20 text-xs text-amber-700 dark:text-amber-400 flex items-center gap-2">
+                          <AlertTriangle className="h-4 w-4 shrink-0" />
+                          <span>Tip: You can continue working safely as an administrator while maintenance is in progress.</span>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </CardContent>
