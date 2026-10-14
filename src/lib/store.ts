@@ -12,7 +12,8 @@ import {
   getLeads, addLead, updateLead, deleteLead,
   getDataScrapings, addDataScraping, deleteDataScraping,
   getInvoices, createInvoice, deleteInvoice,
-  getGroomingRecords, addGrooming, updateGrooming, deleteGrooming
+  getGroomingRecords, addGrooming, updateGrooming, deleteGrooming,
+  submitDailyTraining, getDailyTrainingToday, getDailyTrainings, getDailyTrainingById, validateSalesLogoutStatus
 } from "@/app/actions";
 
 export type Role = "admin" | "hr" | "employee";
@@ -107,13 +108,28 @@ export interface GroomingRecord {
   id: string; employeeId: string; date: string; checkedBy: string; score: number; totalPoints: number; status: string; items: any[]; createdAt: string; updatedAt: string;
 }
 
+export interface DailyTrainingRecord {
+  id: string;
+  employeeId: string;
+  employeeName: string;
+  designation: string;
+  department: string;
+  trainingDate: string;
+  trainingPoints: string[];
+  rawContent?: string;
+  status: string;
+  submittedAt: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 interface DB {
-  employees: Employee[]; attendance: AttendanceRecord[]; tasks: Task[]; leaves: Leave[]; expenses: Expense[]; activities: Activity[]; holidays: Holiday[]; notifications: Notification[]; dailyReports: DailyReport[]; leads: Lead[]; dataScrapings: DataScrapingRecord[]; invoices: Invoice[]; grooming: GroomingRecord[];
+  employees: Employee[]; attendance: AttendanceRecord[]; tasks: Task[]; leaves: Leave[]; expenses: Expense[]; activities: Activity[]; holidays: Holiday[]; notifications: Notification[]; dailyReports: DailyReport[]; dailyTrainings?: DailyTrainingRecord[]; leads: Lead[]; dataScrapings: DataScrapingRecord[]; invoices: Invoice[]; grooming: GroomingRecord[];
   isLoading: boolean;
 }
 
 const AUTH_KEY = "ems_auth_v1";
-let currentDB: DB = { employees: [], attendance: [], tasks: [], leaves: [], expenses: [], activities: [], holidays: [], notifications: [], dailyReports: [], leads: [], dataScrapings: [], invoices: [], grooming: [], isLoading: true };
+let currentDB: DB = { employees: [], attendance: [], tasks: [], leaves: [], expenses: [], activities: [], holidays: [], notifications: [], dailyReports: [], dailyTrainings: [], leads: [], dataScrapings: [], invoices: [], grooming: [], isLoading: true };
 let globalSearch = "";
 const listeners = new Set<() => void>();
 
@@ -456,6 +472,7 @@ export const ROLE_MENUS: Record<Role, { label: string; to: string; icon: string 
     { label: "Employees", to: "/employees", icon: "Users" },
     { label: "Attendance", to: "/attendance", icon: "CalendarCheck" },
     { label: "Daily Reports", to: "/daily-report", icon: "ClipboardList" },
+    { label: "Daily Training Reports", to: "/daily-training-reports", icon: "GraduationCap" },
     { label: "Tasks", to: "/tasks", icon: "ListTodo" },
     { label: "Leaves", to: "/leaves", icon: "CalendarOff" },
     { label: "Expenses", to: "/expenses", icon: "Receipt" },
@@ -474,6 +491,7 @@ export const ROLE_MENUS: Record<Role, { label: string; to: string; icon: string 
     { label: "Dashboard", to: "/dashboard", icon: "LayoutDashboard" },
     { label: "Employees", to: "/employees", icon: "Users" },
     { label: "Daily Reports", to: "/daily-report", icon: "ClipboardList" },
+    { label: "Daily Training Reports", to: "/daily-training-reports", icon: "GraduationCap" },
     { label: "Tasks", to: "/tasks", icon: "ListTodo" },
     { label: "Leaves", to: "/leaves", icon: "CalendarOff" },
     { label: "Expenses", to: "/expenses", icon: "Receipt" },
