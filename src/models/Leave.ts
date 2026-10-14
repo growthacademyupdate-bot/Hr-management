@@ -3,7 +3,7 @@ import mongoose from "mongoose";
 const LeaveSchema = new mongoose.Schema({
   id: { type: String, required: true, unique: true },
   employeeId: { type: String, required: true },
-  type: { type: String, enum: ["Casual Leave", "Sick Leave", "Earned Leave", "Emergency Leave", "Other"], required: true },
+  type: { type: String, enum: ["Casual Leave", "Sick Leave", "Earned Leave", "Emergency Leave", "Half Day", "Half Time", "Other"], required: true },
   startDate: { type: String, required: true }, // Mapped to From Date in UI
   endDate: { type: String, required: true },   // Mapped to To Date in UI
   numberOfDays: { type: Number, required: true },

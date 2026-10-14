@@ -17,7 +17,7 @@ import { useDataTable } from "@/hooks/useDataTable";
 import { SortableHeader } from "@/components/SortableHeader";
 import { DataTablePagination } from "@/components/DataTablePagination";
 import {
-  Receipt, Plus, Search, CheckCircle2, XCircle, Clock, DollarSign, Wallet, FileText, Image as ImageIcon, Check, X, ShieldCheck, Eye, Trash2, Printer, Pencil, Info, ZoomIn, ZoomOut
+  Receipt, Plus, Search, CheckCircle2, XCircle, Clock, DollarSign, Wallet, FileText, Image as ImageIcon, Check, X, ShieldCheck, Eye, Trash2, Printer, Pencil, Info, ZoomIn, ZoomOut, Upload, HandCoins
 } from "lucide-react";
 import Image from "next/image";
 import { format } from "date-fns";
@@ -44,6 +44,8 @@ export default function ExpensesPage() {
   const [galleryExpense, setGalleryExpense] = useState<Expense | null>(null);
   const [previewZoom, setPreviewZoom] = useState(1);
   const [employeeExpensesModal, setEmployeeExpensesModal] = useState<string | null>(null);
+  const [confirmReceiptExpense, setConfirmReceiptExpense] = useState<Expense | null>(null);
+  const [isConfirmingReceipt, setIsConfirmingReceipt] = useState(false);
 
   // Form State for New Expense Claim
   const [formData, setFormData] = useState({
@@ -72,6 +74,36 @@ export default function ExpensesPage() {
   const [editExpenseId, setEditExpenseId] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
+
+  // Bulk Multiple Bills (Without Image) State
+  const [openBulkModal, setOpenBulkModal] = useState(false);
+  const [bulkEmployeeId, setBulkEmployeeId] = useState("");
+  const [bulkDefaultDate, setBulkDefaultDate] = useState(new Date().toISOString().slice(0, 10));
+  const [bulkBankDetails, setBulkBankDetails] = useState({
+    bankHolderName: "",
+    bankName: "",
+    branch: "",
+    accountNo: "",
+    ifscCode: "",
+    upiId: "",
+  });
+  const [showBulkBank, setShowBulkBank] = useState(false);
+  const [showCsvPaste, setShowCsvPaste] = useState(false);
+  const [csvPasteText, setCsvPasteText] = useState("");
+  const [bulkBills, setBulkBills] = useState<Array<{
+    id: string;
+    expenseDate: string;
+    title: string;
+    category: typeof CATEGORIES[number];
+    amount: string;
+    gstPercent: string;
+    description: string;
+  }>>([
+    { id: "1", expenseDate: new Date().toISOString().slice(0, 10), title: "", category: "Office Supplies", amount: "", gstPercent: "0", description: "" },
+    { id: "2", expenseDate: new Date().toISOString().slice(0, 10), title: "", category: "Travel", amount: "", gstPercent: "0", description: "" },
+    { id: "3", expenseDate: new Date().toISOString().slice(0, 10), title: "", category: "Food & Dining", amount: "", gstPercent: "0", description: "" },
+  ]);
+  const [isSubmittingBulk, setIsSubmittingBulk] = useState(false);
 
   // Filters State
   const [statusFilter, setStatusFilter] = useState("all");
@@ -338,6 +370,181 @@ export default function ExpensesPage() {
     }
   };
 
+  // Bulk Multiple Bills Handlers
+  const handleAddBulkRow = () => {
+    setBulkBills((prev) => [
+      ...prev,
+      {
+        id: String(Date.now() + Math.random()),
+        expenseDate: bulkDefaultDate,
+        title: "",
+        category: "Other",
+        amount: "",
+        gstPercent: "0",
+        description: "",
+      },
+    ]);
+  };
+
+  const handleRemoveBulkRow = (index: number) => {
+    setBulkBills((prev) => prev.filter((_, idx) => idx !== index));
+  };
+
+  const handleApplyDefaultDate = () => {
+    setBulkBills((prev) => prev.map((b) => ({ ...b, expenseDate: bulkDefaultDate })));
+    toast.success("Applied default date to all bill rows");
+  };
+
+  const handleCsvFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const text = event.target?.result as string;
+      if (text) {
+        setCsvPasteText(text);
+        setShowCsvPaste(true);
+      }
+    };
+    reader.readAsText(file);
+    e.target.value = "";
+  };
+
+  const handleParseCsvPaste = () => {
+    if (!csvPasteText.trim()) return;
+    const lines = csvPasteText.trim().split("\n");
+    const parsedRows: typeof bulkBills = [];
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i].trim();
+      if (!line) continue;
+      const parts = line.includes("\t") ? line.split("\t") : line.split(",");
+      const cleanParts = parts.map((p) => p.trim());
+
+      let date = bulkDefaultDate;
+      let title = "";
+      let category: typeof CATEGORIES[number] = "Other";
+      let amount = "";
+      let description = "";
+
+      if (cleanParts.length === 1) {
+        title = cleanParts[0];
+      } else if (cleanParts.length === 2) {
+        title = cleanParts[0];
+        amount = cleanParts[1].replace(/[^0-9.]/g, "");
+      } else if (cleanParts.length === 3) {
+        title = cleanParts[0];
+        const matchedCat = CATEGORIES.find(
+          (c) => c.toLowerCase() === cleanParts[1].toLowerCase()
+        );
+        if (matchedCat) {
+          category = matchedCat;
+          amount = cleanParts[2].replace(/[^0-9.]/g, "");
+        } else {
+          amount = cleanParts[1].replace(/[^0-9.]/g, "");
+          description = cleanParts[2];
+        }
+      } else if (cleanParts.length >= 4) {
+        if (/^\d{4}-\d{2}-\d{2}$/.test(cleanParts[0])) {
+          date = cleanParts[0];
+          title = cleanParts[1];
+          const matchedCat = CATEGORIES.find(
+            (c) => c.toLowerCase() === cleanParts[2].toLowerCase()
+          );
+          if (matchedCat) category = matchedCat;
+          amount = cleanParts[3].replace(/[^0-9.]/g, "");
+          if (cleanParts[4]) description = cleanParts[4];
+        } else {
+          title = cleanParts[0];
+          const matchedCat = CATEGORIES.find(
+            (c) => c.toLowerCase() === cleanParts[1].toLowerCase()
+          );
+          if (matchedCat) category = matchedCat;
+          amount = cleanParts[2].replace(/[^0-9.]/g, "");
+          description = cleanParts.slice(3).join(", ");
+        }
+      }
+
+      if (title || amount) {
+        parsedRows.push({
+          id: String(Date.now() + Math.random() + i),
+          expenseDate: date,
+          title: title || `Bill #${i + 1}`,
+          category,
+          amount,
+          gstPercent: "0",
+          description,
+        });
+      }
+    }
+
+    if (parsedRows.length > 0) {
+      setBulkBills((prev) => [...prev.filter((r) => r.title.trim() || r.amount.trim()), ...parsedRows]);
+      setCsvPasteText("");
+      setShowCsvPaste(false);
+      toast.success(`Imported ${parsedRows.length} bill(s) successfully!`);
+    } else {
+      toast.error("Could not parse bills from input. Format: Title, Amount or Title, Category, Amount");
+    }
+  };
+
+  const handleBulkSubmit = async () => {
+    const filledRows = bulkBills.filter((r) => r.title.trim() && Number(r.amount) > 0);
+
+    if (filledRows.length === 0) {
+      toast.error("Please fill in at least one bill with a Title and Amount (> 0).");
+      return;
+    }
+
+    setIsSubmittingBulk(true);
+    try {
+      const targetEmpId = (!isEmployee && bulkEmployeeId) ? bulkEmployeeId : currentUserId;
+      const payload = filledRows.map((r) => ({
+        targetEmployeeId: targetEmpId,
+        title: r.title.trim(),
+        category: r.category,
+        amount: Number(r.amount),
+        expenseDate: r.expenseDate || bulkDefaultDate,
+        description: r.description.trim() || r.title.trim(),
+        gstPercent: Number(r.gstPercent) || 0,
+        receiptUrls: [], // explicitly without image
+        bankHolderName: bulkBankDetails.bankHolderName || null,
+        bankName: bulkBankDetails.bankName || null,
+        branch: bulkBankDetails.branch || null,
+        accountNo: bulkBankDetails.accountNo || null,
+        ifscCode: bulkBankDetails.ifscCode || null,
+        upiId: bulkBankDetails.upiId || null,
+      }));
+
+      if (typeof (api as any)?.addBulkExpenses === "function") {
+        await (api as any).addBulkExpenses(payload);
+      } else {
+        const res = await fetch("/api/expenses/bulk", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ bills: payload, authorId: currentUserId || "u_employee" })
+        });
+        const json = await res.json();
+        if (!json.success) throw new Error(json.error || "Failed to submit bills");
+        await api.refreshDB(true);
+      }
+      toast.success(`Successfully uploaded ${payload.length} bills without image!`);
+      setOpenBulkModal(false);
+      setBulkBills([
+        { id: "1", expenseDate: new Date().toISOString().slice(0, 10), title: "", category: "Office Supplies", amount: "", gstPercent: "0", description: "" },
+        { id: "2", expenseDate: new Date().toISOString().slice(0, 10), title: "", category: "Travel", amount: "", gstPercent: "0", description: "" },
+        { id: "3", expenseDate: new Date().toISOString().slice(0, 10), title: "", category: "Food & Dining", amount: "", gstPercent: "0", description: "" },
+      ]);
+    } catch (err: any) {
+      toast.error(err.message || "Failed to submit bills");
+    } finally {
+      setIsSubmittingBulk(false);
+    }
+  };
+
+  const validBulkRows = bulkBills.filter((r) => r.title.trim() && Number(r.amount) > 0);
+  const totalBulkAmount = validBulkRows.reduce((sum, r) => sum + (Number(r.amount) || 0), 0);
+
   // Handle Review Dialog Submit
   const handleReviewSubmit = async () => {
     if (!selectedExpense) return;
@@ -373,6 +580,21 @@ export default function ExpensesPage() {
     }
   };
 
+  // Employee Acknowledge Receipt Handler
+  const handleAcknowledgeReceipt = async () => {
+    if (!confirmReceiptExpense) return;
+    setIsConfirmingReceipt(true);
+    try {
+      await api.acknowledgeExpenseReceipt(confirmReceiptExpense.id);
+      toast.success(`Payment of ₹${confirmReceiptExpense.amount.toLocaleString('en-IN')} confirmed as received!`);
+      setConfirmReceiptExpense(null);
+    } catch (err: any) {
+      toast.error(err.message || "Failed to confirm receipt");
+    } finally {
+      setIsConfirmingReceipt(false);
+    }
+  };
+
   // Cancel Handler
   const handleCancelExpense = async (expenseId: string) => {
     try {
@@ -384,16 +606,19 @@ export default function ExpensesPage() {
   };
 
   // Helper for Status Badges
-  const renderStatusBadge = (status: Expense["status"]) => {
+  const renderStatusBadge = (status: Expense["status"], employeeReceived?: boolean) => {
     switch (status) {
       case "pending":
-        return <Badge variant="outline" className="bg-amber-500/10 text-amber-600 border-amber-500/30 font-medium"><Clock className="w-3 h-3 mr-1" /> Pending Review</Badge>;
+        return <Badge variant="outline" className="bg-amber-500/10 text-amber-600 border-amber-500/30 font-medium"><Clock className="w-3 h-3 mr-1" /> Pending HR</Badge>;
       case "hr_approved":
-        return <Badge variant="outline" className="bg-blue-500/10 text-blue-600 border-blue-500/30 font-medium"><CheckCircle2 className="w-3 h-3 mr-1" /> HR Approved</Badge>;
+        return <Badge variant="outline" className="bg-blue-500/10 text-blue-600 border-blue-500/30 font-medium"><CheckCircle2 className="w-3 h-3 mr-1" /> HR Approved (Pending Admin)</Badge>;
       case "admin_approved":
-        return <Badge variant="outline" className="bg-indigo-500/10 text-indigo-600 border-indigo-500/30 font-medium"><ShieldCheck className="w-3 h-3 mr-1" /> Admin Approved</Badge>;
+        return <Badge variant="outline" className="bg-indigo-500/10 text-indigo-600 border-indigo-500/30 font-medium"><ShieldCheck className="w-3 h-3 mr-1" /> Admin Approved (Ready for Payout)</Badge>;
       case "reimbursed":
-        return <Badge variant="outline" className="bg-emerald-500/10 text-emerald-600 border-emerald-500/30 font-medium"><Wallet className="w-3 h-3 mr-1" /> Reimbursed (Paid)</Badge>;
+        if (employeeReceived) {
+          return <Badge variant="outline" className="bg-emerald-500/10 text-emerald-600 border-emerald-500/30 font-medium"><CheckCircle2 className="w-3 h-3 mr-1" /> Received & Settled</Badge>;
+        }
+        return <Badge variant="outline" className="bg-amber-500/10 text-amber-600 border-amber-500/30 font-medium animate-pulse"><Wallet className="w-3 h-3 mr-1" /> Paid (Awaiting Receipt)</Badge>;
       case "hr_rejected":
         return <Badge variant="outline" className="bg-rose-500/10 text-rose-600 border-rose-500/30 font-medium"><XCircle className="w-3 h-3 mr-1" /> Rejected by HR</Badge>;
       case "admin_rejected":
@@ -429,18 +654,30 @@ export default function ExpensesPage() {
           title="Expense & Reimbursement Oversight"
           description="Manage employee out-of-pocket work expenses, approval flows, and salary payout reimbursements."
         />
-        <Button onClick={() => {
-          setEditExpenseId(null);
-          setFormData({
-            title: "", category: "Travel", amount: "", expenseDate: new Date().toISOString().slice(0, 10),
-            description: "", receiptUrls: [], gstPercent: "0", bankHolderName: "", bankName: "", branch: "",
-            accountNo: "", ifscCode: "", upiId: "", customCategory: "", vehicleType: "", vehicleNumber: "",
-            distanceKm: "", vehicleAverage: "", petrolRate: "", trips: [], targetEmployeeId: ""
-          });
-          setOpenAddModal(true);
-        }} className="gap-2 shadow-sm">
-          <Plus className="h-4 w-4" /> Claim New Expense
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button 
+            variant="outline"
+            onClick={() => {
+              setBulkEmployeeId((!isEmployee && user?.employeeId) ? user.employeeId : (currentUserId || ""));
+              setOpenBulkModal(true);
+            }} 
+            className="gap-2 shadow-sm border-primary/30 text-primary hover:bg-primary/5"
+          >
+            <Receipt className="h-4 w-4" /> Upload Multiple Bills (Without Image)
+          </Button>
+          <Button onClick={() => {
+            setEditExpenseId(null);
+            setFormData({
+              title: "", category: "Travel", amount: "", expenseDate: new Date().toISOString().slice(0, 10),
+              description: "", receiptUrls: [], gstPercent: "0", bankHolderName: "", bankName: "", branch: "",
+              accountNo: "", ifscCode: "", upiId: "", customCategory: "", vehicleType: "", vehicleNumber: "",
+              distanceKm: "", vehicleAverage: "", petrolRate: "", trips: [], targetEmployeeId: ""
+            });
+            setOpenAddModal(true);
+          }} className="gap-2 shadow-sm">
+            <Plus className="h-4 w-4" /> Single Expense Claim
+          </Button>
+        </div>
       </div>
 
       {/* Metric Cards */}
@@ -590,7 +827,7 @@ export default function ExpensesPage() {
                     </TableCell>
                     <TableCell className="whitespace-nowrap text-xs">{new Date(item.expenseDate).toLocaleDateString()}</TableCell>
                     <TableCell className="font-bold text-sm">₹{item.amount.toLocaleString()}</TableCell>
-                    <TableCell>{renderStatusBadge(item.status)}</TableCell>
+                    <TableCell>{renderStatusBadge(item.status, item.employeeReceived)}</TableCell>
                     <TableCell className="text-right whitespace-nowrap">
                       <div className="flex items-center justify-end gap-1">
                         {/* View Images / Details */}
@@ -659,8 +896,8 @@ export default function ExpensesPage() {
                           </div>
                         )}
 
-                        {/* Admin Approval Action */}
-                        {isAdmin && (item.status === "pending" || item.status === "hr_approved") && (
+                        {/* Admin Approval Action - Requires HR to have approved first */}
+                        {isAdmin && item.status === "hr_approved" && (
                           <div className="flex items-center gap-1">
                             <Button
                               variant="outline"
@@ -691,16 +928,57 @@ export default function ExpensesPage() {
                           </div>
                         )}
 
-                        {/* Mark as Reimbursed Action (Admin or HR on approved expenses) */}
-                        {(isAdmin || isHR) && (item.status === "admin_approved" || item.status === "hr_approved") && (
+                        {isAdmin && item.status === "pending" && (
+                          <span className="text-[11px] text-amber-700 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
+                            Awaiting HR Review
+                          </span>
+                        )}
+
+                        {/* Mark as Reimbursed Action (Admin or HR) - Requires Admin Approval */}
+                        {(isAdmin || isHR) && item.status === "admin_approved" && (
                           <Button
                             variant="default"
                             size="sm"
-                            className="h-7 text-xs bg-emerald-600 hover:bg-emerald-700 text-white"
+                            className="h-7 text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-medium shadow-sm"
                             onClick={() => handleMarkReimbursed(item)}
                           >
                             <Wallet className="h-3 w-3 mr-1" /> Mark Paid
                           </Button>
+                        )}
+
+                        {(isAdmin || isHR) && item.status === "hr_approved" && (
+                          <span className="text-[11px] text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-200">
+                            Awaiting Admin Review
+                          </span>
+                        )}
+
+                        {/* Employee Receipt Confirmation Action */}
+                        {isEmployee && item.status === "reimbursed" && (
+                          !item.employeeReceived ? (
+                            <Button
+                              size="sm"
+                              className="h-7 text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-semibold shadow-sm animate-pulse"
+                              onClick={() => setConfirmReceiptExpense(item)}
+                            >
+                              <HandCoins className="h-3.5 w-3.5 mr-1" /> I Received the Money
+                            </Button>
+                          ) : (
+                            <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-300 text-xs font-medium">
+                              <CheckCircle2 className="h-3 w-3 mr-1" /> Received & Settled
+                            </Badge>
+                          )
+                        )}
+
+                        {!isEmployee && item.status === "reimbursed" && (
+                          item.employeeReceived ? (
+                            <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-300 text-[11px]">
+                              <CheckCircle2 className="h-3 w-3 mr-1" /> Employee Confirmed
+                            </Badge>
+                          ) : (
+                            <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-300 text-[11px]">
+                              <Clock className="h-3 w-3 mr-1" /> Awaiting Employee Receipt
+                            </Badge>
+                          )
                         )}
 
                         {/* Employee Cancel Action */}
@@ -803,6 +1081,367 @@ export default function ExpensesPage() {
         </CardContent>
       </Card>
 
+      {/* --- MODAL: EMPLOYEE CONFIRM MONEY RECEIVED --- */}
+      <Dialog open={!!confirmReceiptExpense} onOpenChange={(open) => !open && setConfirmReceiptExpense(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-emerald-600 font-bold">
+              <CheckCircle2 className="h-5 w-5" /> Confirm Money Received
+            </DialogTitle>
+            <DialogDescription>
+              Please verify that you have received this reimbursement payment in your bank account or UPI before confirming.
+            </DialogDescription>
+          </DialogHeader>
+
+          {confirmReceiptExpense && (
+            <div className="bg-muted/50 p-4 rounded-lg space-y-2 border">
+              <div className="flex justify-between text-sm">
+                <span className="text-muted-foreground">Claim ID:</span>
+                <span className="font-semibold font-mono">{confirmReceiptExpense.id}</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-muted-foreground">Title / Purpose:</span>
+                <span className="font-semibold">{confirmReceiptExpense.title}</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-muted-foreground">Category:</span>
+                <span>{confirmReceiptExpense.category}</span>
+              </div>
+              <div className="flex justify-between text-base pt-2 border-t font-bold">
+                <span>Amount Paid:</span>
+                <span className="text-emerald-600">₹{confirmReceiptExpense.amount.toLocaleString('en-IN')}</span>
+              </div>
+            </div>
+          )}
+
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button variant="outline" onClick={() => setConfirmReceiptExpense(null)}>Cancel</Button>
+            <Button 
+              className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2 font-semibold"
+              onClick={handleAcknowledgeReceipt}
+              disabled={isConfirmingReceipt}
+            >
+              <CheckCircle2 className="h-4 w-4" />
+              {isConfirmingReceipt ? "Confirming..." : "I Received the Money"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* --- MODAL: BULK UPLOAD MULTIPLE BILLS WITHOUT IMAGE --- */}
+      <Dialog open={openBulkModal} onOpenChange={setOpenBulkModal}>
+        <DialogContent className="max-w-4xl max-h-[92vh] overflow-y-auto">
+          <DialogHeader>
+            <div className="flex items-center justify-between">
+              <DialogTitle className="flex items-center gap-2 text-xl font-bold">
+                <Receipt className="h-5 w-5 text-primary" /> Upload Multiple Bills (Without Image)
+              </DialogTitle>
+              <Badge variant="outline" className="bg-emerald-500/10 text-emerald-600 border-emerald-500/30 text-xs font-medium">
+                No Receipt Images Required
+              </Badge>
+            </div>
+            <DialogDescription>
+              Quickly claim multiple expenses at the same time without needing to upload receipt photos.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-3">
+            {/* Target Employee & Default Date */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 p-3 bg-muted/40 rounded-lg border">
+              {!isEmployee ? (
+                <div className="space-y-1">
+                  <Label className="text-xs font-semibold">Target Employee *</Label>
+                  <Select value={bulkEmployeeId} onValueChange={setBulkEmployeeId}>
+                    <SelectTrigger className="h-8 text-xs bg-card">
+                      <SelectValue placeholder="Select Employee" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {db.employees.map((emp) => (
+                        <SelectItem key={emp.id} value={emp.id}>{emp.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              ) : (
+                <div className="space-y-1">
+                  <Label className="text-xs font-semibold">Employee</Label>
+                  <div className="text-xs font-medium py-1.5 px-2 bg-card rounded border text-muted-foreground">{user?.name} ({currentUserId})</div>
+                </div>
+              )}
+
+              <div className="space-y-1">
+                <Label className="text-xs font-semibold">Default Bill Date</Label>
+                <div className="flex gap-2">
+                  <Input 
+                    type="date" 
+                    value={bulkDefaultDate} 
+                    onChange={(e) => setBulkDefaultDate(e.target.value)} 
+                    className="h-8 text-xs bg-card"
+                  />
+                  <Button type="button" variant="outline" size="sm" onClick={handleApplyDefaultDate} className="h-8 text-xs shrink-0">
+                    Apply All
+                  </Button>
+                </div>
+              </div>
+
+              <div className="flex flex-col justify-end">
+                <Button 
+                  type="button" 
+                  variant="ghost" 
+                  size="sm" 
+                  onClick={() => setShowBulkBank(!showBulkBank)} 
+                  className="h-8 text-xs justify-start text-primary hover:text-primary"
+                >
+                  {showBulkBank ? "▲ Hide Bank Details" : "▼ Add Bank / Payout Details (Optional)"}
+                </Button>
+              </div>
+            </div>
+
+            {/* Optional Bank Details Section */}
+            {showBulkBank && (
+              <div className="p-3 border rounded-lg bg-slate-50/50 dark:bg-slate-900/30 space-y-2">
+                <div className="text-xs font-semibold text-slate-800 dark:text-slate-200">Reimbursement Bank Details (Optional)</div>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                  <div>
+                    <Label className="text-[11px]">A/C Holder Name</Label>
+                    <Input className="h-7 text-xs" placeholder="e.g. John Doe" value={bulkBankDetails.bankHolderName} onChange={e => setBulkBankDetails({...bulkBankDetails, bankHolderName: e.target.value})} />
+                  </div>
+                  <div>
+                    <Label className="text-[11px]">Bank Name</Label>
+                    <Input className="h-7 text-xs" placeholder="e.g. HDFC Bank" value={bulkBankDetails.bankName} onChange={e => setBulkBankDetails({...bulkBankDetails, bankName: e.target.value})} />
+                  </div>
+                  <div>
+                    <Label className="text-[11px]">Branch</Label>
+                    <Input className="h-7 text-xs" placeholder="e.g. Mumbai" value={bulkBankDetails.branch} onChange={e => setBulkBankDetails({...bulkBankDetails, branch: e.target.value})} />
+                  </div>
+                  <div>
+                    <Label className="text-[11px]">Account No</Label>
+                    <Input className="h-7 text-xs" placeholder="Account Number" value={bulkBankDetails.accountNo} onChange={e => setBulkBankDetails({...bulkBankDetails, accountNo: e.target.value})} />
+                  </div>
+                  <div>
+                    <Label className="text-[11px]">IFSC Code</Label>
+                    <Input className="h-7 text-xs" placeholder="e.g. HDFC0001234" value={bulkBankDetails.ifscCode} onChange={e => setBulkBankDetails({...bulkBankDetails, ifscCode: e.target.value})} />
+                  </div>
+                  <div>
+                    <Label className="text-[11px]">UPI ID</Label>
+                    <Input className="h-7 text-xs" placeholder="e.g. user@okhdfcbank" value={bulkBankDetails.upiId} onChange={e => setBulkBankDetails({...bulkBankDetails, upiId: e.target.value})} />
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Quick Import / Paste Box */}
+            {showCsvPaste && (
+              <div className="p-3 border rounded-lg bg-primary/5 space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label className="text-xs font-semibold text-primary">Quick Paste or CSV Import</Label>
+                  <span className="text-[11px] text-muted-foreground">Format: Title, Amount, Category (one per line)</span>
+                </div>
+                <Textarea 
+                  rows={4}
+                  placeholder={`Courier to Client, 150, Office Supplies\nMetro Travel, 80, Travel\nTeam Lunch, 450, Food & Dining`}
+                  value={csvPasteText}
+                  onChange={(e) => setCsvPasteText(e.target.value)}
+                  className="text-xs font-mono bg-card"
+                />
+                <div className="flex justify-between items-center">
+                  <div className="flex items-center gap-2">
+                    <Label htmlFor="csvFile" className="text-xs text-primary cursor-pointer hover:underline flex items-center gap-1">
+                      <FileText className="h-3 w-3" /> Upload .csv file
+                    </Label>
+                    <Input id="csvFile" type="file" accept=".csv,.txt" onChange={handleCsvFileUpload} className="hidden" />
+                  </div>
+                  <div className="flex gap-2">
+                    <Button type="button" variant="ghost" size="sm" onClick={() => setShowCsvPaste(false)} className="h-7 text-xs">
+                      Cancel
+                    </Button>
+                    <Button type="button" size="sm" onClick={handleParseCsvPaste} className="h-7 text-xs">
+                      Import Bills into Table
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Bills Table */}
+            <div className="border rounded-lg overflow-hidden bg-card">
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="bg-muted/50 hover:bg-muted/50">
+                      <TableHead className="w-10 text-center">#</TableHead>
+                      <TableHead className="w-36">Date *</TableHead>
+                      <TableHead className="min-w-[180px]">Bill Title / Purpose *</TableHead>
+                      <TableHead className="w-40">Category *</TableHead>
+                      <TableHead className="w-32">Amount (₹) *</TableHead>
+                      <TableHead className="w-20">GST %</TableHead>
+                      <TableHead className="min-w-[150px]">Notes</TableHead>
+                      <TableHead className="w-10 text-center"></TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {bulkBills.map((row, idx) => (
+                      <TableRow key={row.id}>
+                        <TableCell className="text-center text-xs font-medium text-muted-foreground">
+                          {idx + 1}
+                        </TableCell>
+                        <TableCell>
+                          <Input 
+                            type="date" 
+                            value={row.expenseDate} 
+                            onChange={(e) => {
+                              const updated = [...bulkBills];
+                              updated[idx].expenseDate = e.target.value;
+                              setBulkBills(updated);
+                            }}
+                            className="h-8 text-xs"
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <Input 
+                            placeholder="e.g. Courier, Cab, Office Paper" 
+                            value={row.title} 
+                            onChange={(e) => {
+                              const updated = [...bulkBills];
+                              updated[idx].title = e.target.value;
+                              setBulkBills(updated);
+                            }}
+                            className="h-8 text-xs"
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <Select 
+                            value={row.category} 
+                            onValueChange={(val: any) => {
+                              const updated = [...bulkBills];
+                              updated[idx].category = val;
+                              setBulkBills(updated);
+                            }}
+                          >
+                            <SelectTrigger className="h-8 text-xs">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {CATEGORIES.map((c) => (
+                                <SelectItem key={c} value={c}>{c}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </TableCell>
+                        <TableCell>
+                          <Input 
+                            type="number" 
+                            min="1" 
+                            step="any" 
+                            placeholder="₹ 0" 
+                            value={row.amount} 
+                            onChange={(e) => {
+                              const updated = [...bulkBills];
+                              updated[idx].amount = e.target.value;
+                              setBulkBills(updated);
+                            }}
+                            className="h-8 text-xs font-semibold"
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <Input 
+                            type="number" 
+                            min="0" 
+                            max="100" 
+                            placeholder="0" 
+                            value={row.gstPercent} 
+                            onChange={(e) => {
+                              const updated = [...bulkBills];
+                              updated[idx].gstPercent = e.target.value;
+                              setBulkBills(updated);
+                            }}
+                            className="h-8 text-xs text-center"
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <Input 
+                            placeholder="Optional notes" 
+                            value={row.description} 
+                            onChange={(e) => {
+                              const updated = [...bulkBills];
+                              updated[idx].description = e.target.value;
+                              setBulkBills(updated);
+                            }}
+                            className="h-8 text-xs"
+                          />
+                        </TableCell>
+                        <TableCell className="text-center">
+                          {bulkBills.length > 1 && (
+                            <Button 
+                              type="button" 
+                              variant="ghost" 
+                              size="icon" 
+                              onClick={() => handleRemoveBulkRow(idx)}
+                              className="h-7 w-7 text-rose-500 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/30"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+
+              {/* Action Toolbar */}
+              <div className="flex flex-wrap items-center justify-between p-2.5 bg-muted/30 border-t gap-2">
+                <div className="flex items-center gap-2">
+                  <Button type="button" variant="outline" size="sm" onClick={handleAddBulkRow} className="h-8 text-xs gap-1.5">
+                    <Plus className="h-3.5 w-3.5" /> Add Another Bill
+                  </Button>
+                  <Button 
+                    type="button" 
+                    variant="ghost" 
+                    size="sm" 
+                    onClick={() => setShowCsvPaste(!showCsvPaste)} 
+                    className="h-8 text-xs gap-1.5 text-muted-foreground"
+                  >
+                    <FileText className="h-3.5 w-3.5" /> {showCsvPaste ? "Hide Quick Import" : "Quick Paste / Import"}
+                  </Button>
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <div className="text-xs text-muted-foreground">
+                    Valid Bills: <span className="font-semibold text-foreground">{validBulkRows.length}</span>
+                  </div>
+                  <div className="text-sm font-bold text-emerald-600 dark:text-emerald-400">
+                    Grand Total: ₹{totalBulkAmount.toLocaleString()}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Total In Words */}
+            {totalBulkAmount > 0 && (
+              <div className="text-xs text-muted-foreground italic px-1">
+                Total in words: {numberToWords(totalBulkAmount)}
+              </div>
+            )}
+          </div>
+
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button type="button" variant="outline" onClick={() => setOpenBulkModal(false)} disabled={isSubmittingBulk}>
+              Cancel
+            </Button>
+            <Button 
+              type="button" 
+              disabled={isSubmittingBulk || validBulkRows.length === 0} 
+              onClick={handleBulkSubmit}
+              className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white"
+            >
+              <Check className="h-4 w-4" />
+              {isSubmittingBulk ? "Submitting Bills..." : `Submit ${validBulkRows.length} Bills (₹${totalBulkAmount.toLocaleString()})`}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* --- MODAL 1: ADD NEW EXPENSE --- */}
       <Dialog open={openAddModal} onOpenChange={setOpenAddModal}>
         <DialogContent className="sm:max-w-[500px] max-h-[90vh] overflow-y-auto">
@@ -815,6 +1454,25 @@ export default function ExpensesPage() {
                 {editExpenseId ? "Modify an existing expense record." : "Submit out-of-pocket expenses for official reimbursement."}
               </DialogDescription>
             </DialogHeader>
+
+            {!editExpenseId && (
+              <div className="mt-3 flex items-center justify-between p-2.5 rounded-lg bg-primary/5 border border-primary/20 text-xs">
+                <span className="text-muted-foreground">Have multiple bills without receipts/images?</span>
+                <Button 
+                  type="button" 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={() => {
+                    setOpenAddModal(false);
+                    setBulkEmployeeId((!isEmployee && formData.targetEmployeeId) ? formData.targetEmployeeId : (currentUserId || ""));
+                    setOpenBulkModal(true);
+                  }}
+                  className="h-7 text-xs font-medium text-primary hover:text-primary gap-1 border-primary/30"
+                >
+                  <Receipt className="h-3.5 w-3.5" /> Upload Multiple Bills
+                </Button>
+              </div>
+            )}
 
             <div className="space-y-4 py-4">
               {!isEmployee && (
