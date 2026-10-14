@@ -4,6 +4,7 @@ import { SalarySlip } from "@/models/SalarySlip";
 import { Employee } from "@/models/Employee";
 import { getPayrollActor, requirePayrollManager } from "@/lib/payroll-auth";
 import { saveSalarySlip } from "@/lib/payroll-service";
+import { sendSalaryCreditEmail } from "@/lib/email-service";
 
 function errorResponse(error: unknown) {
   const message = error instanceof Error ? error.message : "Payroll request failed";
@@ -36,6 +37,7 @@ export async function POST(request: NextRequest) {
     const actor = getPayrollActor(request);
     requirePayrollManager(actor);
     const slip = await saveSalarySlip(await request.json(), actor.id);
+    sendSalaryCreditEmail(slip).catch((err) => console.error("[Payroll] Failed to send salary credit email:", err));
     return NextResponse.json({ success: true, data: slip }, { status: 201 });
   } catch (error) { return errorResponse(error); }
 }

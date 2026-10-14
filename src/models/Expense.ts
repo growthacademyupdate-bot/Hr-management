@@ -49,6 +49,9 @@ const ExpenseSchema = new mongoose.Schema({
   reimbursedBy: { type: String, default: null },
   reimbursedAt: { type: String, default: null },
 
+  employeeReceived: { type: Boolean, default: false },
+  employeeReceivedAt: { type: String, default: null },
+
   cancelledBy: { type: String, default: null },
   cancelledAt: { type: String, default: null },
 }, { timestamps: true });

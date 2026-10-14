@@ -300,13 +300,16 @@ function ApplyLeaveForm({ user, onSuccess }: { user: any; onSuccess: () => void 
   const [endDate, setEndDate] = useState(new Date().toISOString().slice(0, 10));
   const [reason, setReason] = useState("");
 
+  const isHalfDay = type === "Half Day" || type === "Half Time";
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!type || !startDate || !endDate || !reason) {
+    const finalEndDate = isHalfDay ? startDate : endDate;
+    if (!type || !startDate || !finalEndDate || !reason) {
       toast.error("Please fill all required fields");
       return;
     }
-    if (new Date(endDate) < new Date(startDate)) {
+    if (!isHalfDay && new Date(finalEndDate) < new Date(startDate)) {
       toast.error("To Date cannot be before From Date");
       return;
     }
@@ -314,10 +317,10 @@ function ApplyLeaveForm({ user, onSuccess }: { user: any; onSuccess: () => void 
       await api.addLeave({
         type,
         startDate,
-        endDate,
+        endDate: finalEndDate,
         reason,
       }, user.employeeId || user.id);
-      toast.success("Leave request submitted successfully");
+      toast.success(isHalfDay ? "Half Day (0.5 day) leave request submitted successfully" : "Leave request submitted successfully");
       onSuccess();
     } catch (err: any) {
       toast.error(err.message || "Failed to submit leave");
@@ -328,27 +331,54 @@ function ApplyLeaveForm({ user, onSuccess }: { user: any; onSuccess: () => void 
     <form onSubmit={handleSubmit} className="space-y-4 pt-4">
       <div className="space-y-2">
         <Label>Leave Type</Label>
-        <Select value={type} onValueChange={setType} required>
+        <Select 
+          value={type} 
+          onValueChange={(val) => {
+            setType(val);
+            if (val === "Half Day" || val === "Half Time") {
+              setEndDate(startDate);
+            }
+          }} 
+          required
+        >
           <SelectTrigger><SelectValue /></SelectTrigger>
           <SelectContent>
             <SelectItem value="Casual Leave">Casual Leave</SelectItem>
             <SelectItem value="Sick Leave">Sick Leave</SelectItem>
             <SelectItem value="Earned Leave">Earned Leave</SelectItem>
             <SelectItem value="Emergency Leave">Emergency Leave</SelectItem>
+            <SelectItem value="Half Day">Half Time (Half Day - 0.5 Day)</SelectItem>
             <SelectItem value="Other">Other</SelectItem>
           </SelectContent>
         </Select>
       </div>
-      <div className="grid grid-cols-2 gap-4">
+
+      {isHalfDay ? (
         <div className="space-y-2">
-          <Label>From Date</Label>
-          <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} required />
+          <Label>Date</Label>
+          <Input 
+            type="date" 
+            value={startDate} 
+            onChange={(e) => {
+              setStartDate(e.target.value);
+              setEndDate(e.target.value);
+            }} 
+            required 
+          />
+          <p className="text-xs text-muted-foreground">This request will be counted as 0.5 day (Half Time).</p>
         </div>
-        <div className="space-y-2">
-          <Label>To Date</Label>
-          <Input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} required />
+      ) : (
+        <div className="grid grid-cols-2 gap-4">
+          <div className="space-y-2">
+            <Label>From Date</Label>
+            <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} required />
+          </div>
+          <div className="space-y-2">
+            <Label>To Date</Label>
+            <Input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} required />
+          </div>
         </div>
-      </div>
+      )}
       <div className="space-y-2">
         <Label>Reason</Label>
         <Textarea value={reason} onChange={(e) => setReason(e.target.value)} rows={3} placeholder="Please provide a reason..." required />

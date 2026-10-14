@@ -4,6 +4,13 @@ import bcrypt from "bcryptjs";
 import nodemailer from "nodemailer";
 import mongoose from "mongoose";
 import connectDB from "@/lib/mongoose";
+import {
+  sendEmployeeCredentialsEmail,
+  sendLeaveApplicationEmail,
+  sendLeaveStatusEmail,
+  sendExpenseReimbursedEmail,
+  sendEmail,
+} from "@/lib/email-service";
 import { Employee } from "@/models/Employee";
 import { Task } from "@/models/Task";
 import { Leave } from "@/models/Leave";
@@ -236,78 +243,12 @@ export async function getEmployees() {
   return serialize(emps);
 }
 
-async function sendEmployeeCredentialsEmail(email: string, name: string, empId: string, plainPassword: string) {
-  if (!process.env.SMTP_USER || !process.env.SMTP_PASS) return;
-  try {
-    const transporter = nodemailer.createTransport({
-      service: process.env.SMTP_HOST === "smtp.gmail.com" ? "gmail" : undefined,
-      host: process.env.SMTP_HOST !== "smtp.gmail.com" ? process.env.SMTP_HOST : undefined,
-      port: process.env.SMTP_HOST !== "smtp.gmail.com" ? Number(process.env.SMTP_PORT || 587) : undefined,
-      secure: process.env.SMTP_PORT === "465",
-      auth: {
-        user: process.env.SMTP_USER,
-        pass: process.env.SMTP_PASS,
-      },
-    });
-
-    const mailOptions = {
-      from: process.env.SMTP_FROM || process.env.SMTP_USER,
-      to: email,
-      subject: "Welcome! Your Employee Account Credentials",
-      html: `
-        <div style="font-family: Arial, sans-serif; padding: 20px;">
-          <h2>Welcome, ${name}!</h2>
-          <p>Your employee account has been created successfully. Below are your login credentials:</p>
-          <div style="background: #f4f4f4; padding: 15px; border-radius: 5px; margin: 20px 0;">
-            <p><strong>Login ID (Email):</strong> ${email}</p>
-            <p><strong>Employee ID:</strong> ${empId}</p>
-            <p><strong>Password:</strong> ${plainPassword}</p>
-          </div>
-          <p>Best regards,<br/>HR Department</p>
-        </div>
-      `,
-    };
-
-    await transporter.sendMail(mailOptions);
-    console.log("Credentials email sent to", email);
-  } catch (error) {
-    console.error("Failed to send credentials email:", error);
-  }
-}
-
 async function sendSystemNotificationEmail(toEmail: string | string[], subject: string, messageHtml: string) {
-  if (!process.env.SMTP_USER || !process.env.SMTP_PASS) return;
-  try {
-    const transporter = nodemailer.createTransport({
-      service: process.env.SMTP_HOST === "smtp.gmail.com" ? "gmail" : undefined,
-      host: process.env.SMTP_HOST !== "smtp.gmail.com" ? process.env.SMTP_HOST : undefined,
-      port: process.env.SMTP_HOST !== "smtp.gmail.com" ? Number(process.env.SMTP_PORT || 587) : undefined,
-      secure: process.env.SMTP_PORT === "465",
-      auth: {
-        user: process.env.SMTP_USER,
-        pass: process.env.SMTP_PASS,
-      },
-    });
-
-    const mailOptions = {
-      from: process.env.SMTP_FROM || process.env.SMTP_USER,
-      to: Array.isArray(toEmail) ? toEmail.join(",") : toEmail,
-      subject: subject,
-      html: `
-        <div style="font-family: Arial, sans-serif; padding: 20px; max-width: 600px;">
-          <h2 style="color: #4f46e5;">HR Management System</h2>
-          <div style="background: #f9fafb; padding: 20px; border-radius: 8px; border: 1px solid #e5e7eb; margin: 20px 0;">
-            ${messageHtml}
-          </div>
-          <p style="font-size: 12px; color: #6b7280;">This is an automated notification from your HR Management System.</p>
-        </div>
-      `,
-    };
-
-    await transporter.sendMail(mailOptions);
-  } catch (error) {
-    console.error("Failed to send system notification email:", error);
-  }
+  return sendEmail({
+    to: toEmail,
+    subject,
+    html: messageHtml,
+  });
 }
 
 export async function addEmployee(data: any) {
@@ -563,7 +504,12 @@ export async function addLeave(data: any, userId: string) {
   };
 
   const reqStart = normalizeDateStr(data.startDate);
-  const reqEnd = normalizeDateStr(data.endDate);
+  let reqEnd = normalizeDateStr(data.endDate);
+
+  const isHalfDay = data.type === "Half Day" || data.type === "Half Time";
+  if (isHalfDay) {
+    reqEnd = reqStart;
+  }
 
   if (!reqStart || !reqEnd) throw new Error("Please select valid Start and End dates.");
   if (reqEnd < reqStart) throw new Error("End date cannot be before start date.");
@@ -589,40 +535,55 @@ export async function addLeave(data: any, userId: string) {
   }
   const id = `LV${String(max + 1).padStart(3, "0")}`;
   
-  const sDate = new Date(reqStart);
-  const eDate = new Date(reqEnd);
-  let days = Math.round((eDate.getTime() - sDate.getTime()) / (1000 * 60 * 60 * 24)) + 1;
-  
-  // Find overlapping company holidays and subtract them
-  const holidays = await Holiday.find({
-    isActive: true,
-    holidayType: "COMPANY_HOLIDAY",
-    $or: [
-      { startDate: { $lte: reqEnd }, endDate: { $gte: reqStart } }
-    ]
-  }).lean();
+  let days = 1;
+  if (isHalfDay) {
+    days = 0.5;
+  } else {
+    const sDate = new Date(reqStart);
+    const eDate = new Date(reqEnd);
+    days = Math.round((eDate.getTime() - sDate.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+    
+    // Find overlapping company holidays and subtract them
+    const holidays = await Holiday.find({
+      isActive: true,
+      holidayType: "COMPANY_HOLIDAY",
+      $or: [
+        { startDate: { $lte: reqEnd }, endDate: { $gte: reqStart } }
+      ]
+    }).lean();
 
-  let holidayDates = new Set<string>();
-  for (const h of holidays) {
-    let curr = new Date(normalizeDateStr((h as any).startDate));
-    const endHol = new Date(normalizeDateStr((h as any).endDate));
-    while (curr <= endHol) {
-      const currStr = curr.toISOString().slice(0, 10);
-      if (currStr >= reqStart && currStr <= reqEnd) {
-        holidayDates.add(currStr);
+    let holidayDates = new Set<string>();
+    for (const h of holidays) {
+      let curr = new Date(normalizeDateStr((h as any).startDate));
+      const endHol = new Date(normalizeDateStr((h as any).endDate));
+      while (curr <= endHol) {
+        const currStr = curr.toISOString().slice(0, 10);
+        if (currStr >= reqStart && currStr <= reqEnd) {
+          holidayDates.add(currStr);
+        }
+        curr.setDate(curr.getDate() + 1);
       }
-      curr.setDate(curr.getDate() + 1);
     }
+    
+    days = Math.max(0, days - holidayDates.size);
+    if (days <= 0) throw new Error("Selected date range consists entirely of company holidays.");
   }
-  
-  days = Math.max(0, days - holidayDates.size);
-  if (days <= 0) throw new Error("Selected date range consists entirely of company holidays.");
 
-  const empDoc = await Employee.findOne({ id: userId }, { name: 1 }).lean();
+  const empDoc = await Employee.findOne({ id: userId }, { name: 1, email: 1 }).lean();
   const empName = (empDoc as any)?.name || "An employee";
+  const empEmail = (empDoc as any)?.email;
   const notifMsg = `${empName} requested ${days} day(s) of leave (${data.type || "Leave"}).`;
 
-  const leave = await Leave.create({ ...data, id, employeeId: userId, numberOfDays: days, appliedAt: new Date().toISOString(), status: "pending" });
+  const leave = await Leave.create({ 
+    ...data, 
+    id, 
+    employeeId: userId, 
+    startDate: reqStart,
+    endDate: reqEnd,
+    numberOfDays: days, 
+    appliedAt: new Date().toISOString(), 
+    status: "pending" 
+  });
   
   await createActivity({
     employeeId: userId, actorId: userId, actorRole: "employee",
@@ -655,6 +616,17 @@ export async function addLeave(data: any, userId: string) {
     referenceId: id,
     actionUrl: `/leaves`,
   });
+
+  // Send Email Notification to HR, Admin, and Employee
+  sendLeaveApplicationEmail({
+    employeeName: empName,
+    employeeEmail: empEmail,
+    leaveType: data.type || "Casual Leave",
+    startDate: reqStart,
+    endDate: reqEnd,
+    numberOfDays: days,
+    reason: data.reason || "",
+  }).catch(console.error);
 
   return serialize(leave);
 }
@@ -729,13 +701,16 @@ export async function hrReviewLeave(leaveId: string, action: "approve" | "reject
 
   const emp = await Employee.findOne({ id: leave.employeeId });
   if (emp && emp.email) {
-    const statusText = action === "approve" ? "Approved" : "Rejected";
-    const commentHtml = comment ? `<p><strong>HR Comment:</strong> ${comment}</p>` : "";
-    sendSystemNotificationEmail(
-      emp.email,
-      `Leave Request ${statusText}`,
-      `<p>Your leave request from <strong>${leave.startDate}</strong> to <strong>${leave.endDate}</strong> has been <strong>${statusText}</strong> by HR.</p>${commentHtml}`
-    ).catch(console.error);
+    sendLeaveStatusEmail({
+      employeeName: emp.name,
+      employeeEmail: emp.email,
+      leaveType: leave.type,
+      startDate: leave.startDate,
+      endDate: leave.endDate,
+      status: action === "approve" ? "approved" : "rejected",
+      reviewerRole: "HR",
+      comment: comment || undefined,
+    }).catch(console.error);
   }
 
   if (action === "approve") {
@@ -787,6 +762,20 @@ export async function adminReviewLeave(leaveId: string, action: "approve" | "rej
     referenceId: leaveId,
     actionUrl: `/leaves`,
   });
+
+  const emp = await Employee.findOne({ id: leave.employeeId });
+  if (emp && emp.email) {
+    sendLeaveStatusEmail({
+      employeeName: emp.name,
+      employeeEmail: emp.email,
+      leaveType: leave.type,
+      startDate: leave.startDate,
+      endDate: leave.endDate,
+      status: action === "approve" ? "approved" : "rejected",
+      reviewerRole: "Admin",
+      comment: comment || undefined,
+    }).catch(console.error);
+  }
 
   return serialize(leave);
 }
@@ -1283,6 +1272,101 @@ export async function addExpense(data: any, authorId: string) {
   return serialize(expense);
 }
 
+export async function addBulkExpenses(bills: any[], authorId: string) {
+  await connectDB();
+  if (!Array.isArray(bills) || bills.length === 0) {
+    throw new Error("No bills provided for bulk upload");
+  }
+
+  const all = await Expense.find({}, { id: 1 }).lean();
+  let max = 0;
+  for (const doc of all) {
+    const num = parseInt((doc as any).id.replace("EXP", ""), 10);
+    if (!isNaN(num) && num > max) max = num;
+  }
+
+  const createdExpenses: any[] = [];
+  let totalAmount = 0;
+  let firstTargetId = authorId;
+
+  for (const b of bills) {
+    max += 1;
+    const id = `EXP${String(max).padStart(3, "0")}`;
+    const targetId = b.targetEmployeeId || authorId;
+    firstTargetId = targetId;
+    const amountNum = Number(b.amount) || 0;
+    totalAmount += amountNum;
+
+    const expense = await Expense.create({
+      id,
+      employeeId: targetId,
+      title: b.title || "Bill Expense",
+      category: b.category || "Other",
+      amount: amountNum,
+      expenseDate: b.expenseDate || new Date().toISOString().slice(0, 10),
+      description: b.description || b.title || "Official expense without receipt image",
+      receiptUrls: [], // explicitly without image
+      gstPercent: Number(b.gstPercent) || 0,
+      bankHolderName: b.bankHolderName || null,
+      bankName: b.bankName || null,
+      branch: b.branch || null,
+      accountNo: b.accountNo || null,
+      ifscCode: b.ifscCode || null,
+      upiId: b.upiId || null,
+      vehicleType: b.vehicleType || null,
+      vehicleNumber: b.vehicleNumber || null,
+      distanceKm: b.distanceKm ? Number(b.distanceKm) : null,
+      vehicleAverage: b.vehicleAverage ? Number(b.vehicleAverage) : null,
+      petrolRate: b.petrolRate ? Number(b.petrolRate) : null,
+      trips: b.trips || [],
+      appliedAt: new Date().toISOString(),
+      status: "pending"
+    });
+
+    createdExpenses.push(serialize(expense));
+  }
+
+  await createActivity({
+    employeeId: firstTargetId,
+    actorId: authorId,
+    actorRole: authorId === firstTargetId ? "employee" : "hr",
+    activityType: "EXPENSE_SUBMITTED",
+    module: "EXPENSE",
+    referenceId: createdExpenses[0]?.id || `BULK${Date.now()}`,
+    message: `Batch of ${bills.length} bills submitted totaling ₹${totalAmount.toLocaleString()} without image receipts.`
+  });
+
+  const empDoc = await Employee.findOne({ id: firstTargetId }, { name: 1 }).lean();
+  const empName = (empDoc as any)?.name || "An employee";
+  const expMsg = `${empName} submitted ${bills.length} bills totaling ₹${totalAmount.toLocaleString()}.`;
+
+  await createNotification({
+    recipientId: "u_hr",
+    senderId: authorId,
+    senderRole: "employee",
+    title: "New Expense Claims (Bulk)",
+    message: expMsg,
+    type: "EXPENSE_SUBMITTED",
+    module: "EXPENSE",
+    referenceId: createdExpenses[0]?.id || `BULK${Date.now()}`,
+    actionUrl: `/expenses`,
+  });
+
+  await createNotification({
+    recipientId: "u_admin",
+    senderId: authorId,
+    senderRole: "employee",
+    title: "New Expense Claims (Bulk)",
+    message: expMsg,
+    type: "EXPENSE_SUBMITTED",
+    module: "EXPENSE",
+    referenceId: createdExpenses[0]?.id || `BULK${Date.now()}`,
+    actionUrl: `/expenses`,
+  });
+
+  return createdExpenses;
+}
+
 export async function cancelExpense(expenseId: string, userId: string) {
   await connectDB();
   const expense = await Expense.findOne({ id: expenseId });
@@ -1358,7 +1442,7 @@ export async function adminReviewExpense(expenseId: string, action: "approve" | 
   if (userRole !== "admin") throw new Error("Unauthorized");
   const expense = await Expense.findOne({ id: expenseId });
   if (!expense) throw new Error("Expense claim not found");
-  if (expense.status !== "hr_approved" && expense.status !== "pending") throw new Error("Invalid expense review state");
+  if (expense.status !== "hr_approved") throw new Error("Expense claim must be approved by HR before Admin review");
 
   expense.status = action === "approve" ? "admin_approved" : "admin_rejected";
   expense.adminReviewedBy = adminId;
@@ -1393,11 +1477,13 @@ export async function markExpenseReimbursed(expenseId: string, reviewerId: strin
   if (userRole !== "admin" && userRole !== "hr") throw new Error("Unauthorized");
   const expense = await Expense.findOne({ id: expenseId });
   if (!expense) throw new Error("Expense claim not found");
-  if (expense.status !== "admin_approved" && expense.status !== "hr_approved") throw new Error("Only approved expenses can be marked as reimbursed");
+  if (expense.status !== "admin_approved") throw new Error("Expense must be approved by both HR and Admin before marking as reimbursed (paid)");
 
   expense.status = "reimbursed";
   expense.reimbursedBy = reviewerId;
   expense.reimbursedAt = new Date().toISOString();
+  expense.employeeReceived = false;
+  expense.employeeReceivedAt = null;
   await expense.save();
 
   await createActivity({
@@ -1411,11 +1497,71 @@ export async function markExpenseReimbursed(expenseId: string, reviewerId: strin
     senderId: reviewerId,
     senderRole: userRole,
     title: "Expense Reimbursed",
-    message: `Your expense claim of ₹${expense.amount} (${expense.category}) has been reimbursed.`,
+    message: `Your expense claim of ₹${expense.amount} (${expense.category}) has been reimbursed. Please confirm receipt once received in your account.`,
     type: "EXPENSE_REIMBURSED",
     module: "EXPENSE",
     referenceId: expenseId,
     actionUrl: `/expenses`,
+  });
+
+  const emp = await Employee.findOne({ id: expense.employeeId }).lean();
+  if (emp && (emp as any).email) {
+    sendExpenseReimbursedEmail({
+      employeeName: (emp as any).name || "Employee",
+      employeeEmail: (emp as any).email,
+      title: expense.title || expense.category,
+      category: expense.category,
+      amount: expense.amount,
+      expenseId: expense.id,
+    }).catch(console.error);
+  }
+
+  return serialize(expense);
+}
+
+export async function acknowledgeExpenseReceipt(expenseId: string, employeeId: string) {
+  await connectDB();
+  const expense = await Expense.findOne({ id: expenseId });
+  if (!expense) throw new Error("Expense claim not found");
+  if (expense.employeeId !== employeeId) throw new Error("Unauthorized to acknowledge this expense");
+  if (expense.status !== "reimbursed") throw new Error("Expense claim is not yet marked as reimbursed");
+
+  expense.employeeReceived = true;
+  expense.employeeReceivedAt = new Date().toISOString();
+  await expense.save();
+
+  await createActivity({
+    employeeId,
+    actorId: employeeId,
+    actorRole: "employee",
+    activityType: "EXPENSE_RECEIPT_CONFIRMED",
+    module: "EXPENSE",
+    referenceId: expenseId,
+    message: `You confirmed receipt of reimbursement payment of ₹${expense.amount} for ${expense.title || expense.category}.`
+  });
+
+  await createNotification({
+    recipientId: "u_hr",
+    senderId: employeeId,
+    senderRole: "employee",
+    title: "Expense Payment Confirmed by Employee",
+    message: `Employee confirmed receipt of ₹${expense.amount} for ${expense.title || expense.category}.`,
+    type: "EXPENSE_RECEIPT_CONFIRMED",
+    module: "EXPENSE",
+    referenceId: expenseId,
+    actionUrl: `/expenses`
+  });
+
+  await createNotification({
+    recipientId: "u_admin",
+    senderId: employeeId,
+    senderRole: "employee",
+    title: "Expense Payment Confirmed by Employee",
+    message: `Employee confirmed receipt of ₹${expense.amount} for ${expense.title || expense.category}.`,
+    type: "EXPENSE_RECEIPT_CONFIRMED",
+    module: "EXPENSE",
+    referenceId: expenseId,
+    actionUrl: `/expenses`
   });
 
   return serialize(expense);

@@ -6,7 +6,7 @@ import {
   getLeaves, addLeave, cancelLeave, hrReviewLeave, adminReviewLeave, deleteLeave as deleteLeaveAction,
   getAttendance, getActivities, logLogoutActivity, deleteAttendance, deleteActivity as deleteActivityAction, updateSystemSetting, getSystemSettings, updateSystemSettings,
   getHolidays, createHoliday, updateHoliday, deleteHoliday,
-  getExpenses, addExpense, updateExpense, cancelExpense, hrReviewExpense, adminReviewExpense, markExpenseReimbursed, deleteExpense,
+  getExpenses, addExpense, addBulkExpenses, updateExpense, cancelExpense, hrReviewExpense, adminReviewExpense, markExpenseReimbursed, acknowledgeExpenseReceipt, deleteExpense,
   getNotifications, markNotificationAsRead, markAllNotificationsAsRead, deleteNotification as deleteNotificationAction, broadcastNotification, editBroadcastNotification, deleteBroadcastNotification,
   getDailyReports, addDailyReport, deleteDailyReport,
   getLeads, addLead, updateLead, deleteLead,
@@ -37,10 +37,10 @@ export interface Task {
   id: string; title: string; description: string; assignedTo: string; assignedBy: string; priority: "low" | "medium" | "high" | "urgent"; status: "assigned" | "working_progress" | "completed" | "reviewed"; assignDate: string; dueDate: string; startedAt: string | null; completedAt: string | null; reviewedAt: string | null; hrRating: string | null; hrReview: string | null; reviewedBy: string | null; createdAt: string; updatedAt: string;
 }
 export interface Leave {
-  id: string; employeeId: string; type: "Casual Leave" | "Sick Leave" | "Earned Leave" | "Emergency Leave" | "Other"; startDate: string; endDate: string; numberOfDays: number; reason: string; status: "pending" | "hr_approved" | "hr_rejected" | "admin_approved" | "admin_rejected" | "cancelled"; appliedAt: string; hrReviewedBy?: string | null; hrReviewedAt?: string | null; hrReviewComment?: string | null; adminReviewedBy?: string | null; adminReviewedAt?: string | null; adminReviewComment?: string | null; cancelledBy?: string | null; cancelledAt?: string | null;
+  id: string; employeeId: string; type: "Casual Leave" | "Sick Leave" | "Earned Leave" | "Emergency Leave" | "Half Day" | "Half Time" | "Other"; startDate: string; endDate: string; numberOfDays: number; reason: string; status: "pending" | "hr_approved" | "hr_rejected" | "admin_approved" | "admin_rejected" | "cancelled"; appliedAt: string; hrReviewedBy?: string | null; hrReviewedAt?: string | null; hrReviewComment?: string | null; adminReviewedBy?: string | null; adminReviewedAt?: string | null; adminReviewComment?: string | null; cancelledBy?: string | null; cancelledAt?: string | null;
 }
 export interface Expense {
-  id: string; employeeId: string; title: string; category: string; amount: number; expenseDate: string; description: string; receiptUrls?: string[] | null; gstPercent?: number; vehicleType?: string; vehicleNumber?: string; distanceKm?: number; vehicleAverage?: number; petrolRate?: number; trips?: { date: string; distanceKm: number; vehicleAverage: number; petrolRate: number; amount: number; }[]; bankHolderName?: string; bankName?: string; branch?: string; accountNo?: string; ifscCode?: string; upiId?: string; status: "pending" | "hr_approved" | "hr_rejected" | "admin_approved" | "admin_rejected" | "reimbursed" | "cancelled"; appliedAt: string; hrReviewedBy?: string | null; hrReviewedAt?: string | null; hrReviewComment?: string | null; adminReviewedBy?: string | null; adminReviewedAt?: string | null; adminReviewComment?: string | null; reimbursedBy?: string | null; reimbursedAt?: string | null; cancelledBy?: string | null; cancelledAt?: string | null;
+  id: string; employeeId: string; title: string; category: string; amount: number; expenseDate: string; description: string; receiptUrls?: string[] | null; gstPercent?: number; vehicleType?: string; vehicleNumber?: string; distanceKm?: number; vehicleAverage?: number; petrolRate?: number; trips?: { date: string; distanceKm: number; vehicleAverage: number; petrolRate: number; amount: number; }[]; bankHolderName?: string; bankName?: string; branch?: string; accountNo?: string; ifscCode?: string; upiId?: string; status: "pending" | "hr_approved" | "hr_rejected" | "admin_approved" | "admin_rejected" | "reimbursed" | "cancelled"; appliedAt: string; hrReviewedBy?: string | null; hrReviewedAt?: string | null; hrReviewComment?: string | null; adminReviewedBy?: string | null; adminReviewedAt?: string | null; adminReviewComment?: string | null; reimbursedBy?: string | null; reimbursedAt?: string | null; employeeReceived?: boolean; employeeReceivedAt?: string | null; cancelledBy?: string | null; cancelledAt?: string | null;
 }
 export interface Activity {
   id: string; employeeId: string; time: string; label: string; type: string;
@@ -298,10 +298,36 @@ export const api = {
   async deleteLeave(leaveId: string) { const user = getCurrentUser(); if (!user) return; try { await deleteLeaveAction(leaveId, user.employeeId || user.id, user.role); currentDB.leaves = currentDB.leaves.filter(x => x.id !== leaveId); notify(); } catch (error: any) { console.error("Delete leave error:", error); throw error; } },
 
   async addExpense(expense: any) { const user = getCurrentUser(); if (!user) return; const e = await addExpense(expense, user.employeeId || user.id); currentDB.expenses = [e, ...currentDB.expenses]; getNotifications(user.employeeId || user.id).then(n => { currentDB.notifications = n; notify(); }).catch(console.error); notify(); return e; },
+  async addBulkExpenses(bills: any[]) {
+    const user = getCurrentUser();
+    if (!user) return [];
+    const authorId = user.employeeId || user.id;
+    try {
+      const res = await fetch("/api/expenses/bulk", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ bills, authorId })
+      });
+      const json = await res.json();
+      if (!json.success) throw new Error(json.error || "Failed to submit bulk bills");
+      const list = json.data || [];
+      currentDB.expenses = [...list, ...currentDB.expenses];
+      getNotifications(authorId).then(n => { currentDB.notifications = n; notify(); }).catch(console.error);
+      notify();
+      return list;
+    } catch {
+      const list = await addBulkExpenses(bills, authorId);
+      currentDB.expenses = [...list, ...currentDB.expenses];
+      getNotifications(authorId).then(n => { currentDB.notifications = n; notify(); }).catch(console.error);
+      notify();
+      return list;
+    }
+  },
   async cancelExpense(expenseId: string) { const user = getCurrentUser(); if (!user) return; const e = await cancelExpense(expenseId, user.employeeId || user.id); currentDB.expenses = currentDB.expenses.map(x => x.id === expenseId ? e : x); notify(); },
   async hrReviewExpense(expenseId: string, action: "approve" | "reject", comment: string) { const user = getCurrentUser(); if (!user) return; const e = await hrReviewExpense(expenseId, action, comment, user.employeeId || user.id, user.role); currentDB.expenses = currentDB.expenses.map(x => x.id === expenseId ? e : x); notify(); },
   async adminReviewExpense(expenseId: string, action: "approve" | "reject", comment: string) { const user = getCurrentUser(); if (!user) return; const e = await adminReviewExpense(expenseId, action, comment, user.employeeId || user.id, user.role); currentDB.expenses = currentDB.expenses.map(x => x.id === expenseId ? e : x); notify(); },
   async markExpenseReimbursed(expenseId: string) { const user = getCurrentUser(); if (!user) return; const e = await markExpenseReimbursed(expenseId, user.employeeId || user.id, user.role); currentDB.expenses = currentDB.expenses.map(x => x.id === expenseId ? e : x); notify(); },
+  async acknowledgeExpenseReceipt(expenseId: string) { const user = getCurrentUser(); if (!user) return; const e = await acknowledgeExpenseReceipt(expenseId, user.employeeId || user.id); currentDB.expenses = currentDB.expenses.map(x => x.id === expenseId ? e : x); notify(); return e; },
   async updateExpense(id: string, data: any) { const user = getCurrentUser(); if (!user) return; const e = await updateExpense(id, data, user.role, user.employeeId || user.id); currentDB.expenses = currentDB.expenses.map(x => x.id === id ? e : x); notify(); },
   async deleteExpense(id: string) { const user = getCurrentUser(); if (!user) return; await deleteExpense(id, user.role, user.employeeId || user.id); currentDB.expenses = currentDB.expenses.filter(x => x.id !== id); notify(); },
 
