@@ -1639,7 +1639,7 @@ function PrintExpenseBillModal({ expense, employee, onClose, numberToWords }: { 
 
                 // Dynamically import to prevent Next.js SSR issues
                 const m = await import('html2pdf.js');
-                const html2pdfModule = m.default || m;
+                const html2pdfModule = (m as any).default || m;
                 
                 html2pdfModule().set({
                   margin: 0,

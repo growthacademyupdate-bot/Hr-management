@@ -5,7 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useAuth, logout, ROLE_MENUS, useGlobalSearch, api, useDB } from "@/lib/store";
 import {
   LayoutDashboard, Users, CalendarCheck, ListTodo, CalendarOff, BarChart3, Settings, Activity, User as UserIcon,
-  Bell, LogOut, Menu, Search, Sun, CalendarDays, Receipt, WalletCards, X, ClipboardList, FileText, AlertTriangle
+  Bell, LogOut, Menu, Search, Sun, CalendarDays, Receipt, WalletCards, X, ClipboardList, FileText, AlertTriangle, GraduationCap
 } from "lucide-react";
 import { useEffect, useState, useMemo } from "react";
 import { Button } from "@/components/ui/button";
@@ -15,9 +15,12 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { MandatoryTrainingModal } from "@/components/MandatoryTrainingModal";
+import { validateSalesLogoutStatus } from "@/app/actions";
+import { toast } from "sonner";
 
 const ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
-  LayoutDashboard, Users, CalendarCheck, ListTodo, CalendarOff, BarChart3, Settings, Activity, User: UserIcon, CalendarDays, Bell, Receipt, ClipboardList, FileText
+  LayoutDashboard, Users, CalendarCheck, ListTodo, CalendarOff, BarChart3, Settings, Activity, User: UserIcon, CalendarDays, Bell, Receipt, ClipboardList, FileText, GraduationCap
 };
 
 export function AppLayout({ children }: { children: React.ReactNode }) {
@@ -27,12 +30,25 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [maintenanceMode, setMaintenanceMode] = useState(false);
   const [checkingMaintenance, setCheckingMaintenance] = useState(true);
+  const [trainingModalOpen, setTrainingModalOpen] = useState(false);
+  const [loggingOut, setLoggingOut] = useState(false);
   const globalSearch = useGlobalSearch();
   const db = useDB();
   const notifications = db.notifications || [];
   const unreadCount = notifications.filter(n => !n.isRead).length;
 
   const [searchFocused, setSearchFocused] = useState(false);
+
+  // Check if current user is Sales
+  const isSalesEmployee = useMemo(() => {
+    if (!user || user.role !== "employee") return false;
+    if (user.jobRole === "Sales") return true;
+    const currentEmp = db.employees?.find((e) => e.id === (user.employeeId || user.id));
+    return (
+      currentEmp?.jobRole === "Sales" ||
+      (currentEmp?.designation && currentEmp.designation.toLowerCase().includes("sales"))
+    );
+  }, [user, db.employees]);
 
   // Check maintenance mode on mount
   useEffect(() => {
@@ -148,13 +164,41 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
     return <>{children}</>;
   }
 
+  // Centralized pre-logout validator
+  const handleSecureLogout = async () => {
+    if (loggingOut) return;
+    setLoggingOut(true);
+
+    try {
+      if (user && user.role === "employee" && isSalesEmployee) {
+        const empId = user.employeeId || user.id;
+        const res = await validateSalesLogoutStatus(empId, "employee");
+        if (!res.allowed) {
+          toast.warning("Daily training submission is mandatory before logout. Please submit today's training points to continue.");
+          setTrainingModalOpen(true);
+          setLoggingOut(false);
+          return;
+        }
+      }
+
+      logout();
+      router.push("/");
+    } catch (err) {
+      console.error("Logout validation error:", err);
+      toast.error("Failed to validate logout status. Please try again.");
+    } finally {
+      setLoggingOut(false);
+    }
+  };
+
   if (!user) return null;
   let menu = [...ROLE_MENUS[user.role]];
 
-  if (user.role === "employee" && user.jobRole === "Sales") {
-    // Remove default Daily Report, add Sales specific routes
+  if (user.role === "employee" && isSalesEmployee) {
+    // Remove default Daily Report, add Sales specific routes + Daily Training
     menu = menu.filter(m => m.label !== "Daily Task Report");
     menu.splice(1, 0, 
+      { label: "Daily Training", to: "/daily-training", icon: "GraduationCap" },
       { label: "Sales Report", to: "/sales-reports", icon: "ClipboardList" },
       { label: "Leads", to: "/leads", icon: "Users" },
       { label: "Positive Customers", to: "/positive-customers", icon: "User" }
@@ -222,7 +266,8 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
             <Button 
               variant="ghost" 
               size="icon" 
-              onClick={() => { logout(); router.push("/"); }} 
+              onClick={handleSecureLogout} 
+              disabled={loggingOut}
               title="Log out" 
               className="text-sidebar-foreground/60 hover:text-destructive hover:bg-destructive/10 shrink-0"
             >
@@ -267,7 +312,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                 <Settings className="h-4 w-4 mr-2" />Settings
               </DropdownMenuItem>
               <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={() => { logout(); router.push("/"); }} className="text-destructive focus:bg-destructive/10 focus:text-destructive cursor-pointer">
+              <DropdownMenuItem onClick={handleSecureLogout} disabled={loggingOut} className="text-destructive focus:bg-destructive/10 focus:text-destructive cursor-pointer">
                 <LogOut className="h-4 w-4 mr-2" />Log out
               </DropdownMenuItem>
             </DropdownMenuContent>
@@ -555,6 +600,21 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
           {children}
         </main>
       </div>
+
+      {/* Mandatory Training Modal for Sales Employees */}
+      {user && (
+        <MandatoryTrainingModal
+          isOpen={trainingModalOpen}
+          onClose={() => setTrainingModalOpen(false)}
+          employeeId={user.employeeId || user.id}
+          employeeName={user.name}
+          onSuccess={() => {
+            setTrainingModalOpen(false);
+            logout();
+            router.push("/");
+          }}
+        />
+      )}
     </div>
   );
 }

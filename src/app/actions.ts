@@ -18,6 +18,7 @@ import { Lead } from "@/models/Lead";
 import { DataScraping } from "@/models/DataScraping";
 import { Invoice } from "@/models/Invoice";
 import { Grooming } from "@/models/Grooming";
+import { DailyTraining } from "@/models/DailyTraining";
 
 // Helper to serialize Mongoose documents
 function serialize(doc: any) {
@@ -1824,3 +1825,299 @@ export async function deleteGrooming(id: string) {
   await Grooming.findOneAndDelete({ id });
   return true;
 }
+
+// ---------------- Daily Training Actions ----------------
+function getTodayDateInTimezone(): string {
+  // Asia/Kolkata / configured local time (Indian Standard Time: UTC+5:30)
+  try {
+    const formatter = new Intl.DateTimeFormat("en-CA", {
+      timeZone: "Asia/Kolkata",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit"
+    });
+    return formatter.format(new Date()); // Returns YYYY-MM-DD
+  } catch {
+    return new Date().toISOString().slice(0, 10);
+  }
+}
+
+export async function submitDailyTraining(data: {
+  employeeId: string;
+  trainingDate?: string;
+  trainingPoints: string[] | string;
+  rawContent?: string;
+}) {
+  try {
+    await connectDB();
+
+    if (!data.employeeId) {
+      return { success: false, error: "Employee ID is required" };
+    }
+
+    // Verify employee exists and is Sales
+    const emp = await Employee.findOne({ id: data.employeeId });
+    if (!emp) {
+      return { success: false, error: "Employee record not found" };
+    }
+
+    const isSales =
+      emp.jobRole === "Sales" ||
+      (emp.designation && emp.designation.toLowerCase().includes("sales"));
+
+    if (!isSales) {
+      return { success: false, error: "Daily training is only applicable for Sales employees" };
+    }
+
+    // Current working date
+    const today = getTodayDateInTimezone();
+    const trainingDate = data.trainingDate ? data.trainingDate.trim() : today;
+
+    // Prevent future dates
+    if (trainingDate > today) {
+      return { success: false, error: "Cannot submit training details for future dates" };
+    }
+
+    // Process training points
+    let points: string[] = [];
+    if (Array.isArray(data.trainingPoints)) {
+      points = data.trainingPoints
+        .map((p) => (typeof p === "string" ? p.trim() : ""))
+        .filter((p) => p.length > 0);
+    } else if (typeof data.trainingPoints === "string") {
+      points = data.trainingPoints
+        .split(/\r?\n/)
+        .map((p) => p.trim())
+        .filter((p) => p.length > 0);
+    }
+
+    if (points.length === 0) {
+      return {
+        success: false,
+        error: "Please enter at least one meaningful training point. Empty or whitespace-only submissions are not allowed."
+      };
+    }
+
+    // Check if training already exists for this date
+    const existing = await DailyTraining.findOne({
+      employeeId: emp.id,
+      trainingDate
+    });
+
+    if (existing) {
+      return {
+        success: false,
+        error: `Daily training report has already been submitted for ${trainingDate}. Overwriting is not permitted.`
+      };
+    }
+
+    const id = `TRN${Date.now()}${Math.floor(Math.random() * 1000)}`;
+    const nowIso = new Date().toISOString();
+
+    const newRecord = await DailyTraining.create({
+      id,
+      employeeId: emp.id,
+      employeeName: emp.name,
+      designation: emp.designation || "Sales",
+      department: emp.department || "Sales",
+      trainingDate,
+      trainingPoints: points,
+      rawContent: data.rawContent || points.join("\n"),
+      status: "Submitted",
+      submittedAt: nowIso
+    });
+
+    // Create activity
+    await createActivity({
+      employeeId: emp.id,
+      actorId: emp.id,
+      actorRole: "employee",
+      activityType: "TRAINING_SUBMISSION",
+      module: "Training",
+      referenceId: id,
+      message: `${emp.name} submitted Daily Training report for ${trainingDate}`
+    });
+
+    return {
+      success: true,
+      report: serialize(newRecord)
+    };
+  } catch (err: any) {
+    if (err.code === 11000) {
+      return {
+        success: false,
+        error: "A training report for today has already been submitted."
+      };
+    }
+    console.error("submitDailyTraining error:", err);
+    return { success: false, error: err.message || "Failed to submit training report" };
+  }
+}
+
+export async function getDailyTrainingToday(employeeId: string) {
+  try {
+    await connectDB();
+    const today = getTodayDateInTimezone();
+    const record = await DailyTraining.findOne({
+      employeeId,
+      trainingDate: today
+    }).lean();
+
+    return {
+      success: true,
+      today,
+      submitted: !!record,
+      report: record ? serialize(record) : null
+    };
+  } catch (err: any) {
+    console.error("getDailyTrainingToday error:", err);
+    return { success: false, error: err.message || "Failed to check training status" };
+  }
+}
+
+export async function getDailyTrainings(params?: {
+  role?: string;
+  employeeId?: string;
+  search?: string;
+  date?: string;
+  startDate?: string;
+  endDate?: string;
+  department?: string;
+  designation?: string;
+  page?: number;
+  pageSize?: number;
+}) {
+  try {
+    await connectDB();
+    const filter: any = {};
+
+    // Authorization checks
+    if (params?.role === "employee") {
+      filter.employeeId = params.employeeId;
+    } else if (params?.role === "admin" || params?.role === "hr") {
+      // Allowed to view all or filtered
+      if (params.employeeId) {
+        filter.employeeId = params.employeeId;
+      }
+    } else {
+      return { success: false, error: "Unauthorized access" };
+    }
+
+    if (params?.date) {
+      filter.trainingDate = params.date;
+    } else if (params?.startDate || params?.endDate) {
+      filter.trainingDate = {};
+      if (params.startDate) filter.trainingDate.$gte = params.startDate;
+      if (params.endDate) filter.trainingDate.$lte = params.endDate;
+    }
+
+    if (params?.department && params.department !== "all") {
+      filter.department = params.department;
+    }
+
+    if (params?.designation && params.designation !== "all") {
+      filter.designation = new RegExp(params.designation, "i");
+    }
+
+    if (params?.search && params.search.trim()) {
+      const q = params.search.trim();
+      filter.$or = [
+        { employeeName: new RegExp(q, "i") },
+        { employeeId: new RegExp(q, "i") },
+        { designation: new RegExp(q, "i") }
+      ];
+    }
+
+    const page = params?.page || 1;
+    const pageSize = params?.pageSize || 10;
+    const skip = (page - 1) * pageSize;
+
+    const [total, records] = await Promise.all([
+      DailyTraining.countDocuments(filter),
+      DailyTraining.find(filter)
+        .sort({ trainingDate: -1, createdAt: -1 })
+        .skip(skip)
+        .limit(pageSize)
+        .lean()
+    ]);
+
+    return {
+      success: true,
+      records: serialize(records),
+      total,
+      page,
+      pageSize,
+      totalPages: Math.ceil(total / pageSize) || 1
+    };
+  } catch (err: any) {
+    console.error("getDailyTrainings error:", err);
+    return { success: false, error: err.message || "Failed to load training reports" };
+  }
+}
+
+export async function getDailyTrainingById(id: string, userRole: string, requesterEmployeeId?: string) {
+  try {
+    await connectDB();
+    const record = await DailyTraining.findOne({ id }).lean();
+    if (!record) return { success: false, error: "Training report not found" };
+
+    if (userRole === "employee" && record.employeeId !== requesterEmployeeId) {
+      return { success: false, error: "Unauthorized to view this training report" };
+    }
+
+    return { success: true, report: serialize(record) };
+  } catch (err: any) {
+    console.error("getDailyTrainingById error:", err);
+    return { success: false, error: err.message || "Failed to load report" };
+  }
+}
+
+export async function validateSalesLogoutStatus(employeeId?: string, userRole?: string) {
+  try {
+    // If not an employee, e.g. admin or hr, logout is always allowed
+    if (!employeeId || userRole !== "employee") {
+      return { allowed: true, isSales: false };
+    }
+
+    await connectDB();
+    const emp = await Employee.findOne({ id: employeeId });
+    if (!emp) {
+      return { allowed: true, isSales: false };
+    }
+
+    const isSales =
+      emp.jobRole === "Sales" ||
+      (emp.designation && emp.designation.toLowerCase().includes("sales"));
+
+    if (!isSales) {
+      return { allowed: true, isSales: false };
+    }
+
+    const today = getTodayDateInTimezone();
+    const record = await DailyTraining.findOne({
+      employeeId: emp.id,
+      trainingDate: today
+    });
+
+    if (record) {
+      return {
+        allowed: true,
+        isSales: true,
+        trainingSubmitted: true,
+        today
+      };
+    } else {
+      return {
+        allowed: false,
+        isSales: true,
+        trainingSubmitted: false,
+        today,
+        message: "Daily training submission is mandatory before logout. Please submit today's training points to continue."
+      };
+    }
+  } catch (err: any) {
+    console.error("validateSalesLogoutStatus error:", err);
+    return { allowed: false, error: "Server error during logout check" };
+  }
+}
+
