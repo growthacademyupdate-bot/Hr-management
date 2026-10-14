@@ -32,6 +32,13 @@ export default function AttendancePage() {
   const [filterDate, setFilterDate] = useState("");
   const [selectedRecord, setSelectedRecord] = useState<any>(null);
 
+  const todayStr = useMemo(() => {
+    const d = new Date();
+    const dateStr = d.toLocaleString("en-IN", { timeZone: "Asia/Kolkata", year: 'numeric', month: '2-digit', day: '2-digit' });
+    const [day, month, year] = dateStr.split('/');
+    return `${year}-${month}-${day}`;
+  }, []);
+
   const isAdminOrHR = user?.role === "admin" || user?.role === "hr";
 
   const rawRecords = useMemo(() => {
@@ -84,8 +91,22 @@ export default function AttendancePage() {
         }
       } catch (e) {}
 
+      const isToday = r.date === todayStr;
+      const hasOpenSession = r.sessions?.some((s: any) => !s.logoutAt);
+      const isForgotLogout = Boolean(r.isForgotLogout || r.logoutTime === "Forgot Logout" || (!isToday && hasOpenSession));
+      const isActiveNow = isToday && hasOpenSession && !r.isForgotLogout;
+
       const firstLoginStr = r.firstLoginAt ? format(new Date(r.firstLoginAt), "hh:mm a") : (r.loginTime || "");
-      const lastLogoutStr = r.lastLogoutAt ? format(new Date(r.lastLogoutAt), "hh:mm a") : (r.logoutTime || "");
+      const lastLogoutStr = isActiveNow
+        ? "Active Now"
+        : isForgotLogout
+          ? "Forgot Logout"
+          : (r.lastLogoutAt ? format(new Date(r.lastLogoutAt), "hh:mm a") : (r.logoutTime || ""));
+      const statusStr = isActiveNow
+        ? "Active Now"
+        : isForgotLogout
+          ? (r.status === "Late" || r.status === "Late (Forgot Logout)" ? "Late (Forgot Logout)" : "Forgot Logout")
+          : (r.status || "Absent");
       const totalHoursStr = r.totalWorkingSeconds ? formatDuration(r.totalWorkingSeconds) : `${r.workingHours || 0}h`;
 
       return [
@@ -94,7 +115,7 @@ export default function AttendancePage() {
         r.date,
         formattedDate1,
         formattedDate2,
-        r.status,
+        statusStr,
         firstLoginStr,
         lastLogoutStr,
         totalHoursStr,
@@ -212,17 +233,44 @@ export default function AttendancePage() {
                       {record.firstLoginAt ? format(new Date(record.firstLoginAt), "hh:mm a") : record.loginTime || "—"}
                     </TableCell>
                     <TableCell>
-                      {record.sessions?.some((s: any) => !s.logoutAt) ? (
-                        <span className="text-emerald-600 dark:text-emerald-400 font-medium text-xs">Active Now</span>
-                      ) : (
-                        record.lastLogoutAt ? format(new Date(record.lastLogoutAt), "hh:mm a") : record.logoutTime || "—"
-                      )}
+                      {(() => {
+                        const isToday = record.date === todayStr;
+                        const hasOpenSession = record.sessions?.some((s: any) => !s.logoutAt);
+                        const isForgotLogout = Boolean(record.isForgotLogout || record.logoutTime === "Forgot Logout" || (!isToday && hasOpenSession));
+                        const isActiveNow = isToday && hasOpenSession && !record.isForgotLogout;
+
+                        if (isActiveNow) {
+                          return <span className="text-emerald-600 dark:text-emerald-400 font-medium text-xs">Active Now</span>;
+                        }
+                        if (isForgotLogout) {
+                          return (
+                            <Badge variant="outline" className="bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30 text-xs font-medium">
+                              Forgot Logout
+                            </Badge>
+                          );
+                        }
+                        return record.lastLogoutAt ? format(new Date(record.lastLogoutAt), "hh:mm a") : record.logoutTime || "—";
+                      })()}
                     </TableCell>
                     <TableCell>
                       {(() => {
-                        const activeSession = record.sessions?.find((s: any) => !s.logoutAt);
-                        const ongoingSecs = activeSession ? Math.max(0, Math.floor((Date.now() - new Date(activeSession.loginAt).getTime()) / 1000)) : 0;
-                        const totalSecs = (record.totalWorkingSeconds || (record.workingHours ? record.workingHours * 3600 : 0)) + ongoingSecs;
+                        const isToday = record.date === todayStr;
+                        const hasOpenSession = record.sessions?.some((s: any) => !s.logoutAt);
+                        const isForgotLogout = Boolean(record.isForgotLogout || record.logoutTime === "Forgot Logout" || (!isToday && hasOpenSession));
+                        const isActiveNow = isToday && hasOpenSession && !record.isForgotLogout;
+
+                        let totalSecs = record.totalWorkingSeconds || (record.workingHours ? record.workingHours * 3600 : 0);
+                        if (isActiveNow) {
+                          const activeSession = record.sessions?.find((s: any) => !s.logoutAt);
+                          const ongoingSecs = activeSession ? Math.max(0, Math.floor((Date.now() - new Date(activeSession.loginAt).getTime()) / 1000)) : 0;
+                          totalSecs += ongoingSecs;
+                        } else if (isForgotLogout && (!totalSecs || totalSecs === 0)) {
+                          if (record.firstLoginAt) {
+                            const loginMs = new Date(record.firstLoginAt).getTime();
+                            const shiftEndMs = new Date(`${record.date}T18:00:00+05:30`).getTime();
+                            if (shiftEndMs > loginMs) totalSecs = Math.floor((shiftEndMs - loginMs) / 1000);
+                          }
+                        }
                         return (
                           <Badge variant="secondary" className="font-mono">
                             {totalSecs > 0 ? formatDuration(totalSecs) : `${record.workingHours || 0}h`}
@@ -231,7 +279,20 @@ export default function AttendancePage() {
                       })()}
                     </TableCell>
                     <TableCell>
-                      <StatusBadge status={record.sessions?.some((s: any) => !s.logoutAt) ? "Active Now" : (record.status || "Absent")} />
+                      {(() => {
+                        const isToday = record.date === todayStr;
+                        const hasOpenSession = record.sessions?.some((s: any) => !s.logoutAt);
+                        const isForgotLogout = Boolean(record.isForgotLogout || record.logoutTime === "Forgot Logout" || (!isToday && hasOpenSession));
+                        const isActiveNow = isToday && hasOpenSession && !record.isForgotLogout;
+
+                        const displayStatus = isActiveNow
+                          ? "Active Now"
+                          : isForgotLogout
+                            ? (record.status === "Late" || record.status === "Late (Forgot Logout)" ? "Late (Forgot Logout)" : "Forgot Logout")
+                            : (record.status || "Absent");
+
+                        return <StatusBadge status={displayStatus} />;
+                      })()}
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex items-center justify-end gap-2">
@@ -283,9 +344,23 @@ export default function AttendancePage() {
                 <div className="text-muted-foreground">Total Working Time:</div>
                 <div className="font-medium text-right text-primary">
                   {(() => {
-                    const activeSession = selectedRecord.sessions?.find((s: any) => !s.logoutAt);
-                    const ongoingSecs = activeSession ? Math.max(0, Math.floor((Date.now() - new Date(activeSession.loginAt).getTime()) / 1000)) : 0;
-                    const totalSecs = (selectedRecord.totalWorkingSeconds || (selectedRecord.workingHours ? selectedRecord.workingHours * 3600 : 0)) + ongoingSecs;
+                    const isToday = selectedRecord.date === todayStr;
+                    const hasOpenSession = selectedRecord.sessions?.some((s: any) => !s.logoutAt);
+                    const isForgotLogout = Boolean(selectedRecord.isForgotLogout || selectedRecord.logoutTime === "Forgot Logout" || (!isToday && hasOpenSession));
+                    const isActiveNow = isToday && hasOpenSession && !selectedRecord.isForgotLogout;
+
+                    let totalSecs = selectedRecord.totalWorkingSeconds || (selectedRecord.workingHours ? selectedRecord.workingHours * 3600 : 0);
+                    if (isActiveNow) {
+                      const activeSession = selectedRecord.sessions?.find((s: any) => !s.logoutAt);
+                      const ongoingSecs = activeSession ? Math.max(0, Math.floor((Date.now() - new Date(activeSession.loginAt).getTime()) / 1000)) : 0;
+                      totalSecs += ongoingSecs;
+                    } else if (isForgotLogout && (!totalSecs || totalSecs === 0)) {
+                      if (selectedRecord.firstLoginAt) {
+                        const loginMs = new Date(selectedRecord.firstLoginAt).getTime();
+                        const shiftEndMs = new Date(`${selectedRecord.date}T18:00:00+05:30`).getTime();
+                        if (shiftEndMs > loginMs) totalSecs = Math.floor((shiftEndMs - loginMs) / 1000);
+                      }
+                    }
                     return totalSecs > 0 ? formatDuration(totalSecs) : `${selectedRecord.workingHours || 0}h`;
                   })()}
                 </div>
@@ -299,25 +374,53 @@ export default function AttendancePage() {
                       Legacy record. No detailed session data available.
                     </div>
                   ) : (
-                    selectedRecord.sessions.map((session: any, i: number) => (
-                      <div key={i} className="flex justify-between items-center text-sm p-2 rounded bg-background border">
-                        <div>
-                          <div className="font-medium">Session {i + 1}</div>
-                          <div className="text-xs text-muted-foreground">
-                            {format(new Date(session.loginAt), "hh:mm a")} - {session.logoutAt ? format(new Date(session.logoutAt), "hh:mm a") : "Active"}
+                    selectedRecord.sessions.map((session: any, i: number) => {
+                      const isSessionToday = selectedRecord.date === todayStr;
+                      const isSessionOpen = !session.logoutAt;
+                      const isSessionForgot = Boolean(session.forgotLogout || (!isSessionToday && isSessionOpen));
+                      const isSessionActive = isSessionToday && isSessionOpen && !session.forgotLogout;
+
+                      let sessionLogoutText = "—";
+                      if (session.logoutAt && !session.forgotLogout) {
+                        sessionLogoutText = format(new Date(session.logoutAt), "hh:mm a");
+                      } else if (isSessionActive) {
+                        sessionLogoutText = "Active";
+                      } else if (isSessionForgot) {
+                        sessionLogoutText = "Forgot Logout";
+                      } else if (session.logoutAt) {
+                        sessionLogoutText = format(new Date(session.logoutAt), "hh:mm a");
+                      }
+
+                      let dur = session.durationSeconds || 0;
+                      if (isSessionActive) {
+                        dur += Math.max(0, Math.floor((Date.now() - new Date(session.loginAt).getTime()) / 1000));
+                      } else if (isSessionForgot && dur === 0) {
+                        const loginMs = new Date(session.loginAt).getTime();
+                        const shiftEndMs = new Date(`${selectedRecord.date}T18:00:00+05:30`).getTime();
+                        if (shiftEndMs > loginMs) dur = Math.floor((shiftEndMs - loginMs) / 1000);
+                      }
+
+                      return (
+                        <div key={i} className="flex justify-between items-center text-sm p-2 rounded bg-background border">
+                          <div>
+                            <div className="font-medium flex items-center gap-2">
+                              <span>Session {i + 1}</span>
+                              {isSessionForgot && (
+                                <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-amber-500/10 text-amber-600 border-amber-500/30">
+                                  Forgot Logout
+                                </Badge>
+                              )}
+                            </div>
+                            <div className="text-xs text-muted-foreground">
+                              {format(new Date(session.loginAt), "hh:mm a")} - {sessionLogoutText}
+                            </div>
                           </div>
+                          <Badge variant="secondary" className="font-mono">
+                            {formatDuration(dur)}
+                          </Badge>
                         </div>
-                        <Badge variant="secondary" className="font-mono">
-                          {(() => {
-                            let dur = session.durationSeconds || 0;
-                            if (!session.logoutAt) {
-                              dur += Math.max(0, Math.floor((Date.now() - new Date(session.loginAt).getTime()) / 1000));
-                            }
-                            return formatDuration(dur);
-                          })()}
-                        </Badge>
-                      </div>
-                    ))
+                      );
+                    })
                   )}
                 </div>
               </div>

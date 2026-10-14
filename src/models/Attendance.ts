@@ -4,6 +4,8 @@ const SessionSchema = new mongoose.Schema({
   loginAt: { type: Date, required: true },
   logoutAt: { type: Date, default: null },
   durationSeconds: { type: Number, default: 0 },
+  forgotLogout: { type: Boolean, default: false },
+  autoClosed: { type: Boolean, default: false },
 }, { _id: false });
 
 const AttendanceSchema = new mongoose.Schema({
@@ -21,6 +23,7 @@ const AttendanceSchema = new mongoose.Schema({
 
   status: { type: String, default: "Absent" },
   productivity: { type: Number, default: 0 },
+  isForgotLogout: { type: Boolean, default: false },
   
   // Keep legacy string fields to not completely break un-updated frontend components
   loginTime: { type: String },

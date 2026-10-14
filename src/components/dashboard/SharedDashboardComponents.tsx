@@ -19,6 +19,12 @@ import { cn } from "@/lib/utils";
 export function StatusBadge({ status }: { status: string }) {
   const map: Record<string, string> = {
     "Active Now": "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 font-medium",
+    "Forgot Logout": "bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30 font-medium",
+    "Late (Forgot Logout)": "bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30 font-medium",
+    Late: "bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/20",
+    "Late & Early Leave": "bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/20",
+    "Late & Half Day": "bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/20",
+    "Early Leave": "bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/20",
     Present: "bg-success/15 text-success border-success/20",
     Absent: "bg-destructive/15 text-destructive border-destructive/20",
     Leave: "bg-warning/15 text-warning border-warning/20",

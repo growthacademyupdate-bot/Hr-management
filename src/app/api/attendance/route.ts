@@ -3,6 +3,7 @@ import { apiSuccess, handleApiError } from "@/lib/api-response";
 import connectDB from "@/lib/mongoose";
 import { Attendance } from "@/models/Attendance";
 import { Employee } from "@/models/Employee";
+import { autoCloseOrphanSessions } from "@/app/actions";
 
 interface AttendanceQuery {
   employeeId?: string;
@@ -16,6 +17,7 @@ interface AttendanceQuery {
 export async function GET(req: NextRequest) {
   try {
     await connectDB();
+    await autoCloseOrphanSessions();
     const searchParams = req.nextUrl.searchParams;
     const employeeId = searchParams.get("employeeId");
     const status = searchParams.get("status");

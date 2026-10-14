@@ -26,9 +26,11 @@ export interface AttendanceSession {
   loginAt: string;
   logoutAt: string | null;
   durationSeconds: number;
+  forgotLogout?: boolean;
+  autoClosed?: boolean;
 }
 export interface AttendanceRecord {
-  id: string; employeeId: string; date: string; loginTime: string | null; logoutTime: string | null; workingHours: number; status: string; productivity: number; firstLoginAt?: string; lastLogoutAt?: string; totalWorkingSeconds?: number; totalWorkingHours?: number; sessions?: AttendanceSession[];
+  id: string; employeeId: string; date: string; loginTime: string | null; logoutTime: string | null; workingHours: number; status: string; productivity: number; firstLoginAt?: string; lastLogoutAt?: string; totalWorkingSeconds?: number; totalWorkingHours?: number; sessions?: AttendanceSession[]; isForgotLogout?: boolean;
 }
 export interface Task {
   id: string; title: string; description: string; assignedTo: string; assignedBy: string; priority: "low" | "medium" | "high" | "urgent"; status: "assigned" | "working_progress" | "completed" | "reviewed"; assignDate: string; dueDate: string; startedAt: string | null; completedAt: string | null; reviewedAt: string | null; hrRating: string | null; hrReview: string | null; reviewedBy: string | null; createdAt: string; updatedAt: string;
