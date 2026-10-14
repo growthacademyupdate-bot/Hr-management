@@ -811,8 +811,78 @@ export async function deleteLeave(leaveId: string, userId: string, userRole: str
 }
 
 // ---------------- Attendance & Activity ----------------
+export async function autoCloseOrphanSessions(targetEmployeeId?: string) {
+  try {
+    await connectDB();
+    const now = new Date();
+    const dateStr = now.toLocaleString("en-IN", { timeZone: "Asia/Kolkata", year: 'numeric', month: '2-digit', day: '2-digit' });
+    const [day, month, year] = dateStr.split('/');
+    const today = `${year}-${month}-${day}`;
+
+    const query: any = {
+      date: { $lt: today },
+      $or: [
+        { "sessions.logoutAt": null },
+        { sessions: { $elemMatch: { logoutAt: null } } }
+      ]
+    };
+    if (targetEmployeeId) {
+      query.employeeId = targetEmployeeId;
+    }
+
+    const unclosedRecords = await Attendance.find(query);
+    for (const rec of unclosedRecords) {
+      let modified = false;
+      // Default shift end time is 18:00 (6 PM) IST on that record's date
+      const shiftEndIso = `${rec.date}T18:00:00+05:30`;
+      const shiftEndDate = new Date(shiftEndIso);
+
+      if (rec.sessions && rec.sessions.length > 0) {
+        for (const session of rec.sessions) {
+          if (!session.logoutAt) {
+            const loginDate = new Date(session.loginAt);
+            let autoLogout = shiftEndDate;
+            if (loginDate.getTime() >= shiftEndDate.getTime()) {
+              autoLogout = new Date(loginDate.getTime() + 4 * 3600 * 1000);
+            }
+            session.logoutAt = autoLogout;
+            session.durationSeconds = Math.max(0, Math.floor((autoLogout.getTime() - loginDate.getTime()) / 1000));
+            session.forgotLogout = true;
+            session.autoClosed = true;
+            modified = true;
+          }
+        }
+      }
+
+      if (modified || rec.status === "Present" || rec.status === "Late" || !rec.lastLogoutAt) {
+        const totalSecs = (rec.sessions || []).reduce((acc: number, s: any) => acc + (s.durationSeconds || 0), 0);
+        rec.totalWorkingSeconds = totalSecs;
+        rec.totalWorkingHours = Number((totalSecs / 3600).toFixed(2));
+        rec.workingHours = rec.totalWorkingHours;
+        const lastSession = rec.sessions?.[rec.sessions.length - 1];
+        if (lastSession) {
+          rec.lastLogoutAt = lastSession.logoutAt;
+        }
+        rec.logoutTime = "Forgot Logout";
+        rec.isForgotLogout = true;
+        
+        if (rec.status === "Late" || rec.status === "Late (Forgot Logout)") {
+          rec.status = "Late (Forgot Logout)";
+        } else {
+          rec.status = "Forgot Logout";
+        }
+
+        await rec.save();
+      }
+    }
+  } catch (err) {
+    console.error("autoCloseOrphanSessions Error:", err);
+  }
+}
+
 export async function getAttendance() {
   await connectDB();
+  await autoCloseOrphanSessions();
   const att = await Attendance.find({}).sort({ createdAt: -1 }).lean();
   return serialize(att);
 }
@@ -831,6 +901,7 @@ export async function deleteActivity(activityId: string, userRole: string) {
 }
 
 async function logLoginActivity(employeeId: string) {
+  await autoCloseOrphanSessions(employeeId);
   const now = new Date();
   
   // Use Asia/Kolkata (IST) timezone

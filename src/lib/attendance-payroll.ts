@@ -114,7 +114,7 @@ export function calculateAttendancePayroll(
     const leave = leaveByDate.get(date);
     if (leave === true) unpaidLeaveDays++;
     else if (leave === false) paidLeaveDays++;
-    else if (["Present", "Short Day", "Holiday"].includes(attendanceByDate.get(date) || "")) presentDays++;
+    else if (["Present", "Late", "Forgot Logout", "Late (Forgot Logout)", "Active Now", "Early Leave", "Short Day", "Holiday"].includes(attendanceByDate.get(date) || "")) presentDays++;
     else absentDays++;
     cursor.setUTCDate(cursor.getUTCDate() + 1);
   }
