@@ -497,6 +497,7 @@ export function useAuth() {
 export const ROLE_MENUS: Record<Role, { label: string; to: string; icon: string }[]> = {
   admin: [
     { label: "Dashboard", to: "/dashboard", icon: "LayoutDashboard" },
+    { label: "RCS Marketing Reports", to: "/rcs-marketing-reports", icon: "Megaphone" },
     { label: "Employees", to: "/employees", icon: "Users" },
     { label: "Attendance", to: "/attendance", icon: "CalendarCheck" },
     { label: "Daily Reports", to: "/daily-report", icon: "ClipboardList" },
@@ -535,6 +536,7 @@ export const ROLE_MENUS: Record<Role, { label: string; to: string; icon: string 
   employee: [
     { label: "Dashboard", to: "/dashboard", icon: "LayoutDashboard" },
     { label: "Daily Task Report", to: "/daily-report", icon: "ClipboardList" },
+    { label: "RCS Marketing", to: "/rcs-marketing", icon: "Megaphone" },
     { label: "My Tasks", to: "/tasks", icon: "ListTodo" },
     { label: "Attendance", to: "/attendance", icon: "CalendarCheck" },
     { label: "Activity", to: "/activity", icon: "Activity" },
@@ -549,4 +551,3 @@ export const ROLE_MENUS: Record<Role, { label: string; to: string; icon: string 
     { label: "Data Scraping", to: "/data-scraping", icon: "Activity" },
   ],
 };
-

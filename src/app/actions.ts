@@ -26,6 +26,7 @@ import { DataScraping } from "@/models/DataScraping";
 import { Invoice } from "@/models/Invoice";
 import { Grooming } from "@/models/Grooming";
 import { DailyTraining } from "@/models/DailyTraining";
+import { RcsMarketingReport } from "@/models/RcsMarketingReport";
 
 // Helper to serialize Mongoose documents
 function serialize(doc: any) {
@@ -2218,6 +2219,105 @@ export async function getDailyTrainingById(id: string, userRole: string, request
   }
 }
 
+export async function saveRcsMarketingDailyReport(
+  data: { reportDate: string; quantity: number; rate: number; amount: number },
+  employeeId: string,
+  userRole: string
+) {
+  try {
+    if (userRole !== "employee") {
+      return { success: false, error: "Only employees can submit RCS Marketing updates" };
+    }
+
+    const values = [data.quantity, data.rate, data.amount];
+    if (values.some((value) => !Number.isFinite(value) || value < 0)) {
+      return { success: false, error: "Quantity, rate, and amount must be valid non-negative numbers" };
+    }
+
+    const reportDate = data.reportDate?.trim();
+    const parsedReportDate = reportDate ? new Date(`${reportDate}T00:00:00.000Z`) : null;
+    if (!reportDate || !/^\d{4}-\d{2}-\d{2}$/.test(reportDate) ||
+        !parsedReportDate || Number.isNaN(parsedReportDate.getTime()) ||
+        parsedReportDate.toISOString().slice(0, 10) !== reportDate) {
+      return { success: false, error: "A valid report date is required" };
+    }
+
+    const today = getTodayDateInTimezone();
+    if (reportDate > today) {
+      return { success: false, error: "Cannot submit an RCS Marketing update for a future date" };
+    }
+
+    await connectDB();
+    const employee = await Employee.findOne({ id: employeeId }, { id: 1, name: 1 }).lean();
+    if (!employee) {
+      return { success: false, error: "Employee record not found" };
+    }
+
+    const record = await RcsMarketingReport.findOneAndUpdate(
+      { employeeId: employee.id, reportDate },
+      {
+        $set: {
+          employeeName: employee.name,
+          quantity: data.quantity,
+          rate: data.rate,
+          amount: data.amount,
+        },
+        $setOnInsert: {
+          id: `RCS${Date.now()}${Math.floor(Math.random() * 1000)}`,
+        },
+      },
+      { new: true, upsert: true, runValidators: true }
+    ).lean();
+
+    return { success: true, report: serialize(record) };
+  } catch (err: any) {
+    console.error("saveRcsMarketingDailyReport error:", err);
+    return { success: false, error: err.message || "Failed to save RCS Marketing update" };
+  }
+}
+
+export async function getRcsMarketingReports(userRole: string, employeeId?: string) {
+  try {
+    await connectDB();
+    let filter = {};
+    if (userRole === "employee" && employeeId) {
+      filter = { employeeId };
+    } else if (userRole !== "admin") {
+      return { success: false, error: "Unauthorized access" };
+    }
+
+    const records = await RcsMarketingReport.find(filter)
+      .sort({ reportDate: -1, createdAt: -1 })
+      .lean();
+    return { success: true, records: serialize(records) };
+  } catch (err: any) {
+    console.error("getRcsMarketingReports error:", err);
+    return { success: false, error: err.message || "Failed to load RCS Marketing updates" };
+  }
+}
+
+export async function deleteRcsMarketingReport(id: string, employeeId: string, userRole: string) {
+  try {
+    if (userRole !== "employee") {
+      return { success: false, error: "Only employees can delete their RCS Marketing updates" };
+    }
+    if (!id || !employeeId) {
+      return { success: false, error: "Report and employee IDs are required" };
+    }
+
+    await connectDB();
+    const deleted = await RcsMarketingReport.findOneAndDelete({ id, employeeId });
+    if (!deleted) {
+      return { success: false, error: "RCS Marketing report not found" };
+    }
+
+    return { success: true };
+  } catch (err: any) {
+    console.error("deleteRcsMarketingReport error:", err);
+    return { success: false, error: err.message || "Failed to delete RCS Marketing update" };
+  }
+}
+
 export async function validateSalesLogoutStatus(employeeId?: string, userRole?: string) {
   try {
     // If not an employee, e.g. admin or hr, logout is always allowed
@@ -2266,4 +2366,3 @@ export async function validateSalesLogoutStatus(employeeId?: string, userRole?: 
     return { allowed: false, error: "Server error during logout check" };
   }
 }
-

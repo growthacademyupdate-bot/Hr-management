@@ -5,7 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useAuth, logout, ROLE_MENUS, useGlobalSearch, api, useDB } from "@/lib/store";
 import {
   LayoutDashboard, Users, CalendarCheck, ListTodo, CalendarOff, BarChart3, Settings, Activity, User as UserIcon,
-  Bell, LogOut, Menu, Search, Sun, CalendarDays, Receipt, WalletCards, X, ClipboardList, FileText, AlertTriangle, GraduationCap
+  Bell, LogOut, Menu, Search, Sun, CalendarDays, Receipt, WalletCards, X, ClipboardList, FileText, AlertTriangle, GraduationCap, Megaphone
 } from "lucide-react";
 import { useEffect, useState, useMemo } from "react";
 import { Button } from "@/components/ui/button";
@@ -20,7 +20,7 @@ import { validateSalesLogoutStatus } from "@/app/actions";
 import { toast } from "sonner";
 
 const ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
-  LayoutDashboard, Users, CalendarCheck, ListTodo, CalendarOff, BarChart3, Settings, Activity, User: UserIcon, CalendarDays, Bell, Receipt, ClipboardList, FileText, GraduationCap
+  LayoutDashboard, Users, CalendarCheck, ListTodo, CalendarOff, BarChart3, Settings, Activity, User: UserIcon, CalendarDays, Bell, Receipt, ClipboardList, FileText, GraduationCap, Megaphone
 };
 
 export function AppLayout({ children }: { children: React.ReactNode }) {

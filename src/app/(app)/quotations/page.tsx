@@ -135,6 +135,21 @@ Regular technical support for website-related issues and maintenance requirement
 Testing changes before deployment to ensure existing functionality is not affected.
 Deployment of approved maintenance updates and bug fixes to the live website.
 Note: Maintenance covers the existing website functionality and structure. Any major new module, feature, third-party API, redesign, or functionality outside the existing scope will be considered separately and may be charged additionally.`
+  },
+  rcs: {
+    description: 'RCS Messaging',
+    serviceDetails: `RCS messaging campaign setup and configuration.
+Business profile setup and branding configuration.
+Creation and configuration of RCS message templates.
+Integration of recipient contact data.
+Rich media messaging support, including images, videos, and interactive content.
+Configuration of call-to-action buttons, website links, and customer response options.
+Promotional and transactional message campaign execution, subject to applicable approvals.
+Bulk message delivery to the provided recipient list.
+Delivery status tracking and campaign monitoring.
+Basic campaign performance reporting and delivery analytics.
+Message template approval and platform compliance support.
+Technical support for campaign configuration and execution.`
   }
 };
 
@@ -357,6 +372,7 @@ export default function QuotationGenerator() {
                   <SelectItem value="erp">4. ERP/CRM</SelectItem>
                   <SelectItem value="portfolio">5. Portfolio</SelectItem>
                   <SelectItem value="maintenance">6. Maintenance & Support</SelectItem>
+                  <SelectItem value="rcs">7. RCS Messaging</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -448,19 +464,27 @@ export default function QuotationGenerator() {
                     <Button variant="ghost" size="sm" onClick={() => removeItem(index)} className="text-red-500 h-8">Delete Item</Button>
                   )}
                 </div>
-                <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-                  <div className="md:col-span-2 space-y-2">
+                <div className={`grid grid-cols-1 gap-4 ${selectedTemplate === 'rcs' ? 'md:grid-cols-4' : 'md:grid-cols-5'}`}>
+                  <div className="space-y-2 md:col-span-2">
                     <Label>Description</Label>
                     <Input value={item.description} onChange={e => handleItemChange(index, 'description', e.target.value)} placeholder="Item description" />
                   </div>
                   <div className="space-y-2">
-                    <Label>Unit Price</Label>
+                    <Label>{selectedTemplate === 'rcs' ? 'Rate' : 'Unit Price'}</Label>
                     <Input type="number" value={item.unitPrice} onChange={e => handleItemChange(index, 'unitPrice', e.target.value)} placeholder="0.00" />
                   </div>
                   <div className="space-y-2">
                     <Label>Quantity</Label>
                     <Input type="number" value={item.quantity} onChange={e => handleItemChange(index, 'quantity', e.target.value)} placeholder="1" />
                   </div>
+                  {selectedTemplate === 'rcs' && (
+                    <div className="space-y-2">
+                      <Label>Amount</Label>
+                      <div className="flex h-9 items-center rounded-md border bg-muted/40 px-3 text-sm font-semibold tabular-nums">
+                        ₹{(Number(item.unitPrice || 0) * Number(item.quantity || 0)).toFixed(2)}
+                      </div>
+                    </div>
+                  )}
                   <div className="space-y-2">
                     <Label>SGST %</Label>
                     <Input type="number" value={item.sgstPercent} onChange={e => handleItemChange(index, 'sgstPercent', e.target.value)} placeholder="0" />
