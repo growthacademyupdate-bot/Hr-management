@@ -453,11 +453,42 @@ export default function QuotationGenerator() {
 
   const [isGenerating, setIsGenerating] = useState(false);
 
-  const generatePDF = async () => {
-    if (!formData.customerName || !formData.companyName || !formData.customerMobile || !formData.address || !formData.pincode || !formData.quoteNumber || !formData.date || !formData.validUntil || !formData.bdeName || items.some(i => !i.description || i.unitPrice === '' || Number(i.unitPrice) < 0 || i.quantity === '' || Number(i.quantity) <= 0)) {
+  const validateQuotation = () => {
+    const hasMissingDetails =
+      !formData.customerName.trim() ||
+      !formData.companyName.trim() ||
+      !formData.customerMobile.trim() ||
+      !formData.address.trim() ||
+      !formData.pincode.trim() ||
+      !formData.quoteNumber.trim() ||
+      !formData.date ||
+      !formData.validUntil ||
+      !formData.bdeName.trim();
+    const hasInvalidItems = items.some(item =>
+      !item.description.trim() ||
+      item.unitPrice === '' ||
+      !Number.isFinite(Number(item.unitPrice)) ||
+      Number(item.unitPrice) < 0 ||
+      item.quantity === '' ||
+      !Number.isFinite(Number(item.quantity)) ||
+      Number(item.quantity) <= 0
+    );
+
+    if (hasMissingDetails || hasInvalidItems) {
       toast.error("Please fill all required fields correctly.");
-      return;
+      return false;
     }
+    return true;
+  };
+
+  const openPreview = () => {
+    if (!validateQuotation()) return;
+    setIsPreviewing(true);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const generatePDF = async () => {
+    if (!validateQuotation()) return;
 
     setIsGenerating(true);
     try {
@@ -520,9 +551,135 @@ export default function QuotationGenerator() {
     <div className="container mx-auto p-6 max-w-4xl">
       <div className="mb-8">
         <h1 className="text-3xl font-bold">Quotation Generator</h1>
-        <p className="text-gray-500">Fill in the details below to generate a professional quotation PDF</p>
+        <p className="text-gray-500">
+          {isPreviewing ? "Review the quotation before generating the PDF." : "Fill in the details, then preview your quotation before generating the PDF."}
+        </p>
       </div>
 
+      {isPreviewing ? (
+        <div className="space-y-6">
+          <Card className="overflow-hidden border shadow-sm">
+            <CardHeader className="border-b bg-muted/20">
+              <CardTitle className="flex items-center gap-2 text-xl">
+                <Eye className="h-5 w-5 text-primary" />
+                Quotation Preview
+              </CardTitle>
+              <CardDescription>Review the customer, quote, and item details before generating the PDF.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6 p-5 sm:p-6">
+              <section className="space-y-3">
+                <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Customer Information</h2>
+                <div className="grid gap-4 rounded-lg border bg-background p-4 sm:grid-cols-2">
+                  <PreviewField label="Customer Name" value={formData.customerName} />
+                  <PreviewField label="Company" value={formData.companyName} />
+                  <PreviewField label="Mobile Number" value={formData.customerMobile} />
+                  <PreviewField label="Alternate Mobile" value={formData.customerMobile2} />
+                  <PreviewField label="Address" value={formData.address} />
+                  <PreviewField label="Pincode" value={formData.pincode} />
+                  <PreviewField label="Email" value={formData.email} />
+                  <PreviewField label="Customer ID" value={formData.customerId} />
+                </div>
+              </section>
+
+              <section className="space-y-3">
+                <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Quotation Details</h2>
+                <div className="grid gap-4 rounded-lg border bg-background p-4 sm:grid-cols-2 lg:grid-cols-4">
+                  <PreviewField label="Quotation Type" value={quotationTemplates[selectedTemplate]?.description || "Custom quotation"} />
+                  <PreviewField label="Quote Number" value={formData.quoteNumber} />
+                  <PreviewField label="Date" value={formData.date} />
+                  <PreviewField label="Valid Until" value={formData.validUntil} />
+                  <PreviewField label="BDE Name" value={formData.bdeName} />
+                </div>
+              </section>
+
+              <section className="space-y-3">
+                <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Items & Services</h2>
+                <div className="space-y-4">
+                  {items.map((item, index) => {
+                    const baseAmount = Number(item.unitPrice) * Number(item.quantity);
+                    const itemSgst = item.includeGst ? baseAmount * Number(item.sgstPercent || 0) / 100 : 0;
+                    const itemCgst = item.includeGst ? baseAmount * Number(item.cgstPercent || 0) / 100 : 0;
+
+                    return (
+                      <div key={index} className="overflow-hidden rounded-lg border bg-background">
+                        <div className="flex flex-wrap items-center justify-between gap-3 border-b bg-muted/20 p-4">
+                          <div>
+                            <p className="font-semibold">{item.description}</p>
+                            <p className="text-xs text-muted-foreground">Item {index + 1}</p>
+                          </div>
+                          <p className="text-lg font-bold tabular-nums">₹{(baseAmount + itemSgst + itemCgst).toFixed(2)}</p>
+                        </div>
+                        <div className="grid gap-4 p-4 sm:grid-cols-2 lg:grid-cols-4">
+                          <PreviewField label="Rate / Unit Price" value={`₹${Number(item.unitPrice).toFixed(2)}`} />
+                          <PreviewField label="Quantity" value={item.quantity} />
+                          <PreviewField label="SGST" value={item.includeGst ? `${item.sgstPercent || 0}% · ₹${itemSgst.toFixed(2)}` : "Not applicable"} />
+                          <PreviewField label="CGST" value={item.includeGst ? `${item.cgstPercent || 0}% · ₹${itemCgst.toFixed(2)}` : "Not applicable"} />
+                        </div>
+                        {item.serviceDetails.trim() && (
+                          <div className="border-t p-4">
+                            <p className="mb-2 text-sm font-medium">Service Details</p>
+                            <ul className="space-y-1.5 text-sm text-muted-foreground">
+                              {item.serviceDetails.split(/\r?\n/).filter(line => line.trim()).map((line, detailIndex) => (
+                                <li key={detailIndex} className="flex gap-2">
+                                  <span className="text-primary">•</span>
+                                  <span>{line.replace(/^•\s*/, "")}</span>
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </section>
+
+              {additionalServices.length > 0 && (
+                <section className="space-y-3">
+                  <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Additional Services</h2>
+                  <div className="divide-y rounded-lg border bg-background">
+                    {additionalServices.map((service, index) => (
+                      <div key={index} className="flex flex-wrap justify-between gap-3 p-4 text-sm">
+                        <span>{service.description || "Additional service"}</span>
+                        <span className="font-medium">{service.amount || "—"}</span>
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              )}
+
+              <section className="ml-auto w-full space-y-2 rounded-lg border bg-muted/20 p-4 sm:max-w-sm">
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Subtotal</span>
+                  <span className="tabular-nums">₹{calculations.subtotal.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">SGST</span>
+                  <span className="tabular-nums">₹{calculations.sgst.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">CGST</span>
+                  <span className="tabular-nums">₹{calculations.cgst.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between border-t pt-2 text-base font-bold">
+                  <span>Total</span>
+                  <span className="tabular-nums">₹{total.toFixed(2)}</span>
+                </div>
+              </section>
+            </CardContent>
+          </Card>
+          <div className="flex flex-col-reverse justify-between gap-3 sm:flex-row">
+            <Button type="button" variant="outline" onClick={() => setIsPreviewing(false)} disabled={isGenerating}>
+              <ArrowLeft className="h-4 w-4" />
+              Edit Details
+            </Button>
+            <Button type="button" onClick={generatePDF} disabled={isGenerating} size="lg" className="bg-blue-600 text-white hover:bg-blue-700">
+              <FileDown className="h-4 w-4" />
+              {isGenerating ? "Generating PDF..." : "Generate PDF Quote"}
+            </Button>
+          </div>
+        </div>
+      ) : (
       <div className="space-y-6">
         <Card className="bg-slate-50 border-none shadow-sm">
           <CardHeader>
@@ -868,11 +1025,22 @@ export default function QuotationGenerator() {
         </Card>
 
         <div className="flex justify-center pt-4">
-          <Button onClick={generatePDF} disabled={isGenerating} size="lg" className="bg-blue-600 hover:bg-blue-700 text-white min-w-[200px]">
-            {isGenerating ? 'Generating...' : 'Generate PDF Quote'}
+          <Button type="button" onClick={openPreview} size="lg" className="min-w-[200px] bg-blue-600 text-white hover:bg-blue-700">
+            <Eye className="h-4 w-4" />
+            Preview Quotation
           </Button>
         </div>
       </div>
+      )}
+    </div>
+  );
+}
+
+function PreviewField({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="min-w-0">
+      <p className="text-xs font-medium text-muted-foreground">{label}</p>
+      <p className="mt-1 break-words text-sm font-medium">{value || "—"}</p>
     </div>
   );
 }
