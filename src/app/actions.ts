@@ -24,6 +24,7 @@ import { DailyReport } from "@/models/DailyReport";
 import { Lead } from "@/models/Lead";
 import { DataScraping } from "@/models/DataScraping";
 import { Invoice } from "@/models/Invoice";
+import { Quotation } from "@/models/Quotation";
 import { Grooming } from "@/models/Grooming";
 import { DailyTraining } from "@/models/DailyTraining";
 import { RcsMarketingReport } from "@/models/RcsMarketingReport";
@@ -1909,6 +1910,29 @@ export async function getInvoices() {
   await connectDB();
   const invoices = await Invoice.find({}).sort({ createdAt: -1 }).lean();
   return serialize(invoices);
+}
+
+export async function getQuotationHistory(userRole: string) {
+  try {
+    if (!["admin", "hr", "employee"].includes(userRole)) {
+      return { success: false, error: "Unauthorized access" };
+    }
+
+    await connectDB();
+    const quotations = await Quotation.find({})
+      .select("-createdBy -__v")
+      .sort({ updatedAt: -1 })
+      .limit(100)
+      .lean();
+
+    return {
+      success: true,
+      quotations: JSON.parse(JSON.stringify(quotations)),
+    };
+  } catch (error: any) {
+    console.error("getQuotationHistory error:", error);
+    return { success: false, error: error.message || "Failed to load saved quotations" };
+  }
 }
 
 export async function createInvoice(data: any, adminId: string, userRole: string) {
