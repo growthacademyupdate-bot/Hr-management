@@ -25,6 +25,24 @@ function formatDuration(seconds?: number) {
 export function EmployeeDashboard() {
   const user = useAuth();
   const db = useDB();
+  const [showReceiveModal, setShowReceiveModal] = useState(false);
+  const [isConfirming, setIsConfirming] = useState(false);
+
+  const empId = user?.employeeId;
+  const myExpenses = useMemo(() => {
+    if (!empId) return [];
+    return db.expenses.filter((e) => e.employeeId === empId);
+  }, [db.expenses, empId]);
+
+  // Unconfirmed Reimbursed Claims (waiting for employee to click "I Received the Money")
+  const unconfirmedReimbursed = useMemo(() => {
+    return myExpenses.filter((e) => e.status === "reimbursed" && !e.employeeReceived);
+  }, [myExpenses]);
+
+  const pendingReimbursedAmount = useMemo(() => {
+    return unconfirmedReimbursed.reduce((sum, e) => sum + e.amount, 0);
+  }, [unconfirmedReimbursed]);
+
   if (!user?.employeeId) return null;
 
   if (db.isLoading) {
@@ -41,7 +59,6 @@ export function EmployeeDashboard() {
     );
   }
 
-  const empId = user.employeeId;
   const today = new Date().toISOString().slice(0, 10);
   const employeeIds = new Set(db.employees.map(e => e.id));
   
@@ -57,21 +74,8 @@ export function EmployeeDashboard() {
   const pendingTasks = myTasks.filter((t) => t.status === "assigned" || t.status === "working_progress").length;
   const activeTasks = myTasks.filter((t) => t.status === "assigned" || t.status === "working_progress");
 
-  const [showReceiveModal, setShowReceiveModal] = useState(false);
-  const [isConfirming, setIsConfirming] = useState(false);
-
   // Expenses
-  const myExpenses = db.expenses.filter((e) => e.employeeId === empId);
   const pendingExpenses = myExpenses.filter((e) => e.status === "pending" || e.status === "hr_approved").length;
-  
-  // Unconfirmed Reimbursed Claims (waiting for employee to click "I Received the Money")
-  const unconfirmedReimbursed = useMemo(() => {
-    return myExpenses.filter((e) => e.status === "reimbursed" && !e.employeeReceived);
-  }, [myExpenses]);
-
-  const pendingReimbursedAmount = useMemo(() => {
-    return unconfirmedReimbursed.reduce((sum, e) => sum + e.amount, 0);
-  }, [unconfirmedReimbursed]);
 
   const handleConfirmAllReceipts = async () => {
     if (unconfirmedReimbursed.length === 0) return;
