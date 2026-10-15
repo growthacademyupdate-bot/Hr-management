@@ -21,10 +21,6 @@ export async function POST(req: NextRequest) {
   try {
     await connectDB();
     
-    // In a real app, verify authentication
-    // const session = await getServerSession();
-    // if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    // const createdBy = session.user.id;
     const createdBy = new mongoose.Types.ObjectId(); // mock user ID for now
 
     const body = await req.json();
@@ -48,17 +44,6 @@ export async function POST(req: NextRequest) {
     });
 
     const totalAmount = subtotal + sgstAmount + cgstAmount;
-
-    // Save to DB
-    const newQuotation = new Quotation({
-      customerName, companyName, customerMobile, customerMobile2, address, pincode, email, customerId,
-      quoteNumber, date, validUntil, bdeName, items, additionalServices,
-      subtotal, sgstAmount, cgstAmount, totalAmount,
-      createdBy
-    });
-    
-    // In production we should handle duplicates
-    // await newQuotation.save(); 
 
     // Generate PDF
     const doc = new PDFDocument({ size: 'A4', margin: 40 });
@@ -480,6 +465,16 @@ export async function POST(req: NextRequest) {
       });
     });
 
+    await Quotation.findOneAndUpdate(
+      { quoteNumber },
+      {
+        customerName, companyName, customerMobile, customerMobile2, address, pincode, email, customerId,
+        quoteNumber, date, validUntil, bdeName, items, additionalServices,
+        subtotal, sgstAmount, cgstAmount, totalAmount, createdBy, status: 'Generated',
+      },
+      { upsert: true, new: true, runValidators: true, setDefaultsOnInsert: true }
+    );
+
     return new NextResponse(pdfBuffer as any, {
       status: 200,
       headers: {
@@ -490,6 +485,9 @@ export async function POST(req: NextRequest) {
 
   } catch (error: any) {
     console.error('Quotation Generation Error:', error);
+    if (error?.code === 11000) {
+      return NextResponse.json({ error: 'This quotation number already exists. Choose another number or load the saved quotation to update it.' }, { status: 409 });
+    }
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
