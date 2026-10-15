@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { toast } from 'sonner';
 import { getQuotationHistory } from '@/app/actions';
 import { useAuth } from '@/lib/store';
+import { ArrowLeft, Eye, FileDown } from 'lucide-react';
 
 const quotationTemplates: Record<string, { description: string; serviceDetails: string }> = {
   ecommerce: {
@@ -259,6 +260,7 @@ export default function QuotationGenerator() {
   const [selectedTemplate, setSelectedTemplate] = useState<string>('');
   const [savedQuotations, setSavedQuotations] = useState<SavedQuotation[]>([]);
   const [loadingSavedQuotations, setLoadingSavedQuotations] = useState(false);
+  const [isPreviewing, setIsPreviewing] = useState(false);
 
   useEffect(() => {
     if (!user) return;
