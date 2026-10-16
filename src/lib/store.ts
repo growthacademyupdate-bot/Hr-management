@@ -6,7 +6,8 @@ import {
   getLeaves, addLeave, cancelLeave, hrReviewLeave, adminReviewLeave, deleteLeave as deleteLeaveAction,
   getAttendance, getActivities, logLogoutActivity, deleteAttendance, deleteActivity as deleteActivityAction, updateSystemSetting, getSystemSettings, updateSystemSettings,
   getHolidays, createHoliday, updateHoliday, deleteHoliday,
-  getExpenses, addExpense, addBulkExpenses, updateExpense, cancelExpense, hrReviewExpense, adminReviewExpense, markExpenseReimbursed, acknowledgeExpenseReceipt, deleteExpense,
+  getExpenses, addExpense, addBulkExpenses, updateExpense, cancelExpense, hrReviewExpense, adminReviewExpense, markExpenseReimbursed, acknowledgeExpenseReceipt, employeeAcceptHrExpense, deleteExpense,
+  getAdvancePayments, createAdvancePayment, deleteAdvancePayment,
   getNotifications, markNotificationAsRead, markAllNotificationsAsRead, deleteNotification as deleteNotificationAction, broadcastNotification, editBroadcastNotification, deleteBroadcastNotification,
   getDailyReports, addDailyReport, deleteDailyReport,
   getLeads, addLead, updateLead, deleteLead,
@@ -21,7 +22,7 @@ export interface User {
   id: string; username: string; password?: string; role: Role; jobRole?: string; name: string; email: string; avatar?: string; employeeId?: string; loginDate?: string;
 }
 export interface Employee {
-  id: string; name: string; email: string; mobile: string; department: string; designation: string; jobRole?: string; joiningDate: string; salary: number; status: string; avatar?: string; password?: string; emergencyContact?: string; documents?: any; gstin?: string; address?: string; state?: string; notes?: string;
+  id: string; name: string; email: string; mobile: string; department: string; designation: string; jobRole?: string; joiningDate: string; salary: number; status: string; avatar?: string; password?: string; emergencyContact?: string; documents?: any; gstin?: string; address?: string; state?: string; notes?: string; totalAdvanceTaken?: number; activeAdvanceBalance?: number; clearedAdvance?: number;
 }
 export interface AttendanceSession {
   loginAt: string;
@@ -40,7 +41,7 @@ export interface Leave {
   id: string; employeeId: string; type: "Casual Leave" | "Sick Leave" | "Earned Leave" | "Emergency Leave" | "Half Day" | "Half Time" | "Other"; startDate: string; endDate: string; numberOfDays: number; reason: string; status: "pending" | "hr_approved" | "hr_rejected" | "admin_approved" | "admin_rejected" | "cancelled"; appliedAt: string; hrReviewedBy?: string | null; hrReviewedAt?: string | null; hrReviewComment?: string | null; adminReviewedBy?: string | null; adminReviewedAt?: string | null; adminReviewComment?: string | null; cancelledBy?: string | null; cancelledAt?: string | null;
 }
 export interface Expense {
-  id: string; employeeId: string; title: string; category: string; amount: number; expenseDate: string; description: string; receiptUrls?: string[] | null; gstPercent?: number; vehicleType?: string; vehicleNumber?: string; distanceKm?: number; vehicleAverage?: number; petrolRate?: number; trips?: { date: string; distanceKm: number; vehicleAverage: number; petrolRate: number; amount: number; }[]; bankHolderName?: string; bankName?: string; branch?: string; accountNo?: string; ifscCode?: string; upiId?: string; status: "pending" | "hr_approved" | "hr_rejected" | "admin_approved" | "admin_rejected" | "reimbursed" | "cancelled"; appliedAt: string; hrReviewedBy?: string | null; hrReviewedAt?: string | null; hrReviewComment?: string | null; adminReviewedBy?: string | null; adminReviewedAt?: string | null; adminReviewComment?: string | null; reimbursedBy?: string | null; reimbursedAt?: string | null; employeeReceived?: boolean; employeeReceivedAt?: string | null; cancelledBy?: string | null; cancelledAt?: string | null;
+  id: string; employeeId: string; title: string; category: string; amount: number; expenseDate: string; description: string; receiptUrls?: string[] | null; gstPercent?: number; vehicleType?: string; vehicleNumber?: string; distanceKm?: number; vehicleAverage?: number; petrolRate?: number; trips?: { date: string; distanceKm: number; vehicleAverage: number; petrolRate: number; amount: number; }[]; bankHolderName?: string; bankName?: string; branch?: string; accountNo?: string; ifscCode?: string; upiId?: string; status: "pending" | "hr_approved" | "hr_rejected" | "admin_approved" | "admin_rejected" | "reimbursed" | "cancelled"; appliedAt: string; hrReviewedBy?: string | null; hrReviewedAt?: string | null; hrReviewComment?: string | null; employeeAcceptedHr?: boolean; employeeAcceptedHrAt?: string | null; adminReviewedBy?: string | null; adminReviewedAt?: string | null; adminReviewComment?: string | null; reimbursedBy?: string | null; reimbursedAt?: string | null; employeeReceived?: boolean; employeeReceivedAt?: string | null; originalAmount?: number | null; advanceDeducted?: number; advancePaymentIds?: string[]; cancelledBy?: string | null; cancelledAt?: string | null;
 }
 export interface Activity {
   id: string; employeeId: string; time: string; label: string; type: string;
@@ -125,13 +126,31 @@ export interface DailyTrainingRecord {
   updatedAt?: string;
 }
 
+export interface AdvancePayment {
+  id: string;
+  employeeId: string;
+  amount: number;
+  disbursedDate: string;
+  reason?: string;
+  paymentMode?: string;
+  disbursedBy: string;
+  disbursedByRole: string;
+  notes?: string;
+  settledAmount?: number;
+  settledExpenseId?: string | null;
+  settledAt?: string | null;
+  status: "given" | "partially_settled" | "settled";
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 interface DB {
-  employees: Employee[]; attendance: AttendanceRecord[]; tasks: Task[]; leaves: Leave[]; expenses: Expense[]; activities: Activity[]; holidays: Holiday[]; notifications: Notification[]; dailyReports: DailyReport[]; dailyTrainings?: DailyTrainingRecord[]; leads: Lead[]; dataScrapings: DataScrapingRecord[]; invoices: Invoice[]; grooming: GroomingRecord[];
+  employees: Employee[]; attendance: AttendanceRecord[]; tasks: Task[]; leaves: Leave[]; expenses: Expense[]; advancePayments: AdvancePayment[]; activities: Activity[]; holidays: Holiday[]; notifications: Notification[]; dailyReports: DailyReport[]; dailyTrainings?: DailyTrainingRecord[]; leads: Lead[]; dataScrapings: DataScrapingRecord[]; invoices: Invoice[]; grooming: GroomingRecord[];
   isLoading: boolean;
 }
 
 const AUTH_KEY = "ems_auth_v1";
-let currentDB: DB = { employees: [], attendance: [], tasks: [], leaves: [], expenses: [], activities: [], holidays: [], notifications: [], dailyReports: [], dailyTrainings: [], leads: [], dataScrapings: [], invoices: [], grooming: [], isLoading: true };
+let currentDB: DB = { employees: [], attendance: [], tasks: [], leaves: [], expenses: [], advancePayments: [], activities: [], holidays: [], notifications: [], dailyReports: [], dailyTrainings: [], leads: [], dataScrapings: [], invoices: [], grooming: [], isLoading: true };
 let globalSearch = "";
 const listeners = new Set<() => void>();
 
@@ -153,12 +172,13 @@ export async function refreshDB(force = false) {
   try {
     const user = getCurrentUser();
     const userId = user?.employeeId || user?.id;
-    const [emps, atts, ts, lvs, exps, acts, hols, notifs, dReports, leadsData, dScrapings, invs, grms] = await Promise.all([
+    const [emps, atts, ts, lvs, exps, advs, acts, hols, notifs, dReports, leadsData, dScrapings, invs, grms] = await Promise.all([
       getEmployees(),
       getAttendance(),
       getTasks(user?.role, userId),
       getLeaves(user?.role, userId),
       getExpenses(user?.role, userId),
+      getAdvancePayments(user?.role, userId),
       getActivities(),
       getHolidays(),
       userId ? getNotifications(userId) : Promise.resolve([]),
@@ -174,6 +194,7 @@ export async function refreshDB(force = false) {
       tasks: ts || [],
       leaves: lvs || [],
       expenses: exps || [],
+      advancePayments: advs || [],
       activities: acts || [],
       holidays: hols || [],
       notifications: notifs || [],
@@ -297,11 +318,29 @@ export const api = {
   async adminReviewLeave(leaveId: string, action: "approve" | "reject", comment: string) { const user = getCurrentUser(); if (!user) return; const l = await adminReviewLeave(leaveId, action, comment, user.employeeId || user.id, user.role); currentDB.leaves = currentDB.leaves.map(x => x.id === leaveId ? l : x); notify(); },
   async deleteLeave(leaveId: string) { const user = getCurrentUser(); if (!user) return; try { await deleteLeaveAction(leaveId, user.employeeId || user.id, user.role); currentDB.leaves = currentDB.leaves.filter(x => x.id !== leaveId); notify(); } catch (error: any) { console.error("Delete leave error:", error); throw error; } },
 
-  async addExpense(expense: any) { const user = getCurrentUser(); if (!user) return; const e = await addExpense(expense, user.employeeId || user.id); currentDB.expenses = [e, ...currentDB.expenses]; getNotifications(user.employeeId || user.id).then(n => { currentDB.notifications = n; notify(); }).catch(console.error); notify(); return e; },
+  async addExpense(expense: any) {
+    const user = getCurrentUser();
+    if (!user) return;
+    const authorId = user.employeeId || user.id;
+    const e = await addExpense(expense, authorId);
+    currentDB.expenses = [e, ...currentDB.expenses];
+    try {
+      const advs = await getAdvancePayments(user?.role, authorId);
+      currentDB.advancePayments = advs || [];
+      const emps = await getEmployees();
+      currentDB.employees = emps || [];
+    } catch (err) {
+      console.error("Error refreshing advances after addExpense:", err);
+    }
+    getNotifications(authorId).then(n => { currentDB.notifications = n; notify(); }).catch(console.error);
+    notify();
+    return e;
+  },
   async addBulkExpenses(bills: any[]) {
     const user = getCurrentUser();
     if (!user) return [];
     const authorId = user.employeeId || user.id;
+    let list: any[] = [];
     try {
       const res = await fetch("/api/expenses/bulk", {
         method: "POST",
@@ -310,26 +349,123 @@ export const api = {
       });
       const json = await res.json();
       if (!json.success) throw new Error(json.error || "Failed to submit bulk bills");
-      const list = json.data || [];
-      currentDB.expenses = [...list, ...currentDB.expenses];
-      getNotifications(authorId).then(n => { currentDB.notifications = n; notify(); }).catch(console.error);
-      notify();
-      return list;
+      list = json.data || [];
     } catch {
-      const list = await addBulkExpenses(bills, authorId);
-      currentDB.expenses = [...list, ...currentDB.expenses];
-      getNotifications(authorId).then(n => { currentDB.notifications = n; notify(); }).catch(console.error);
-      notify();
-      return list;
+      list = await addBulkExpenses(bills, authorId);
     }
+    currentDB.expenses = [...list, ...currentDB.expenses];
+    try {
+      const advs = await getAdvancePayments(user?.role, authorId);
+      currentDB.advancePayments = advs || [];
+      const emps = await getEmployees();
+      currentDB.employees = emps || [];
+    } catch (err) {
+      console.error("Error refreshing advances after bulk expenses:", err);
+    }
+    getNotifications(authorId).then(n => { currentDB.notifications = n; notify(); }).catch(console.error);
+    notify();
+    return list;
   },
-  async cancelExpense(expenseId: string) { const user = getCurrentUser(); if (!user) return; const e = await cancelExpense(expenseId, user.employeeId || user.id); currentDB.expenses = currentDB.expenses.map(x => x.id === expenseId ? e : x); notify(); },
-  async hrReviewExpense(expenseId: string, action: "approve" | "reject", comment: string) { const user = getCurrentUser(); if (!user) return; const e = await hrReviewExpense(expenseId, action, comment, user.employeeId || user.id, user.role); currentDB.expenses = currentDB.expenses.map(x => x.id === expenseId ? e : x); notify(); },
-  async adminReviewExpense(expenseId: string, action: "approve" | "reject", comment: string) { const user = getCurrentUser(); if (!user) return; const e = await adminReviewExpense(expenseId, action, comment, user.employeeId || user.id, user.role); currentDB.expenses = currentDB.expenses.map(x => x.id === expenseId ? e : x); notify(); },
+  async cancelExpense(expenseId: string) {
+    const user = getCurrentUser();
+    if (!user) return;
+    const authorId = user.employeeId || user.id;
+    const e = await cancelExpense(expenseId, authorId);
+    currentDB.expenses = currentDB.expenses.map(x => x.id === expenseId ? e : x);
+    try {
+      const advs = await getAdvancePayments(user?.role, authorId);
+      currentDB.advancePayments = advs || [];
+      const emps = await getEmployees();
+      currentDB.employees = emps || [];
+    } catch (err) {
+      console.error("Error refreshing advances after cancelExpense:", err);
+    }
+    notify();
+  },
+  async hrReviewExpense(expenseId: string, action: "approve" | "reject", comment: string) {
+    const user = getCurrentUser();
+    if (!user) return;
+    const authorId = user.employeeId || user.id;
+    const e = await hrReviewExpense(expenseId, action, comment, authorId, user.role);
+    currentDB.expenses = currentDB.expenses.map(x => x.id === expenseId ? e : x);
+    try {
+      const advs = await getAdvancePayments(user?.role, authorId);
+      currentDB.advancePayments = advs || [];
+      const emps = await getEmployees();
+      currentDB.employees = emps || [];
+    } catch (err) {
+      console.error("Error refreshing advances after hrReviewExpense:", err);
+    }
+    notify();
+  },
+  async adminReviewExpense(expenseId: string, action: "approve" | "reject", comment: string) {
+    const user = getCurrentUser();
+    if (!user) return;
+    const authorId = user.employeeId || user.id;
+    const e = await adminReviewExpense(expenseId, action, comment, authorId, user.role);
+    currentDB.expenses = currentDB.expenses.map(x => x.id === expenseId ? e : x);
+    try {
+      const advs = await getAdvancePayments(user?.role, authorId);
+      currentDB.advancePayments = advs || [];
+      const emps = await getEmployees();
+      currentDB.employees = emps || [];
+    } catch (err) {
+      console.error("Error refreshing advances after adminReviewExpense:", err);
+    }
+    notify();
+  },
   async markExpenseReimbursed(expenseId: string) { const user = getCurrentUser(); if (!user) return; const e = await markExpenseReimbursed(expenseId, user.employeeId || user.id, user.role); currentDB.expenses = currentDB.expenses.map(x => x.id === expenseId ? e : x); notify(); },
   async acknowledgeExpenseReceipt(expenseId: string) { const user = getCurrentUser(); if (!user) return; const e = await acknowledgeExpenseReceipt(expenseId, user.employeeId || user.id); currentDB.expenses = currentDB.expenses.map(x => x.id === expenseId ? e : x); notify(); return e; },
+  async employeeAcceptHrExpense(expenseId: string) { const user = getCurrentUser(); if (!user) return; const e = await employeeAcceptHrExpense(expenseId, user.employeeId || user.id); currentDB.expenses = currentDB.expenses.map(x => x.id === expenseId ? e : x); notify(); return e; },
   async updateExpense(id: string, data: any) { const user = getCurrentUser(); if (!user) return; const e = await updateExpense(id, data, user.role, user.employeeId || user.id); currentDB.expenses = currentDB.expenses.map(x => x.id === id ? e : x); notify(); },
-  async deleteExpense(id: string) { const user = getCurrentUser(); if (!user) return; await deleteExpense(id, user.role, user.employeeId || user.id); currentDB.expenses = currentDB.expenses.filter(x => x.id !== id); notify(); },
+  async deleteExpense(id: string) {
+    const user = getCurrentUser();
+    if (!user) return;
+    const authorId = user.employeeId || user.id;
+    await deleteExpense(id, user.role, authorId);
+    currentDB.expenses = currentDB.expenses.filter(x => x.id !== id);
+    try {
+      const advs = await getAdvancePayments(user?.role, authorId);
+      currentDB.advancePayments = advs || [];
+      const emps = await getEmployees();
+      currentDB.employees = emps || [];
+    } catch (err) {
+      console.error("Error refreshing advances after deleteExpense:", err);
+    }
+    notify();
+  },
+
+  async createAdvancePayment(data: { employeeId: string; amount: number; disbursedDate: string; reason?: string; paymentMode?: string; notes?: string; }) {
+    const user = getCurrentUser();
+    if (!user) throw new Error("Not authenticated");
+    const adv = await createAdvancePayment({
+      ...data,
+      disbursedBy: user.employeeId || user.id,
+      disbursedByRole: user.role,
+    });
+    currentDB.advancePayments = [adv, ...currentDB.advancePayments];
+    try {
+      const emps = await getEmployees();
+      currentDB.employees = emps || [];
+    } catch (err) {
+      console.error("Error refreshing employees after advance:", err);
+    }
+    notify();
+    return adv;
+  },
+  async deleteAdvancePayment(id: string) {
+    const user = getCurrentUser();
+    if (!user) throw new Error("Not authenticated");
+    await deleteAdvancePayment(id, user.role);
+    currentDB.advancePayments = currentDB.advancePayments.filter(x => x.id !== id);
+    try {
+      const emps = await getEmployees();
+      currentDB.employees = emps || [];
+    } catch (err) {
+      console.error("Error refreshing employees after delete advance:", err);
+    }
+    notify();
+  },
 
   async deleteAttendance(id: string) { const user = getCurrentUser(); if (!user) return; await deleteAttendance(id, user.role); currentDB.attendance = currentDB.attendance.filter(x => x.id !== id); notify(); },
   async deleteActivity(id: string) { const user = getCurrentUser(); if (!user) return; try { await deleteActivityAction(id, user.role); currentDB.activities = currentDB.activities.filter(x => x.id !== id); notify(); } catch (error: any) { console.error("Delete activity error:", error); throw error; } },

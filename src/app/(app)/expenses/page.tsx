@@ -4,6 +4,7 @@ import { useState, useMemo, useEffect } from "react";
 import { useAuth, useDB, api, Expense, Role, useGlobalSearch } from "@/lib/store";
 import { PageHeader } from "@/components/PageHeader";
 import { StatCard } from "@/components/StatCard";
+import { cn } from "@/lib/utils";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
@@ -47,6 +48,26 @@ export default function ExpensesPage() {
   const [confirmReceiptExpense, setConfirmReceiptExpense] = useState<Expense | null>(null);
   const [isConfirmingReceipt, setIsConfirmingReceipt] = useState(false);
 
+  // Advance Payment Modal (Admin & HR)
+  const [openAdvanceModal, setOpenAdvanceModal] = useState(false);
+  const [openAdvanceListModal, setOpenAdvanceListModal] = useState(false);
+  const [advanceListFilter, setAdvanceListFilter] = useState("all"); // "all" | "active" | "settled"
+  const [advanceListSearch, setAdvanceListSearch] = useState("");
+  const [advanceListPage, setAdvanceListPage] = useState(1);
+  const [advanceListPageSize, setAdvanceListPageSize] = useState(10);
+  const [isSubmittingAdvance, setIsSubmittingAdvance] = useState(false);
+  const [advanceForm, setAdvanceForm] = useState({
+    employeeId: "",
+    amount: "",
+    disbursedDate: new Date().toISOString().slice(0, 10),
+    paymentMode: "Cash",
+    reason: "",
+    notes: "",
+  });
+
+  // Employee Cleared & Pending Status Summary Popup
+  const [openStatusPopup, setOpenStatusPopup] = useState(false);
+
   // Form State for New Expense Claim
   const [formData, setFormData] = useState({
     title: "",
@@ -55,7 +76,7 @@ export default function ExpensesPage() {
     expenseDate: new Date().toISOString().slice(0, 10),
     description: "",
     receiptUrls: [] as string[],
-    gstPercent: "0",
+    gstPercent: "",
     bankHolderName: "",
     bankName: "",
     branch: "",
@@ -99,9 +120,9 @@ export default function ExpensesPage() {
     gstPercent: string;
     description: string;
   }>>([
-    { id: "1", expenseDate: new Date().toISOString().slice(0, 10), title: "", category: "Office Supplies", amount: "", gstPercent: "0", description: "" },
-    { id: "2", expenseDate: new Date().toISOString().slice(0, 10), title: "", category: "Travel", amount: "", gstPercent: "0", description: "" },
-    { id: "3", expenseDate: new Date().toISOString().slice(0, 10), title: "", category: "Food & Dining", amount: "", gstPercent: "0", description: "" },
+    { id: "1", expenseDate: new Date().toISOString().slice(0, 10), title: "", category: "Office Supplies", amount: "", gstPercent: "", description: "" },
+    { id: "2", expenseDate: new Date().toISOString().slice(0, 10), title: "", category: "Travel", amount: "", gstPercent: "", description: "" },
+    { id: "3", expenseDate: new Date().toISOString().slice(0, 10), title: "", category: "Food & Dining", amount: "", gstPercent: "", description: "" },
   ]);
   const [isSubmittingBulk, setIsSubmittingBulk] = useState(false);
 
@@ -206,22 +227,77 @@ export default function ExpensesPage() {
     setSearch(globalSearch);
   }, [globalSearch, setSearch]);
 
+  // Employee Accept HR Approval Modal State
+  const [acceptingHrExpense, setAcceptingHrExpense] = useState<Expense | null>(null);
+  const [isSubmittingHrAccept, setIsSubmittingHrAccept] = useState(false);
+
   // Calculate Metrics
   const metrics = useMemo(() => {
     const relevant = isEmployee ? db.expenses.filter((e) => e.employeeId === currentUserId) : db.expenses;
-    const totalClaimed = relevant.reduce((sum, e) => (e.status !== "cancelled" && e.status !== "hr_rejected" && e.status !== "admin_rejected" ? sum + e.amount : sum), 0);
-    const pendingAmount = relevant.filter((e) => e.status === "pending" || e.status === "hr_approved").reduce((sum, e) => sum + e.amount, 0);
-    const approvedAmount = relevant.filter((e) => e.status === "admin_approved" || (isHR && e.status === "hr_approved")).reduce((sum, e) => sum + e.amount, 0);
+    
+    // Total Claimed: Active outstanding claims that are not yet accepted by employee, approved by admin, reimbursed, rejected or cancelled.
+    // Includes original gross amount if advance was adjusted
+    const totalClaimed = relevant.reduce((sum, e) => {
+      // Exclude cancelled, rejected
+      if (e.status === "cancelled" || e.status === "hr_rejected" || e.status === "admin_rejected") return sum;
+      // When accepted by employee, or approved by admin, or reimbursed, deduct it from active Total Claimed
+      if (e.employeeAcceptedHr || e.status === "admin_approved" || e.status === "reimbursed") return sum;
+      const effectiveAmt = (e.originalAmount != null && e.advanceDeducted ? e.originalAmount : e.amount);
+      return sum + effectiveAmt;
+    }, 0);
+    
+    // Expenses awaiting HR approval or awaiting employee acceptance
+    // Uses original gross amount so the user sees the real value of their pending claim
+    const pendingAmount = relevant.filter((e) => {
+      if (isEmployee) {
+        return e.status === "pending" || (e.status === "hr_approved" && !e.employeeAcceptedHr);
+      }
+      return e.status === "pending" || (e.status === "hr_approved" && !e.employeeAcceptedHr);
+    }).reduce((sum, e) => sum + (e.originalAmount != null && e.advanceDeducted ? e.originalAmount : e.amount), 0);
+
+    const approvedAmount = relevant.filter((e) => {
+      // When HR approves and employee accepts, or when Admin approves
+      return e.status === "admin_approved" || (e.status === "hr_approved" && (isHR || e.employeeAcceptedHr));
+    }).reduce((sum, e) => sum + e.amount, 0);
     const reimbursedAmount = relevant.filter((e) => e.status === "reimbursed").reduce((sum, e) => sum + e.amount, 0);
+    
+    // Cleared (settled) vs Unconfirmed reimbursed
+    const clearedAmount = relevant.filter((e) => e.status === "reimbursed" && e.employeeReceived).reduce((sum, e) => sum + e.amount, 0);
+    const pendingClearanceAmount = relevant.filter((e) => e.status === "reimbursed" && !e.employeeReceived).reduce((sum, e) => sum + e.amount, 0);
+
+    // HR Approved claims specifically waiting for employee to accept
+    const pendingEmployeeAcceptance = relevant.filter((e) => e.status === "hr_approved" && !e.employeeAcceptedHr);
+    const pendingEmployeeAcceptanceAmount = pendingEmployeeAcceptance.reduce((sum, e) => sum + (e.originalAmount != null && e.advanceDeducted ? e.originalAmount : e.amount), 0);
+    const pendingEmployeeAcceptanceNet = pendingEmployeeAcceptance.reduce((sum, e) => sum + e.amount, 0);
+    const pendingEmployeeAcceptanceAdvanceDeducted = pendingEmployeeAcceptance.reduce((sum, e) => sum + (e.advanceDeducted || 0), 0);
+
+    // Advances
+    const relevantAdvances = isEmployee ? (db.advancePayments || []).filter((a) => a.employeeId === currentUserId) : (db.advancePayments || []);
+    const totalAdvanceTaken = relevantAdvances.reduce((sum, a) => sum + a.amount, 0);
+    const activeAdvanceTaken = relevantAdvances
+      .filter((a) => a.status === "given" || a.status === "partially_settled")
+      .reduce((sum, a) => sum + Math.max(0, a.amount - (a.settledAmount || 0)), 0);
+    const clearedAdvanceTaken = relevantAdvances
+      .reduce((sum, a) => sum + (a.settledAmount || (a.status === "settled" ? a.amount : 0)), 0);
 
     return {
       totalClaimed,
       pendingAmount,
-      pendingCount: relevant.filter((e) => e.status === "pending").length,
+      pendingCount: relevant.filter((e) => isEmployee ? (e.status === "pending" || (e.status === "hr_approved" && !e.employeeAcceptedHr)) : e.status === "pending").length,
       approvedAmount,
       reimbursedAmount,
+      clearedAmount,
+      pendingClearanceAmount,
+      pendingEmployeeAcceptance,
+      pendingEmployeeAcceptanceAmount,
+      pendingEmployeeAcceptanceNet,
+      pendingEmployeeAcceptanceAdvanceDeducted,
+      totalAdvanceTaken,
+      activeAdvanceTaken,
+      clearedAdvanceTaken,
+      advancesCount: relevantAdvances.length,
     };
-  }, [db.expenses, isEmployee, isHR, currentUserId]);
+  }, [db.expenses, db.advancePayments, isEmployee, isHR, currentUserId]);
 
   if (!user) return null;
 
@@ -346,7 +422,7 @@ export default function ExpensesPage() {
         expenseDate: new Date().toISOString().slice(0, 10),
         description: "",
         receiptUrls: [],
-        gstPercent: "0",
+        gstPercent: "",
         bankHolderName: "",
         bankName: "",
         branch: "",
@@ -380,7 +456,7 @@ export default function ExpensesPage() {
         title: "",
         category: "Other",
         amount: "",
-        gstPercent: "0",
+        gstPercent: "",
         description: "",
       },
     ]);
@@ -531,9 +607,9 @@ export default function ExpensesPage() {
       toast.success(`Successfully uploaded ${payload.length} bills without image!`);
       setOpenBulkModal(false);
       setBulkBills([
-        { id: "1", expenseDate: new Date().toISOString().slice(0, 10), title: "", category: "Office Supplies", amount: "", gstPercent: "0", description: "" },
-        { id: "2", expenseDate: new Date().toISOString().slice(0, 10), title: "", category: "Travel", amount: "", gstPercent: "0", description: "" },
-        { id: "3", expenseDate: new Date().toISOString().slice(0, 10), title: "", category: "Food & Dining", amount: "", gstPercent: "0", description: "" },
+        { id: "1", expenseDate: new Date().toISOString().slice(0, 10), title: "", category: "Office Supplies", amount: "", gstPercent: "", description: "" },
+        { id: "2", expenseDate: new Date().toISOString().slice(0, 10), title: "", category: "Travel", amount: "", gstPercent: "", description: "" },
+        { id: "3", expenseDate: new Date().toISOString().slice(0, 10), title: "", category: "Food & Dining", amount: "", gstPercent: "", description: "" },
       ]);
     } catch (err: any) {
       toast.error(err.message || "Failed to submit bills");
@@ -580,6 +656,60 @@ export default function ExpensesPage() {
     }
   };
 
+  // Give Advance Money Handler (Admin & HR)
+  const handleGiveAdvance = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!advanceForm.employeeId) {
+      toast.error("Please select an employee");
+      return;
+    }
+    const amt = parseFloat(advanceForm.amount);
+    if (isNaN(amt) || amt <= 0) {
+      toast.error("Please enter a valid positive advance amount");
+      return;
+    }
+
+    setIsSubmittingAdvance(true);
+    try {
+      await api.createAdvancePayment({
+        employeeId: advanceForm.employeeId,
+        amount: amt,
+        disbursedDate: advanceForm.disbursedDate,
+        paymentMode: advanceForm.paymentMode,
+        reason: advanceForm.reason,
+        notes: advanceForm.notes,
+      });
+      toast.success(`Advance payment of ₹${amt.toLocaleString("en-IN")} recorded successfully!`);
+      setOpenAdvanceModal(false);
+      setAdvanceForm({
+        employeeId: "",
+        amount: "",
+        disbursedDate: new Date().toISOString().slice(0, 10),
+        paymentMode: "Cash",
+        reason: "",
+        notes: "",
+      });
+    } catch (err: any) {
+      toast.error(err.message || "Failed to disburse advance money");
+    } finally {
+      setIsSubmittingAdvance(false);
+    }
+  };
+
+  // Employee Accept HR Approval Handler
+  const handleEmployeeAcceptHr = async (expense: Expense) => {
+    setIsSubmittingHrAccept(true);
+    try {
+      await api.employeeAcceptHrExpense(expense.id);
+      toast.success(`You have accepted HR's approval for ₹${expense.amount.toLocaleString("en-IN")}. Claim deducted from your pending balance and sent to Admin for payout approval!`);
+      setAcceptingHrExpense(null);
+    } catch (err: any) {
+      toast.error(err.message || "Failed to accept HR approval");
+    } finally {
+      setIsSubmittingHrAccept(false);
+    }
+  };
+
   // Employee Acknowledge Receipt Handler
   const handleAcknowledgeReceipt = async () => {
     if (!confirmReceiptExpense) return;
@@ -606,12 +736,15 @@ export default function ExpensesPage() {
   };
 
   // Helper for Status Badges
-  const renderStatusBadge = (status: Expense["status"], employeeReceived?: boolean) => {
+  const renderStatusBadge = (status: Expense["status"], employeeReceived?: boolean, employeeAcceptedHr?: boolean) => {
     switch (status) {
       case "pending":
         return <Badge variant="outline" className="bg-amber-500/10 text-amber-600 border-amber-500/30 font-medium"><Clock className="w-3 h-3 mr-1" /> Pending HR</Badge>;
       case "hr_approved":
-        return <Badge variant="outline" className="bg-blue-500/10 text-blue-600 border-blue-500/30 font-medium"><CheckCircle2 className="w-3 h-3 mr-1" /> HR Approved (Pending Admin)</Badge>;
+        if (employeeAcceptedHr) {
+          return <Badge variant="outline" className="bg-emerald-500/10 text-emerald-700 border-emerald-500/30 font-medium"><CheckCircle2 className="w-3 h-3 mr-1" /> Accepted by You (Awaiting Admin)</Badge>;
+        }
+        return <Badge variant="outline" className="bg-blue-500/10 text-blue-700 border-blue-500/30 font-medium animate-pulse"><Clock className="w-3 h-3 mr-1" /> HR Approved (Action Required)</Badge>;
       case "admin_approved":
         return <Badge variant="outline" className="bg-indigo-500/10 text-indigo-600 border-indigo-500/30 font-medium"><ShieldCheck className="w-3 h-3 mr-1" /> Admin Approved (Ready for Payout)</Badge>;
       case "reimbursed":
@@ -655,6 +788,45 @@ export default function ExpensesPage() {
           description="Manage employee out-of-pocket work expenses, approval flows, and salary payout reimbursements."
         />
         <div className="flex flex-wrap items-center gap-2">
+          {/* Status Popup Trigger (View Cleared & Pending Expenses in one popup) */}
+          <Button
+            variant="outline"
+            onClick={() => setOpenStatusPopup(true)}
+            className="gap-2 shadow-sm border-emerald-500/30 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-50 dark:hover:bg-emerald-950/30"
+          >
+            <CheckCircle2 className="h-4 w-4 text-emerald-600" /> View Cleared & Pending
+          </Button>
+
+          {/* Advance Records Modal Trigger */}
+          <Button
+            variant="outline"
+            onClick={() => setOpenAdvanceListModal(true)}
+            className="gap-2 shadow-sm border-purple-500/30 text-purple-700 dark:text-purple-300 hover:bg-purple-50 dark:hover:bg-purple-950/30"
+          >
+            <Wallet className="h-4 w-4 text-purple-600" /> Advance Records
+          </Button>
+
+          {/* Admin & HR: Give Advance Money Button */}
+          {(isAdmin || isHR) && (
+            <Button
+              variant="outline"
+              onClick={() => {
+                setAdvanceForm({
+                  employeeId: "",
+                  amount: "",
+                  disbursedDate: new Date().toISOString().slice(0, 10),
+                  paymentMode: "Cash",
+                  reason: "",
+                  notes: "",
+                });
+                setOpenAdvanceModal(true);
+              }}
+              className="gap-2 shadow-sm border-purple-600 bg-purple-50/50 text-purple-800 dark:text-purple-200 hover:bg-purple-100 dark:hover:bg-purple-900/40"
+            >
+              <Plus className="h-4 w-4 text-purple-600" /> Give Advance Money
+            </Button>
+          )}
+
           <Button 
             variant="outline"
             onClick={() => {
@@ -669,7 +841,7 @@ export default function ExpensesPage() {
             setEditExpenseId(null);
             setFormData({
               title: "", category: "Travel", amount: "", expenseDate: new Date().toISOString().slice(0, 10),
-              description: "", receiptUrls: [], gstPercent: "0", bankHolderName: "", bankName: "", branch: "",
+              description: "", receiptUrls: [], gstPercent: "", bankHolderName: "", bankName: "", branch: "",
               accountNo: "", ifscCode: "", upiId: "", customCategory: "", vehicleType: "", vehicleNumber: "",
               distanceKm: "", vehicleAverage: "", petrolRate: "", trips: [], targetEmployeeId: ""
             });
@@ -680,13 +852,60 @@ export default function ExpensesPage() {
         </div>
       </div>
 
+      {/* Employee HR Approval Notification & Acceptance Banner */}
+      {isEmployee && metrics.pendingEmployeeAcceptance.length > 0 && (
+        <div className="bg-gradient-to-r from-blue-500/15 via-indigo-500/10 to-blue-500/15 border-2 border-blue-500/40 rounded-xl p-4 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 shadow-sm animate-in fade-in duration-300">
+          <div className="flex items-center gap-3">
+            <div className="h-11 w-11 rounded-full bg-blue-600 text-white flex items-center justify-center shrink-0 shadow-sm animate-bounce">
+              <CheckCircle2 className="h-6 w-6" />
+            </div>
+            <div>
+              <h4 className="font-bold text-blue-950 dark:text-blue-100 flex items-center gap-2 text-base">
+                HR Approved Your Expense: ₹{metrics.pendingEmployeeAcceptanceAmount.toLocaleString('en-IN')}
+                <Badge variant="outline" className="bg-blue-100 text-blue-800 border-blue-300 text-[10px]">
+                  {metrics.pendingEmployeeAcceptance.length} Claim{metrics.pendingEmployeeAcceptance.length > 1 ? "s" : ""} Approved
+                </Badge>
+              </h4>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                {metrics.pendingEmployeeAcceptanceAdvanceDeducted > 0 ? (
+                  <>
+                    ₹{metrics.pendingEmployeeAcceptanceAdvanceDeducted.toLocaleString('en-IN')} adjusted from advance &bull; Net payout: ₹{metrics.pendingEmployeeAcceptanceNet.toLocaleString('en-IN')} &bull; Remaining active advance: <strong>₹{metrics.activeAdvanceTaken.toLocaleString('en-IN')}</strong>. Please accept this approval.
+                  </>
+                ) : (
+                  <>
+                    HR has reviewed and approved your claim{metrics.pendingEmployeeAcceptance.length > 1 ? "s" : ""}. Please accept this approval so it can be forwarded to Admin for payout.
+                  </>
+                )}
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 w-full md:w-auto shrink-0">
+            {metrics.pendingEmployeeAcceptance.length === 1 ? (
+              <Button
+                className="bg-blue-600 hover:bg-blue-700 text-white font-semibold shadow-md gap-2 w-full md:w-auto"
+                onClick={() => setAcceptingHrExpense(metrics.pendingEmployeeAcceptance[0])}
+              >
+                <Check className="h-4 w-4" /> Accept HR Approval
+              </Button>
+            ) : (
+              <Button
+                className="bg-blue-600 hover:bg-blue-700 text-white font-semibold shadow-md gap-2 w-full md:w-auto"
+                onClick={() => setAcceptingHrExpense(metrics.pendingEmployeeAcceptance[0])}
+              >
+                <Check className="h-4 w-4" /> Review & Accept Claims
+              </Button>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Metric Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
         <StatCard
           label="Total Claimed"
           value={`₹${metrics.totalClaimed.toLocaleString()}`}
           icon={Receipt}
-          trend={isEmployee ? "Your total requested expense claims" : "Combined employee expense claims"}
+          trend={isEmployee ? "Unsettled requested expense claims" : "Unsettled employee expense claims"}
           tone="primary"
         />
         <StatCard
@@ -697,19 +916,42 @@ export default function ExpensesPage() {
           tone="warning"
         />
         <StatCard
-          label="Approved (Salary Day Payout)"
+          label="Approved (Payout)"
           value={`₹${metrics.approvedAmount.toLocaleString()}`}
           icon={ShieldCheck}
-          trend="Ready for upcoming payroll calculation"
+          trend="Ready for upcoming payout"
           tone="info"
         />
         <StatCard
           label="Total Reimbursed"
           value={`₹${metrics.reimbursedAmount.toLocaleString()}`}
           icon={Wallet}
-          trend="Successfully paid out to employees"
+          trend={`₹${metrics.clearedAmount.toLocaleString()} cleared by employee`}
           tone="success"
         />
+        <div 
+          onClick={() => setOpenAdvanceListModal(true)} 
+          className="cursor-pointer transition-transform hover:scale-[1.02]"
+          title="Click to view all advances and details"
+        >
+          <StatCard
+            label="Advance Money"
+            value={
+              metrics.activeAdvanceTaken > 0
+                ? `₹${metrics.activeAdvanceTaken.toLocaleString()}`
+                : (metrics.totalAdvanceTaken > 0 ? "All Cleared" : "₹0")
+            }
+            icon={Wallet}
+            trend={
+              metrics.activeAdvanceTaken > 0
+                ? `₹${metrics.activeAdvanceTaken.toLocaleString()} remaining • ₹${metrics.clearedAdvanceTaken.toLocaleString()} cleared`
+                : metrics.totalAdvanceTaken > 0
+                ? `All ₹${metrics.totalAdvanceTaken.toLocaleString()} advances cleared & settled`
+                : `No active advance`
+            }
+            tone={metrics.activeAdvanceTaken > 0 ? "info" : "success"}
+          />
+        </div>
       </div>
 
       {/* Main Table Card */}
@@ -826,8 +1068,17 @@ export default function ExpensesPage() {
                       <Badge variant="secondary" className="font-normal">{item.category}</Badge>
                     </TableCell>
                     <TableCell className="whitespace-nowrap text-xs">{new Date(item.expenseDate).toLocaleDateString()}</TableCell>
-                    <TableCell className="font-bold text-sm">₹{item.amount.toLocaleString()}</TableCell>
-                    <TableCell>{renderStatusBadge(item.status, item.employeeReceived)}</TableCell>
+                    <TableCell className="text-sm">
+                      <div className="font-bold text-foreground">
+                        ₹{(item.originalAmount != null && item.advanceDeducted ? item.originalAmount : item.amount).toLocaleString('en-IN')}
+                      </div>
+                      {item.advanceDeducted != null && item.advanceDeducted > 0 && (
+                        <div className="text-[10px] text-purple-600 dark:text-purple-400 font-medium whitespace-nowrap">
+                          -₹{item.advanceDeducted.toLocaleString('en-IN')} advance (Net: ₹{item.amount.toLocaleString('en-IN')})
+                        </div>
+                      )}
+                    </TableCell>
+                    <TableCell>{renderStatusBadge(item.status, item.employeeReceived, item.employeeAcceptedHr)}</TableCell>
                     <TableCell className="text-right whitespace-nowrap">
                       <div className="flex items-center justify-end gap-1">
                         {/* View Images / Details */}
@@ -863,6 +1114,23 @@ export default function ExpensesPage() {
                         >
                           <FileText className="h-4 w-4" />
                         </Button>
+
+                        {/* Employee Accept HR Approval Action */}
+                        {isEmployee && item.status === "hr_approved" && (
+                          !item.employeeAcceptedHr ? (
+                            <Button
+                              size="sm"
+                              className="h-7 text-xs bg-blue-600 hover:bg-blue-700 text-white font-medium shadow-sm animate-pulse"
+                              onClick={() => setAcceptingHrExpense(item)}
+                            >
+                              <Check className="h-3.5 w-3.5 mr-1" /> Accept HR Approval
+                            </Button>
+                          ) : (
+                            <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-300 text-xs">
+                              <CheckCircle2 className="h-3 w-3 mr-1" /> Accepted (Pending Admin)
+                            </Badge>
+                          )
+                        )}
 
                         {/* HR Approval Action */}
                         {isHR && item.status === "pending" && (
@@ -948,7 +1216,7 @@ export default function ExpensesPage() {
 
                         {(isAdmin || isHR) && item.status === "hr_approved" && (
                           <span className="text-[11px] text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-200">
-                            Awaiting Admin Review
+                            {item.employeeAcceptedHr ? "Employee Accepted (Ready for Admin)" : "Awaiting Employee Acceptance"}
                           </span>
                         )}
 
@@ -1796,13 +2064,19 @@ export default function ExpensesPage() {
                     <span>Date: {new Date(selectedExpense.expenseDate).toLocaleDateString()}</span>
                   </div>
                   <div className="text-xl font-bold text-primary mt-2">
-                    ₹{selectedExpense.amount.toLocaleString()}
+                    ₹{(selectedExpense.originalAmount != null && selectedExpense.advanceDeducted ? selectedExpense.originalAmount : selectedExpense.amount).toLocaleString('en-IN')}
                     {selectedExpense.distanceKm && selectedExpense.petrolRate && selectedExpense.vehicleAverage && (
                       <span className="text-xs font-normal text-muted-foreground ml-2">
                         ({selectedExpense.distanceKm} KM | Avg: {selectedExpense.vehicleAverage} KM/L | Rate: ₹{selectedExpense.petrolRate}/L)
                       </span>
                     )}
                   </div>
+                  {selectedExpense.advanceDeducted != null && selectedExpense.advanceDeducted > 0 && (
+                    <div className="text-xs font-medium text-purple-700 dark:text-purple-300 mt-1 flex items-center gap-2">
+                      <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-200">Advance Adjusted: -₹{selectedExpense.advanceDeducted.toLocaleString('en-IN')}</Badge>
+                      <span>Net Payout Due: <strong>₹{selectedExpense.amount.toLocaleString('en-IN')}</strong></span>
+                    </div>
+                  )}
                   {selectedExpense.trips && selectedExpense.trips.length > 0 && (
                     <div className="mt-3 p-3 bg-white rounded-lg border shadow-sm text-xs text-slate-700">
                       <div className="font-semibold mb-2 text-slate-900 border-b pb-1">Multi-Day Fuel Logs:</div>
@@ -2055,7 +2329,16 @@ export default function ExpensesPage() {
                       </TableCell>
                       <TableCell><Badge variant="secondary" className="font-normal">{exp.category}</Badge></TableCell>
                       <TableCell className="text-xs">{new Date(exp.expenseDate).toLocaleDateString()}</TableCell>
-                      <TableCell className="font-bold text-sm">₹{exp.amount.toLocaleString()}</TableCell>
+                      <TableCell className="text-sm">
+                        <div className="font-bold text-foreground">
+                          ₹{(exp.originalAmount != null && exp.advanceDeducted ? exp.originalAmount : exp.amount).toLocaleString('en-IN')}
+                        </div>
+                        {exp.advanceDeducted != null && exp.advanceDeducted > 0 && (
+                          <div className="text-[10px] text-purple-600 dark:text-purple-400 font-medium whitespace-nowrap">
+                            -₹{exp.advanceDeducted.toLocaleString('en-IN')} adv (Net: ₹{exp.amount.toLocaleString('en-IN')})
+                          </div>
+                        )}
+                      </TableCell>
                       <TableCell>{renderStatusBadge(exp.status)}</TableCell>
                       <TableCell className="text-right whitespace-nowrap">
                         <div className="flex items-center justify-end gap-1">
@@ -2262,6 +2545,702 @@ export default function ExpensesPage() {
               ₹{employeeExpenses.reduce((sum, exp) => sum + exp.amount, 0).toLocaleString()}
             </span>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* --- MODAL: GIVE ADVANCE MONEY (ADMIN & HR) --- */}
+      <Dialog open={openAdvanceModal} onOpenChange={setOpenAdvanceModal}>
+        <DialogContent className="sm:max-w-[480px]">
+          <form onSubmit={handleGiveAdvance}>
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2 text-xl font-bold text-purple-700 dark:text-purple-300">
+                <Wallet className="h-5 w-5" /> Give Advance Money to Employee
+              </DialogTitle>
+              <DialogDescription>
+                Disburse official advance funds to an employee. This will update their advance balance and send a real-time notification.
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-4 py-4 text-sm">
+              <div className="space-y-2">
+                <Label htmlFor="advEmployee" className="font-semibold">Select Employee *</Label>
+                <Select
+                  value={advanceForm.employeeId}
+                  onValueChange={(val) => setAdvanceForm({ ...advanceForm, employeeId: val })}
+                  required
+                >
+                  <SelectTrigger id="advEmployee">
+                    <SelectValue placeholder="Choose employee..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {db.employees.map((emp) => (
+                      <SelectItem key={emp.id} value={emp.id}>
+                        {emp.name} ({emp.id} - {emp.department})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="advAmount" className="font-semibold">Advance Amount (₹) *</Label>
+                  <Input
+                    id="advAmount"
+                    type="number"
+                    min="1"
+                    step="any"
+                    placeholder="Type amount..."
+                    value={advanceForm.amount}
+                    onChange={(e) => setAdvanceForm({ ...advanceForm, amount: e.target.value })}
+                    required
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="advDate" className="font-semibold">Disbursed Date *</Label>
+                  <Input
+                    id="advDate"
+                    type="date"
+                    value={advanceForm.disbursedDate}
+                    onChange={(e) => setAdvanceForm({ ...advanceForm, disbursedDate: e.target.value })}
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="advMode" className="font-semibold">Payment Mode</Label>
+                  <Select
+                    value={advanceForm.paymentMode}
+                    onValueChange={(val) => setAdvanceForm({ ...advanceForm, paymentMode: val })}
+                  >
+                    <SelectTrigger id="advMode">
+                      <SelectValue placeholder="Mode" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Cash">Cash</SelectItem>
+                      <SelectItem value="Bank Transfer">Bank Transfer (NEFT/IMPS)</SelectItem>
+                      <SelectItem value="UPI">UPI / GPay / PhonePe</SelectItem>
+                      <SelectItem value="Cheque">Cheque</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="advReason" className="font-semibold">Purpose / Reason</Label>
+                  <Input
+                    id="advReason"
+                    placeholder="e.g. Travel Advance, Project Site"
+                    value={advanceForm.reason}
+                    onChange={(e) => setAdvanceForm({ ...advanceForm, reason: e.target.value })}
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="advNotes" className="font-semibold">Additional Notes</Label>
+                <Textarea
+                  id="advNotes"
+                  placeholder="Optional reference, transaction ID, or repayment terms..."
+                  value={advanceForm.notes}
+                  onChange={(e) => setAdvanceForm({ ...advanceForm, notes: e.target.value })}
+                  rows={2}
+                />
+              </div>
+            </div>
+
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setOpenAdvanceModal(false)} disabled={isSubmittingAdvance}>
+                Cancel
+              </Button>
+              <Button type="submit" disabled={isSubmittingAdvance} className="bg-purple-600 hover:bg-purple-700 text-white gap-2 font-semibold">
+                <Wallet className="h-4 w-4" />
+                {isSubmittingAdvance ? "Disbursing..." : "Give Advance Money"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* --- MODAL: ALL EMPLOYEES WHO TOOK ADVANCE WITH FULL DETAILS --- */}
+      <Dialog open={openAdvanceListModal} onOpenChange={setOpenAdvanceListModal}>
+        <DialogContent className="max-w-6xl w-[95vw] max-h-[92vh] flex flex-col p-6 overflow-hidden">
+          <DialogHeader className="shrink-0 pb-3 border-b">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <DialogTitle className="flex items-center gap-2 text-2xl font-bold text-purple-700 dark:text-purple-300">
+                  <Wallet className="h-6 w-6 text-purple-600" /> Employees Advance History & Settlement Details
+                </DialogTitle>
+                <DialogDescription className="mt-1 text-xs sm:text-sm">
+                  Comprehensive log of all employees who have taken advance money, including disbursed amounts, remaining balances, and auto-settled claim references.
+                </DialogDescription>
+              </div>
+              {(isAdmin || isHR) && (
+                <Button
+                  size="sm"
+                  className="bg-purple-600 hover:bg-purple-700 text-white font-semibold text-xs gap-1.5 h-9 px-4 shrink-0 shadow-sm"
+                  onClick={() => {
+                    setOpenAdvanceListModal(false);
+                    setOpenAdvanceModal(true);
+                  }}
+                >
+                  <Plus className="h-4 w-4" /> Give New Advance
+                </Button>
+              )}
+            </div>
+          </DialogHeader>
+
+          <div className="flex-1 overflow-y-auto space-y-4 py-3 pr-1 text-sm">
+            {/* Top Advance Overview Metrics */}
+            {(() => {
+              const allAdvances = isEmployee
+                ? (db.advancePayments || []).filter((a) => a.employeeId === currentUserId)
+                : (db.advancePayments || []);
+
+              const totalGiven = allAdvances.reduce((sum, a) => sum + (a.amount || 0), 0);
+              const totalSettled = allAdvances.reduce((sum, a) => sum + (a.settledAmount || (a.status === "settled" ? a.amount : 0)), 0);
+              const totalActive = allAdvances
+                .filter((a) => a.status !== "settled")
+                .reduce((sum, a) => sum + Math.max(0, a.amount - (a.settledAmount || 0)), 0);
+
+              const distinctEmployeesCount = new Set(allAdvances.map((a) => a.employeeId)).size;
+
+              return (
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  <div className="bg-purple-50/80 dark:bg-purple-950/30 border border-purple-200 dark:border-purple-800 p-3.5 rounded-xl text-center shadow-xs">
+                    <span className="text-[11px] uppercase font-bold text-purple-800 dark:text-purple-300 tracking-wider">Total Disbursed</span>
+                    <div className="text-2xl font-black text-purple-700 dark:text-purple-300 mt-1">₹{totalGiven.toLocaleString('en-IN')}</div>
+                    <span className="text-[11px] text-muted-foreground">{allAdvances.length} payment(s) recorded</span>
+                  </div>
+                  <div className="bg-amber-50/80 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 p-3.5 rounded-xl text-center shadow-xs">
+                    <span className="text-[11px] uppercase font-bold text-amber-800 dark:text-amber-300 tracking-wider">Active Advance</span>
+                    <div className="text-2xl font-black text-amber-700 dark:text-amber-300 mt-1">₹{totalActive.toLocaleString('en-IN')}</div>
+                    <span className="text-[11px] text-muted-foreground">To be deducted from claims</span>
+                  </div>
+                  <div className="bg-emerald-50/80 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 p-3.5 rounded-xl text-center shadow-xs">
+                    <span className="text-[11px] uppercase font-bold text-emerald-800 dark:text-emerald-300 tracking-wider">Cleared & Settled</span>
+                    <div className="text-2xl font-black text-emerald-700 dark:text-emerald-300 mt-1">₹{totalSettled.toLocaleString('en-IN')}</div>
+                    <span className="text-[11px] text-muted-foreground">Adjusted against expenses</span>
+                  </div>
+                  <div className="bg-blue-50/80 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 p-3.5 rounded-xl text-center shadow-xs">
+                    <span className="text-[11px] uppercase font-bold text-blue-800 dark:text-blue-300 tracking-wider">Recipients</span>
+                    <div className="text-2xl font-black text-blue-700 dark:text-blue-300 mt-1">{distinctEmployeesCount}</div>
+                    <span className="text-[11px] text-muted-foreground">Employee(s) received advance</span>
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* Filter Pills & Search */}
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-1">
+              <div className="flex flex-wrap items-center gap-1.5">
+                <Button
+                  size="sm"
+                  variant={advanceListFilter === "all" ? "default" : "outline"}
+                  className={`h-8 text-xs px-3 font-semibold ${advanceListFilter === "all" ? "bg-purple-600 hover:bg-purple-700 text-white" : ""}`}
+                  onClick={() => {
+                    setAdvanceListFilter("all");
+                    setAdvanceListPage(1);
+                  }}
+                >
+                  All Advances
+                </Button>
+                <Button
+                  size="sm"
+                  variant={advanceListFilter === "active" ? "default" : "outline"}
+                  className={`h-8 text-xs px-3 font-semibold ${advanceListFilter === "active" ? "bg-purple-600 hover:bg-purple-700 text-white" : ""}`}
+                  onClick={() => {
+                    setAdvanceListFilter("active");
+                    setAdvanceListPage(1);
+                  }}
+                >
+                  Active / Pending Only
+                </Button>
+                <Button
+                  size="sm"
+                  variant={advanceListFilter === "settled" ? "default" : "outline"}
+                  className={`h-8 text-xs px-3 font-semibold ${advanceListFilter === "settled" ? "bg-purple-600 hover:bg-purple-700 text-white" : ""}`}
+                  onClick={() => {
+                    setAdvanceListFilter("settled");
+                    setAdvanceListPage(1);
+                  }}
+                >
+                  Fully Cleared
+                </Button>
+              </div>
+
+              {/* Search bar inside Advance Modal */}
+              <div className="relative w-full sm:w-72">
+                <Search className="h-4 w-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  placeholder="Search advance, employee, mode..."
+                  value={advanceListSearch}
+                  onChange={(e) => {
+                    setAdvanceListSearch(e.target.value);
+                    setAdvanceListPage(1);
+                  }}
+                  className="pl-9 h-8 text-xs"
+                />
+              </div>
+            </div>
+
+            {/* Advance Records Table with scrollbar and pagination */}
+            {(() => {
+              const allAdvances = isEmployee
+                ? (db.advancePayments || []).filter((a) => a.employeeId === currentUserId)
+                : (db.advancePayments || []);
+
+              const filteredAdvances = allAdvances.filter((a) => {
+                if (advanceListFilter === "active") {
+                  if (a.status === "settled") return false;
+                } else if (advanceListFilter === "settled") {
+                  if (a.status !== "settled") return false;
+                }
+
+                if (advanceListSearch.trim()) {
+                  const q = advanceListSearch.toLowerCase();
+                  const emp = db.employees.find((e) => e.id === a.employeeId);
+                  const empName = (emp?.name || "").toLowerCase();
+                  const matchId = (a.id || "").toLowerCase().includes(q);
+                  const matchEmpId = (a.employeeId || "").toLowerCase().includes(q);
+                  const matchEmpName = empName.includes(q);
+                  const matchReason = (a.reason || "").toLowerCase().includes(q);
+                  const matchMode = (a.paymentMode || "").toLowerCase().includes(q);
+                  const matchExpenseId = (a.settledExpenseId || "").toLowerCase().includes(q);
+                  if (!matchId && !matchEmpId && !matchEmpName && !matchReason && !matchMode && !matchExpenseId) {
+                    return false;
+                  }
+                }
+
+                return true;
+              });
+
+              if (filteredAdvances.length === 0) {
+                return (
+                  <div className="text-center py-12 text-muted-foreground border rounded-xl bg-muted/10">
+                    <Wallet className="h-10 w-10 mx-auto mb-2 opacity-30 text-purple-600" />
+                    <p className="font-semibold text-base text-foreground">No advance payments found</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">Try selecting a different filter or clearing your search term.</p>
+                  </div>
+                );
+              }
+
+              // Pagination calculations
+              const totalItems = filteredAdvances.length;
+              const totalPages = Math.ceil(totalItems / advanceListPageSize) || 1;
+              const currentPage = Math.min(Math.max(1, advanceListPage), totalPages);
+              const startIndex = (currentPage - 1) * advanceListPageSize;
+              const endIndex = Math.min(startIndex + advanceListPageSize, totalItems);
+              const paginatedAdvances = filteredAdvances.slice(startIndex, endIndex);
+
+              return (
+                <div className="border rounded-xl shadow-xs overflow-hidden bg-card">
+                  {/* Table with custom horizontal & vertical scrollbar */}
+                  <div className="overflow-x-auto max-h-[420px] overflow-y-auto">
+                    <Table>
+                      <TableHeader className="bg-muted/60 sticky top-0 z-10 shadow-xs backdrop-blur-xs">
+                        <TableRow>
+                          <TableHead className="w-[100px] font-bold">Advance ID</TableHead>
+                          {!isEmployee && <TableHead className="font-bold">Employee Details</TableHead>}
+                          <TableHead className="font-bold">Amount</TableHead>
+                          <TableHead className="font-bold">Remaining</TableHead>
+                          <TableHead className="font-bold">Status</TableHead>
+                          <TableHead className="font-bold">Disbursed Date</TableHead>
+                          <TableHead className="font-bold">Payment Mode</TableHead>
+                          <TableHead className="font-bold">Purpose / Reason</TableHead>
+                          <TableHead className="font-bold">Settlement Claim</TableHead>
+                          <TableHead className="font-bold">Disbursed By</TableHead>
+                          {(isAdmin || isHR) && <TableHead className="font-bold text-right">Actions</TableHead>}
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {paginatedAdvances.map((adv) => {
+                          const emp = db.employees.find((e) => e.id === adv.employeeId);
+                          const empName = emp?.name || adv.employeeId;
+                          const empDept = emp?.department || "General";
+                          const settled = adv.settledAmount || 0;
+                          const remaining = Math.max(0, adv.amount - settled);
+
+                          return (
+                            <TableRow key={adv.id} className="hover:bg-purple-50/30 dark:hover:bg-purple-950/20 transition-colors">
+                              <TableCell className="font-mono text-xs font-bold text-purple-700 dark:text-purple-400">
+                                {adv.id}
+                              </TableCell>
+                              {!isEmployee && (
+                                <TableCell>
+                                  <div className="font-semibold text-xs text-foreground">{empName}</div>
+                                  <div className="text-[11px] text-muted-foreground font-mono">{adv.employeeId} &bull; {empDept}</div>
+                                </TableCell>
+                              )}
+                              <TableCell className="font-bold text-xs text-foreground whitespace-nowrap">
+                                ₹{adv.amount.toLocaleString('en-IN')}
+                              </TableCell>
+                              <TableCell className="whitespace-nowrap">
+                                {remaining === 0 ? (
+                                  <span className="font-bold text-xs text-emerald-600 flex items-center gap-1">
+                                    <CheckCircle2 className="h-3.5 w-3.5" /> ₹0 (Cleared)
+                                  </span>
+                                ) : (
+                                  <span className="font-bold text-xs text-amber-600">
+                                    ₹{remaining.toLocaleString('en-IN')}
+                                  </span>
+                                )}
+                              </TableCell>
+                              <TableCell>
+                                {adv.status === "settled" || remaining === 0 ? (
+                                  <Badge className="bg-emerald-100 text-emerald-800 border-emerald-300 dark:bg-emerald-950/40 dark:text-emerald-300 text-[10px] font-semibold">
+                                    Cleared & Settled
+                                  </Badge>
+                                ) : adv.status === "partially_settled" ? (
+                                  <Badge className="bg-amber-100 text-amber-800 border-amber-300 dark:bg-amber-950/40 dark:text-amber-300 text-[10px] font-semibold">
+                                    Partially Cleared
+                                  </Badge>
+                                ) : (
+                                  <Badge className="bg-purple-100 text-purple-800 border-purple-300 dark:bg-purple-950/40 dark:text-purple-300 text-[10px] font-semibold">
+                                    Active (Unsettled)
+                                  </Badge>
+                                )}
+                              </TableCell>
+                              <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
+                                {adv.disbursedDate}
+                              </TableCell>
+                              <TableCell className="text-xs whitespace-nowrap">
+                                <Badge variant="outline" className="text-[10px] font-medium">{adv.paymentMode || "Cash"}</Badge>
+                              </TableCell>
+                              <TableCell className="text-xs max-w-[180px] truncate" title={adv.reason || "Advance"}>
+                                {adv.reason || "—"}
+                              </TableCell>
+                              <TableCell className="text-xs font-mono whitespace-nowrap">
+                                {adv.settledExpenseId ? (
+                                  <span className="text-blue-600 dark:text-blue-400 font-semibold hover:underline cursor-pointer" title={`Settled against claim ${adv.settledExpenseId}`}>
+                                    {adv.settledExpenseId}
+                                  </span>
+                                ) : (
+                                  <span className="text-muted-foreground text-[11px] italic">Pending Claim</span>
+                                )}
+                              </TableCell>
+                              <TableCell className="text-xs text-muted-foreground whitespace-nowrap capitalize">
+                                {adv.disbursedByRole || "Admin"}
+                              </TableCell>
+                              {(isAdmin || isHR) && (
+                                <TableCell className="text-right">
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-7 w-7 text-rose-600 hover:bg-rose-50"
+                                    title="Delete Advance Record"
+                                    onClick={async () => {
+                                      if (confirm(`Are you sure you want to delete advance record ${adv.id}?`)) {
+                                        try {
+                                          await api.deleteAdvancePayment(adv.id);
+                                          toast.success("Advance record deleted");
+                                        } catch (e: any) {
+                                          toast.error(e.message || "Failed to delete advance record");
+                                        }
+                                      }
+                                    }}
+                                  >
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                  </Button>
+                                </TableCell>
+                              )}
+                            </TableRow>
+                          );
+                        })}
+                      </TableBody>
+                    </Table>
+                  </div>
+
+                  {/* Pagination Component */}
+                  <DataTablePagination
+                    page={currentPage}
+                    pageSize={advanceListPageSize}
+                    totalPages={totalPages}
+                    totalItems={totalItems}
+                    startIndex={totalItems > 0 ? startIndex + 1 : 0}
+                    endIndex={endIndex}
+                    onPageChange={(p) => setAdvanceListPage(p)}
+                    onPageSizeChange={(sz) => {
+                      setAdvanceListPageSize(sz);
+                      setAdvanceListPage(1);
+                    }}
+                    pageSizeOptions={[5, 10, 20, 50]}
+                  />
+                </div>
+              );
+            })()}
+          </div>
+
+          <DialogFooter className="shrink-0 pt-3 border-t">
+            <Button variant="outline" onClick={() => setOpenAdvanceListModal(false)}>Close</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* --- MODAL: CLEARED & PENDING EXPENSES POPUP (FOR EMPLOYEE & ADMIN/HR) --- */}
+      <Dialog open={openStatusPopup} onOpenChange={setOpenStatusPopup}>
+        <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-xl font-bold text-primary">
+              <Receipt className="h-5 w-5" /> All Cleared & Pending Expenses Overview
+            </DialogTitle>
+            <DialogDescription>
+              Comprehensive summary showing all cleared/settled reimbursement expenses and currently pending expense claims in a single view.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-5 py-2">
+            {/* Top Metric Strip */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 p-3 rounded-lg text-center">
+                <span className="text-[11px] font-bold text-emerald-800 dark:text-emerald-300 uppercase tracking-wider flex items-center justify-center gap-1">
+                  <CheckCircle2 className="h-3.5 w-3.5" /> Total Cleared & Settled
+                </span>
+                <div className="text-2xl font-black text-emerald-700 dark:text-emerald-300 mt-1">
+                  ₹{metrics.clearedAmount.toLocaleString()}
+                </div>
+                <div className="text-[11px] text-muted-foreground mt-0.5">
+                  Money received & confirmed by employee
+                </div>
+              </div>
+
+              <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 p-3 rounded-lg text-center">
+                <span className="text-[11px] font-bold text-amber-800 dark:text-amber-300 uppercase tracking-wider flex items-center justify-center gap-1">
+                  <Clock className="h-3.5 w-3.5" /> Pending Review Claims
+                </span>
+                <div className="text-2xl font-black text-amber-700 dark:text-amber-300 mt-1">
+                  ₹{metrics.pendingAmount.toLocaleString()}
+                </div>
+                <div className="text-[11px] text-muted-foreground mt-0.5">
+                  {metrics.pendingCount} claim(s) awaiting approval
+                </div>
+              </div>
+
+              <div className={cn(
+                "border p-3 rounded-lg text-center",
+                metrics.activeAdvanceTaken > 0
+                  ? "bg-purple-50 dark:bg-purple-950/30 border-purple-200 dark:border-purple-800"
+                  : "bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800"
+              )}>
+                <span className={cn(
+                  "text-[11px] font-bold uppercase tracking-wider flex items-center justify-center gap-1",
+                  metrics.activeAdvanceTaken > 0
+                    ? "text-purple-800 dark:text-purple-300"
+                    : "text-emerald-800 dark:text-emerald-300"
+                )}>
+                  <Wallet className="h-3.5 w-3.5" /> {metrics.activeAdvanceTaken > 0 ? "Remaining Advance" : "Advance Cleared"}
+                </span>
+                <div className={cn(
+                  "text-2xl font-black mt-1",
+                  metrics.activeAdvanceTaken > 0
+                    ? "text-purple-700 dark:text-purple-300"
+                    : "text-emerald-700 dark:text-emerald-300"
+                )}>
+                  {metrics.activeAdvanceTaken > 0 ? `₹${metrics.activeAdvanceTaken.toLocaleString()}` : (metrics.totalAdvanceTaken > 0 ? "All Cleared" : "₹0")}
+                </div>
+                <div className="text-[11px] text-muted-foreground mt-0.5">
+                  {metrics.activeAdvanceTaken > 0
+                    ? `₹${metrics.clearedAdvanceTaken.toLocaleString()} cleared of ₹${metrics.totalAdvanceTaken.toLocaleString()}`
+                    : `${metrics.advancesCount} disbursement(s) fully settled`}
+                </div>
+              </div>
+            </div>
+
+            {/* Awaiting Confirmation (Paid by HR/Admin, employee pending acknowledgement) */}
+            {metrics.pendingClearanceAmount > 0 && (
+              <div className="p-3 bg-emerald-500/10 border-2 border-emerald-500 rounded-lg space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <HandCoins className="h-5 w-5 text-emerald-600" />
+                    <div>
+                      <h4 className="font-bold text-sm text-emerald-950 dark:text-emerald-100">
+                        Disbursed Reimbursements Awaiting Confirmation
+                      </h4>
+                      <p className="text-xs text-muted-foreground">
+                        {isEmployee ? "You have received the funds below. Click to acknowledge receipt and clear your balance." : "Payment released by Admin/HR. Awaiting employee acknowledgement."}
+                      </p>
+                    </div>
+                  </div>
+                  <Badge className="bg-emerald-600 text-white font-bold text-xs">
+                    ₹{metrics.pendingClearanceAmount.toLocaleString()}
+                  </Badge>
+                </div>
+              </div>
+            )}
+
+            {/* SECTION 1: CLEARED EXPENSES */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between border-b pb-1">
+                <h4 className="text-xs font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-400 flex items-center gap-1.5">
+                  <CheckCircle2 className="h-4 w-4" /> Cleared Expenses ({expensesData.filter(e => e.status === "reimbursed" && e.employeeReceived).length})
+                </h4>
+                <span className="text-xs font-semibold text-emerald-700">Total Cleared: ₹{metrics.clearedAmount.toLocaleString()}</span>
+              </div>
+              <div className="max-h-48 overflow-y-auto space-y-2 pr-1">
+                {expensesData.filter(e => e.status === "reimbursed" && e.employeeReceived).length === 0 ? (
+                  <p className="text-xs text-muted-foreground italic py-3 text-center">No cleared expenses yet.</p>
+                ) : (
+                  expensesData.filter(e => e.status === "reimbursed" && e.employeeReceived).map((exp) => (
+                    <div key={exp.id} className="p-2.5 rounded-lg border bg-emerald-50/20 dark:bg-emerald-950/10 text-xs flex justify-between items-center">
+                      <div>
+                        <div className="font-semibold text-foreground flex items-center gap-1.5">
+                          {exp.title}
+                          <Badge variant="secondary" className="text-[10px] py-0">{exp.category}</Badge>
+                        </div>
+                        <div className="text-[11px] text-muted-foreground mt-0.5">
+                          {exp.id} &bull; Date: {new Date(exp.expenseDate).toLocaleDateString()}
+                          {!isEmployee && ` • ${(exp as any).employeeName}`}
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <div className="font-bold text-sm text-emerald-700 dark:text-emerald-400">₹{exp.amount.toLocaleString()}</div>
+                        <span className="text-[10px] text-emerald-600 font-medium flex items-center justify-end gap-1">
+                          <CheckCircle2 className="h-3 w-3" /> Cleared
+                        </span>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+
+            {/* SECTION 2: PENDING EXPENSES */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between border-b pb-1">
+                <h4 className="text-xs font-bold uppercase tracking-wider text-amber-700 dark:text-amber-400 flex items-center gap-1.5">
+                  <Clock className="h-4 w-4" /> Pending Expense Claims ({expensesData.filter(e => e.status === "pending" || e.status === "hr_approved" || (e.status === "reimbursed" && !e.employeeReceived)).length})
+                </h4>
+                <span className="text-xs font-semibold text-amber-700">Total Pending: ₹{(metrics.pendingAmount + metrics.pendingClearanceAmount).toLocaleString()}</span>
+              </div>
+              <div className="max-h-48 overflow-y-auto space-y-2 pr-1">
+                {expensesData.filter(e => e.status === "pending" || e.status === "hr_approved" || (e.status === "reimbursed" && !e.employeeReceived)).length === 0 ? (
+                  <p className="text-xs text-muted-foreground italic py-3 text-center">No pending expenses at this time.</p>
+                ) : (
+                  expensesData.filter(e => e.status === "pending" || e.status === "hr_approved" || (e.status === "reimbursed" && !e.employeeReceived)).map((exp) => (
+                    <div key={exp.id} className="p-2.5 rounded-lg border bg-muted/40 text-xs flex justify-between items-center">
+                      <div>
+                        <div className="font-semibold text-foreground flex items-center gap-1.5">
+                          {exp.title}
+                          <Badge variant="outline" className="text-[10px] py-0">{exp.category}</Badge>
+                        </div>
+                        <div className="text-[11px] text-muted-foreground mt-0.5">
+                          {exp.id} &bull; Date: {new Date(exp.expenseDate).toLocaleDateString()}
+                          {!isEmployee && ` • ${(exp as any).employeeName}`}
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <div className="font-bold text-sm">₹{exp.amount.toLocaleString()}</div>
+                        {renderStatusBadge(exp.status, exp.employeeReceived)}
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setOpenStatusPopup(false)}>Close</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* EMPLOYEE ACCEPT HR APPROVAL MODAL */}
+      <Dialog open={!!acceptingHrExpense} onOpenChange={(open) => !open && setAcceptingHrExpense(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <div className="flex items-center gap-2 text-blue-600">
+              <CheckCircle2 className="h-6 w-6" />
+              <DialogTitle>Accept HR Approval</DialogTitle>
+            </div>
+            <DialogDescription>
+              HR has approved your expense claim. Please confirm your acceptance.
+            </DialogDescription>
+          </DialogHeader>
+
+          {acceptingHrExpense && (
+            <div className="space-y-4 py-3">
+              <div className="bg-blue-50/60 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 rounded-lg p-3 text-xs space-y-2">
+                <div className="flex justify-between items-center">
+                  <span className="text-muted-foreground">Claim ID:</span>
+                  <span className="font-mono font-semibold">{acceptingHrExpense.id}</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-muted-foreground">Expense Title:</span>
+                  <span className="font-semibold text-foreground">{acceptingHrExpense.title}</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-muted-foreground">Category:</span>
+                  <Badge variant="outline" className="text-[10px]">{acceptingHrExpense.category}</Badge>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-muted-foreground">Expense Date:</span>
+                  <span>{new Date(acceptingHrExpense.expenseDate).toLocaleDateString()}</span>
+                </div>
+                {acceptingHrExpense.hrReviewComment && (
+                  <div className="pt-1 border-t border-blue-200 dark:border-blue-800">
+                    <span className="text-muted-foreground block mb-0.5">HR Comment:</span>
+                    <p className="text-foreground italic">{acceptingHrExpense.hrReviewComment}</p>
+                  </div>
+                )}
+                <div className="flex justify-between items-center pt-2 border-t border-blue-200 dark:border-blue-800 text-sm">
+                  <span className="font-bold">Claim Amount:</span>
+                  <span className="font-bold text-foreground">
+                    ₹{(acceptingHrExpense.originalAmount != null && acceptingHrExpense.advanceDeducted ? acceptingHrExpense.originalAmount : acceptingHrExpense.amount).toLocaleString('en-IN')}
+                  </span>
+                </div>
+                {acceptingHrExpense.advanceDeducted != null && acceptingHrExpense.advanceDeducted > 0 && (
+                  <>
+                    <div className="flex justify-between items-center text-xs text-purple-700 dark:text-purple-300">
+                      <span>Deducted from Advance:</span>
+                      <span className="font-semibold">-₹{acceptingHrExpense.advanceDeducted.toLocaleString('en-IN')}</span>
+                    </div>
+                    <div className="flex justify-between items-center text-xs font-bold text-blue-700 dark:text-blue-400">
+                      <span>Net Cash Payout:</span>
+                      <span>₹{acceptingHrExpense.amount.toLocaleString('en-IN')}</span>
+                    </div>
+                  </>
+                )}
+              </div>
+
+              <div className="p-3 bg-muted/40 rounded-lg text-xs text-muted-foreground space-y-1">
+                <div className="font-semibold text-foreground flex items-center gap-1.5">
+                  <Info className="h-4 w-4 text-blue-600" /> What happens next?
+                </div>
+                <p>
+                  • This expense will be <strong>deducted from your pending review amount</strong>.
+                </p>
+                <p>
+                  • It will be forwarded to <strong>Admin for final payout disbursement</strong>.
+                </p>
+              </div>
+            </div>
+          )}
+
+          <DialogFooter className="flex sm:justify-between items-center gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setAcceptingHrExpense(null)}
+              disabled={isSubmittingHrAccept}
+            >
+              Cancel
+            </Button>
+            <Button
+              className="bg-blue-600 hover:bg-blue-700 text-white font-semibold gap-2"
+              onClick={() => acceptingHrExpense && handleEmployeeAcceptHr(acceptingHrExpense)}
+              disabled={isSubmittingHrAccept}
+            >
+              {isSubmittingHrAccept ? (
+                <>Processing...</>
+              ) : (
+                <>
+                  <Check className="h-4 w-4" /> Yes, I Accept This Claim
+                </>
+              )}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 

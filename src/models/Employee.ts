@@ -20,10 +20,14 @@ const EmployeeSchema = new mongoose.Schema({
   address: { type: String },
   state: { type: String },
   notes: { type: String },
+  totalAdvanceTaken: { type: Number, default: 0 },
+  activeAdvanceBalance: { type: Number, default: 0 },
+  clearedAdvance: { type: Number, default: 0 },
 }, { timestamps: true });
 
 EmployeeSchema.index({ email: 1 });
 EmployeeSchema.index({ department: 1 });
 EmployeeSchema.index({ status: 1 });
 
+delete mongoose.models.Employee;
 export const Employee = mongoose.models.Employee || mongoose.model("Employee", EmployeeSchema);

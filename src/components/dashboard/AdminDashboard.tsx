@@ -217,17 +217,34 @@ export function AdminDashboard() {
           <CardContent>
             <div className="space-y-4">
               <div className="flex justify-between items-center border-b pb-2">
-                <span className="text-muted-foreground text-sm">Pending HR</span>
+                <span className="text-muted-foreground text-sm">Pending HR Review</span>
                 <span className="font-bold">₹{db.expenses.filter(e => e.status === "pending").reduce((a,b)=>a+b.amount,0).toLocaleString()}</span>
               </div>
               <div className="flex justify-between items-center border-b pb-2">
-                <span className="text-muted-foreground text-sm">Pending Admin</span>
-                <span className="font-bold text-warning">₹{db.expenses.filter(e => e.status === "hr_approved").reduce((a,b)=>a+b.amount,0).toLocaleString()}</span>
+                <span className="text-muted-foreground text-sm">Awaiting Employee Acceptance</span>
+                <span className="font-bold text-blue-600">₹{db.expenses.filter(e => e.status === "hr_approved" && !e.employeeAcceptedHr).reduce((a,b)=>a+b.amount,0).toLocaleString()}</span>
               </div>
               <div className="flex justify-between items-center border-b pb-2">
-                <span className="text-muted-foreground text-sm">Approved (This Month)</span>
+                <span className="text-muted-foreground text-sm">Ready for Admin Approval</span>
+                <span className="font-bold text-warning">₹{db.expenses.filter(e => e.status === "hr_approved" && e.employeeAcceptedHr).reduce((a,b)=>a+b.amount,0).toLocaleString()}</span>
+              </div>
+              <div className="flex justify-between items-center border-b pb-2">
+                <span className="text-muted-foreground text-sm">Approved / Paid</span>
                 <span className="font-bold text-success">₹{db.expenses.filter(e => e.status === "admin_approved" || e.status === "reimbursed").reduce((a,b)=>a+b.amount,0).toLocaleString()}</span>
               </div>
+              {(() => {
+                const advs = db.advancePayments || [];
+                const activeAdv = advs.filter(a => a.status === "given" || a.status === "partially_settled").reduce((sum, a) => sum + Math.max(0, a.amount - (a.settledAmount || 0)), 0);
+                const settledAdv = advs.reduce((sum, a) => sum + (a.settledAmount || (a.status === "settled" ? a.amount : 0)), 0);
+                return (
+                  <div className="flex justify-between items-center">
+                    <span className="text-muted-foreground text-sm">Active Advance Remaining</span>
+                    <span className="font-bold text-purple-600">
+                      {activeAdv > 0 ? `₹${activeAdv.toLocaleString()}` : (settledAdv > 0 ? "All Cleared" : "₹0")}
+                    </span>
+                  </div>
+                );
+              })()}
             </div>
           </CardContent>
         </Card>

@@ -20,6 +20,7 @@ import { Setting } from "@/models/Setting";
 import { Holiday } from "@/models/Holiday";
 import { Notification } from "@/models/Notification";
 import { Expense } from "@/models/Expense";
+import { AdvancePayment } from "@/models/AdvancePayment";
 import { DailyReport } from "@/models/DailyReport";
 import { Lead } from "@/models/Lead";
 import { DataScraping } from "@/models/DataScraping";
@@ -1220,13 +1221,19 @@ export async function addExpense(data: any, authorId: string) {
   }
 
   const targetId = data.targetEmployeeId || authorId;
+  const rawAmount = Number(data.amount);
 
+  // Advance deduction is NOT done at submission time.
+  // Advances are ONLY deducted when HR or Admin approves the claim.
   const expense = await Expense.create({
     ...data,
     id,
     employeeId: targetId,
     receiptUrls: uploadedReceiptUrls,
-    amount: Number(data.amount),
+    originalAmount: rawAmount,
+    advanceDeducted: 0,
+    advancePaymentIds: [],
+    amount: rawAmount,
     distanceKm: data.distanceKm ? Number(data.distanceKm) : null,
     vehicleAverage: data.vehicleAverage ? Number(data.vehicleAverage) : null,
     petrolRate: data.petrolRate ? Number(data.petrolRate) : null,
@@ -1235,15 +1242,17 @@ export async function addExpense(data: any, authorId: string) {
     status: "pending"
   });
 
+  const advanceNote = ` (Claim: ₹${rawAmount.toLocaleString('en-IN')})`;
+
   await createActivity({
     employeeId: targetId, actorId: authorId, actorRole: authorId === targetId ? "employee" : "hr",
     activityType: "EXPENSE_SUBMITTED", module: "EXPENSE", referenceId: id,
-    message: `Expense claim submitted for ₹${data.amount} (${data.category}).`
+    message: `Expense claim submitted for ₹${rawAmount} (${data.category})${advanceNote}.`
   });
 
   const empDoc = await Employee.findOne({ id: targetId }, { name: 1 }).lean();
   const empName = (empDoc as any)?.name || "An employee";
-  const expMsg = `${empName} submitted an expense claim of ₹${data.amount} (${data.category}).`;
+  const expMsg = `${empName} submitted an expense claim${advanceNote} (${data.category}).`;
 
   await createNotification({
     recipientId: "u_hr",
@@ -1294,15 +1303,18 @@ export async function addBulkExpenses(bills: any[], authorId: string) {
     const id = `EXP${String(max).padStart(3, "0")}`;
     const targetId = b.targetEmployeeId || authorId;
     firstTargetId = targetId;
-    const amountNum = Number(b.amount) || 0;
-    totalAmount += amountNum;
+    const rawAmount = Number(b.amount) || 0;
+    totalAmount += rawAmount;
 
     const expense = await Expense.create({
       id,
       employeeId: targetId,
       title: b.title || "Bill Expense",
       category: b.category || "Other",
-      amount: amountNum,
+      originalAmount: rawAmount,
+      advanceDeducted: 0,
+      advancePaymentIds: [],
+      amount: rawAmount,
       expenseDate: b.expenseDate || new Date().toISOString().slice(0, 10),
       description: b.description || b.title || "Official expense without receipt image",
       receiptUrls: [], // explicitly without image
@@ -1367,6 +1379,35 @@ export async function addBulkExpenses(bills: any[], authorId: string) {
   return createdExpenses;
 }
 
+// Helper to restore advance payments if an expense claim is cancelled, rejected, or deleted
+async function restoreExpenseAdvance(expense: any) {
+  if (expense.advanceDeducted && expense.advanceDeducted > 0 && expense.advancePaymentIds?.length) {
+    let toRestore = expense.advanceDeducted;
+    const linkedAdvances = await AdvancePayment.find({ id: { $in: expense.advancePaymentIds } }).sort({ createdAt: -1 });
+    for (const adv of linkedAdvances) {
+      if (toRestore <= 0) break;
+      const currentSettled = Number(adv.settledAmount) || 0;
+      const restoreAmt = Math.min(currentSettled, toRestore);
+      const newSettled = Math.max(0, currentSettled - restoreAmt);
+      const newStatus = newSettled <= 0 ? "given" : "partially_settled";
+      const newSettledExpenseId = adv.settledExpenseId === expense.id ? null : adv.settledExpenseId;
+
+      await AdvancePayment.findOneAndUpdate(
+        { id: adv.id },
+        {
+          $set: {
+            settledAmount: newSettled,
+            status: newStatus,
+            settledExpenseId: newSettledExpenseId,
+          }
+        }
+      );
+      toRestore -= restoreAmt;
+    }
+    await syncEmployeeAdvanceBalance(expense.employeeId);
+  }
+}
+
 export async function cancelExpense(expenseId: string, userId: string) {
   await connectDB();
   const expense = await Expense.findOne({ id: expenseId });
@@ -1378,6 +1419,9 @@ export async function cancelExpense(expenseId: string, userId: string) {
   expense.cancelledBy = userId;
   expense.cancelledAt = new Date().toISOString();
   await expense.save();
+
+  // If this expense had advance deductions, restore the advance payments
+  await restoreExpenseAdvance(expense);
 
   await createActivity({
     employeeId: userId, actorId: userId, actorRole: "employee",
@@ -1395,7 +1439,61 @@ export async function hrReviewExpense(expenseId: string, action: "approve" | "re
   if (!expense) throw new Error("Expense claim not found");
   if (expense.status !== "pending") throw new Error("Expense claim is not pending HR review");
 
-  expense.status = action === "approve" ? "hr_approved" : "hr_rejected";
+  if (action === "approve") {
+    // Deduct from active advances only upon HR/Admin approval
+    const rawGrossAmount = expense.originalAmount != null && expense.originalAmount > 0 ? expense.originalAmount : expense.amount;
+    let advanceDeducted = 0;
+    const deductedAdvanceIds: string[] = [];
+
+    const activeAdvances = await AdvancePayment.find({
+      employeeId: expense.employeeId,
+      status: { $in: ["given", "partially_settled"] }
+    }).sort({ disbursedDate: 1, createdAt: 1 });
+
+    let remainingDeductionCapacity = rawGrossAmount;
+    for (const adv of activeAdvances) {
+      if (remainingDeductionCapacity <= 0) break;
+      const currentSettled = Number(adv.settledAmount) || 0;
+      const availableAdvance = Math.max(0, Number(adv.amount) - currentSettled);
+
+      if (availableAdvance > 0) {
+        const deductionForThisAdvance = Math.min(availableAdvance, remainingDeductionCapacity);
+        const newSettled = currentSettled + deductionForThisAdvance;
+        const newStatus = newSettled >= Number(adv.amount) ? "settled" : "partially_settled";
+
+        await AdvancePayment.findOneAndUpdate(
+          { id: adv.id },
+          {
+            $set: {
+              settledAmount: newSettled,
+              settledExpenseId: expense.id,
+              settledAt: new Date().toISOString(),
+              status: newStatus,
+            }
+          }
+        );
+
+        advanceDeducted += deductionForThisAdvance;
+        remainingDeductionCapacity -= deductionForThisAdvance;
+        deductedAdvanceIds.push(adv.id);
+      }
+    }
+
+    if (advanceDeducted > 0) {
+      await syncEmployeeAdvanceBalance(expense.employeeId);
+    }
+
+    expense.originalAmount = rawGrossAmount;
+    expense.advanceDeducted = advanceDeducted;
+    expense.advancePaymentIds = deductedAdvanceIds;
+    expense.amount = Math.max(0, rawGrossAmount - advanceDeducted);
+    expense.status = "hr_approved";
+  } else {
+    expense.status = "hr_rejected";
+    // If HR rejects an expense that had advance deductions, restore the advance
+    await restoreExpenseAdvance(expense);
+  }
+
   expense.hrReviewedBy = hrId;
   expense.hrReviewedAt = new Date().toISOString();
   expense.hrReviewComment = comment || null;
@@ -1449,6 +1547,11 @@ export async function adminReviewExpense(expenseId: string, action: "approve" | 
   expense.adminReviewedAt = new Date().toISOString();
   expense.adminReviewComment = comment || null;
   await expense.save();
+
+  // If Admin rejects an expense with advance deductions, restore the advance
+  if (action === "reject") {
+    await restoreExpenseAdvance(expense);
+  }
 
   await createActivity({
     employeeId: expense.employeeId, actorId: adminId, actorRole: userRole,
@@ -1519,6 +1622,54 @@ export async function markExpenseReimbursed(expenseId: string, reviewerId: strin
   return serialize(expense);
 }
 
+export async function employeeAcceptHrExpense(expenseId: string, employeeId: string) {
+  await connectDB();
+  const expense = await Expense.findOne({ id: expenseId });
+  if (!expense) throw new Error("Expense claim not found");
+  if (expense.employeeId !== employeeId) throw new Error("Unauthorized to accept this expense");
+  if (expense.status !== "hr_approved") throw new Error("Expense must be approved by HR first");
+
+  expense.employeeAcceptedHr = true;
+  expense.employeeAcceptedHrAt = new Date().toISOString();
+  await expense.save();
+
+  await createActivity({
+    employeeId,
+    actorId: employeeId,
+    actorRole: "employee",
+    activityType: "EXPENSE_EMPLOYEE_ACCEPTED",
+    module: "EXPENSE",
+    referenceId: expenseId,
+    message: `You accepted HR approval for expense claim of ₹${expense.amount} (${expense.title || expense.category}).`
+  });
+
+  await createNotification({
+    recipientId: "u_hr",
+    senderId: employeeId,
+    senderRole: "employee",
+    title: "Employee Accepted HR Approved Expense",
+    message: `Employee accepted HR approval for ₹${expense.amount} (${expense.title || expense.category}). Claim forwarded to Admin.`,
+    type: "EXPENSE_EMPLOYEE_ACCEPTED",
+    module: "EXPENSE",
+    referenceId: expenseId,
+    actionUrl: `/expenses`
+  });
+
+  await createNotification({
+    recipientId: "u_admin",
+    senderId: employeeId,
+    senderRole: "employee",
+    title: "Expense Ready for Admin Payout Approval",
+    message: `HR approved and employee accepted expense claim of ₹${expense.amount}. Final Admin approval required.`,
+    type: "EXPENSE_EMPLOYEE_ACCEPTED",
+    module: "EXPENSE",
+    referenceId: expenseId,
+    actionUrl: `/expenses`
+  });
+
+  return serialize(expense);
+}
+
 export async function acknowledgeExpenseReceipt(expenseId: string, employeeId: string) {
   await connectDB();
   const expense = await Expense.findOne({ id: expenseId });
@@ -1573,6 +1724,9 @@ export async function deleteExpense(id: string, userRole: string, userId: string
   if (!expense) throw new Error("Expense not found");
   if (userRole === "employee" && expense.employeeId !== userId) throw new Error("Unauthorized to delete this expense");
   if (userRole === "employee" && expense.status !== "pending") throw new Error("Can only delete pending expenses");
+  
+  await restoreExpenseAdvance(expense);
+
   await Expense.findOneAndDelete({ id });
   return { success: true };
 }
@@ -1614,6 +1768,130 @@ export async function updateExpense(id: string, data: any, userRole: string, use
   ).lean();
   
   return serialize(updated);
+}
+
+// Helper function to calculate and update an employee's advance balance in the Employee collection
+export async function syncEmployeeAdvanceBalance(employeeId: string) {
+  if (!employeeId) return;
+  try {
+    const advances = await AdvancePayment.find({ employeeId }).lean();
+    let totalAdvanceTaken = 0;
+    let clearedAdvance = 0;
+    let activeAdvanceBalance = 0;
+
+    for (const a of advances) {
+      const amt = Number(a.amount) || 0;
+      const settled = Number(a.settledAmount) || (a.status === "settled" ? amt : 0);
+      totalAdvanceTaken += amt;
+      clearedAdvance += settled;
+      if (a.status !== "settled") {
+        activeAdvanceBalance += Math.max(0, amt - settled);
+      }
+    }
+
+    await Employee.findOneAndUpdate(
+      { id: employeeId },
+      {
+        $set: {
+          totalAdvanceTaken,
+          activeAdvanceBalance,
+          clearedAdvance,
+        }
+      }
+    );
+  } catch (err) {
+    console.error("Error syncing employee advance balance:", err);
+  }
+}
+
+export async function getAdvancePayments(role?: string, employeeId?: string) {
+  await connectDB();
+  let query: any = {};
+  if (role === "employee" && employeeId) {
+    query.employeeId = employeeId;
+  }
+  const advances = await AdvancePayment.find(query).sort({ disbursedDate: -1, createdAt: -1 }).lean();
+  return serialize(advances);
+}
+
+export async function createAdvancePayment(data: {
+  employeeId: string;
+  amount: number;
+  disbursedDate: string;
+  reason?: string;
+  paymentMode?: string;
+  notes?: string;
+  disbursedBy: string;
+  disbursedByRole: string;
+}) {
+  await connectDB();
+  if (data.disbursedByRole !== "admin" && data.disbursedByRole !== "hr") {
+    throw new Error("Only Admin or HR can give advance money");
+  }
+  if (!data.employeeId || !data.amount || data.amount <= 0) {
+    throw new Error("Please select an employee and enter a valid positive advance amount");
+  }
+
+  const id = `ADV-${Date.now().toString().slice(-6)}`;
+  const advance = await AdvancePayment.create({
+    id,
+    employeeId: data.employeeId,
+    amount: Number(data.amount),
+    disbursedDate: data.disbursedDate || new Date().toISOString().slice(0, 10),
+    reason: data.reason || "",
+    paymentMode: data.paymentMode || "Cash",
+    disbursedBy: data.disbursedBy,
+    disbursedByRole: data.disbursedByRole,
+    notes: data.notes || "",
+    status: "given",
+    settledAmount: 0,
+    settledExpenseId: null,
+    settledAt: null,
+  });
+
+  // Sync advance balance directly onto Employee document
+  await syncEmployeeAdvanceBalance(data.employeeId);
+
+  const emp = await Employee.findOne({ id: data.employeeId }).lean();
+  const empName = emp ? (emp as any).name : data.employeeId;
+
+  await createActivity({
+    employeeId: data.employeeId,
+    actorId: data.disbursedBy,
+    actorRole: data.disbursedByRole,
+    activityType: "ADVANCE_GIVEN",
+    module: "EXPENSE",
+    referenceId: id,
+    message: `Advance money of ₹${data.amount.toLocaleString("en-IN")} given to ${empName} (${data.reason || "Advance"}).`,
+  });
+
+  await createNotification({
+    recipientId: data.employeeId,
+    senderId: data.disbursedBy,
+    senderRole: data.disbursedByRole,
+    title: "Advance Money Received",
+    message: `You have received an advance payment of ₹${data.amount.toLocaleString("en-IN")} from ${data.disbursedByRole.toUpperCase()} (${data.reason || "Advance"}).`,
+    type: "ADVANCE_GIVEN",
+    module: "EXPENSE",
+    referenceId: id,
+    actionUrl: `/expenses`,
+  });
+
+  return serialize(advance);
+}
+
+export async function deleteAdvancePayment(id: string, userRole: string) {
+  await connectDB();
+  if (userRole !== "admin" && userRole !== "hr") {
+    throw new Error("Unauthorized to delete advance record");
+  }
+  const adv = await AdvancePayment.findOne({ id });
+  const employeeId = adv ? adv.employeeId : null;
+  await AdvancePayment.findOneAndDelete({ id });
+  if (employeeId) {
+    await syncEmployeeAdvanceBalance(employeeId);
+  }
+  return { success: true };
 }
 
 export async function getDailyReports(role?: string, employeeId?: string) {
