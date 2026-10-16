@@ -264,48 +264,7 @@ export default function QuotationGenerator() {
   const [savedQuotations, setSavedQuotations] = useState<SavedQuotation[]>([]);
   const [loadingSavedQuotations, setLoadingSavedQuotations] = useState(false);
   const [isPreviewing, setIsPreviewing] = useState(false);
-  const [loadingIdentifiers, setLoadingIdentifiers] = useState(true);
-  const [identifierError, setIdentifierError] = useState('');
-  const [identifierAttempt, setIdentifierAttempt] = useState(0);
-  const identifierRequest = useRef<Promise<{ quoteNumber: string; customerId: string }> | null>(null);
-
-  useEffect(() => {
-    let active = true;
-    setLoadingIdentifiers(true);
-    setIdentifierError('');
-
-    if (!identifierRequest.current) {
-      identifierRequest.current = fetch('/api/quotations')
-        .then(async (response) => {
-          const result = await response.json();
-          if (!response.ok) throw new Error(result.error || 'Failed to generate quotation identifiers');
-          return result as { quoteNumber: string; customerId: string };
-        })
-        .catch((error) => {
-          identifierRequest.current = null;
-          throw error;
-        });
-    }
-
-    identifierRequest.current
-      .then(({ quoteNumber, customerId }) => {
-        if (!active) return;
-        setFormData((current) => ({ ...current, quoteNumber, customerId }));
-      })
-      .catch((error: unknown) => {
-        if (!active) return;
-        const message = error instanceof Error ? error.message : 'Failed to generate quotation identifiers';
-        setIdentifierError(message);
-        toast.error(message);
-      })
-      .finally(() => {
-        if (active) setLoadingIdentifiers(false);
-      });
-
-    return () => {
-      active = false;
-    };
-  }, [identifierAttempt]);
+  const [isGenerating, setIsGenerating] = useState(false);
 
   useEffect(() => {
     if (!user) return;
@@ -496,8 +455,6 @@ export default function QuotationGenerator() {
   );
 
   const total = calculations.subtotal + calculations.sgst + calculations.cgst;
-
-  const [isGenerating, setIsGenerating] = useState(false);
 
   const validateQuotation = () => {
     const hasMissingDetails =
