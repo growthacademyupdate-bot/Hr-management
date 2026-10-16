@@ -1,11 +1,73 @@
 import { NextRequest, NextResponse } from 'next/server';
 import mongoose from 'mongoose';
 import { Quotation } from '@/models/Quotation';
+import { QuotationSequence } from '@/models/QuotationSequence';
 import PDFDocument from 'pdfkit';
 import path from 'path';
 import fs from 'fs';
 
 import connectDB from '@/lib/mongoose'; // assuming lib/mongoose exists based on open files
+
+async function getNextSequence(
+  key: string,
+  existingValues: PromiseLike<{ sequence: number }[]>
+) {
+  if (!(await QuotationSequence.exists({ _id: key }))) {
+    const existing = await existingValues;
+    const highest = existing[0]?.sequence ?? -1;
+    try {
+      await QuotationSequence.updateOne(
+        { _id: key },
+        { $setOnInsert: { sequence: highest } },
+        { upsert: true }
+      );
+    } catch (error) {
+      if ((error as { code?: number }).code !== 11000) throw error;
+    }
+  }
+
+  const counter = await QuotationSequence.findOneAndUpdate(
+    { _id: key },
+    { $inc: { sequence: 1 } },
+    { new: true }
+  );
+  if (!counter) throw new Error(`Failed to allocate ${key} sequence`);
+  return counter.sequence;
+}
+
+export async function GET() {
+  try {
+    await connectDB();
+    const [quoteSequence, customerSequence] = await Promise.all([
+      getNextSequence(
+        'quotation',
+        Quotation.aggregate([
+          { $match: { quoteNumber: /^ALM\d+$/ } },
+          {
+            $project: {
+              sequence: {
+                $toInt: {
+                  $arrayElemAt: [{ $split: ['$quoteNumber', 'ALM'] }, 1],
+                },
+              },
+            },
+          },
+          { $sort: { sequence: -1 } },
+          { $limit: 1 },
+        ])
+      ),
+      getNextSequence('customer-id-from-zero-v1', Promise.resolve([])),
+    ]);
+
+    return NextResponse.json({
+      quoteNumber: `ALM${String(quoteSequence).padStart(3, '0')}`,
+      customerId: String(customerSequence),
+    });
+  } catch (error) {
+    console.error('Quotation identifier allocation error:', error);
+    return NextResponse.json({ error: 'Failed to generate quotation identifiers' }, { status: 500 });
+  }
+}
 
 // Helper function to convert stream to buffer
 const streamToBuffer = (stream: any): Promise<Buffer> => {
@@ -113,6 +175,12 @@ export async function POST(req: NextRequest) {
     const pinH = doc.heightOfString(pincode || '', { width: 380 });
     doc.text(pincode, 160, currentCustY, { width: 380 });
     currentCustY += pinH + 10;
+
+    if (customerId !== undefined && customerId !== null && customerId !== '') {
+      doc.font('Helvetica-Bold').text('Customer ID:', 50, currentCustY);
+      doc.font('Helvetica').text(String(customerId), 160, currentCustY, { width: 380 });
+      currentCustY += 15;
+    }
     
     doc.rect(40, custY + 20, 515, currentCustY - (custY + 20)).stroke('#cccccc');
 

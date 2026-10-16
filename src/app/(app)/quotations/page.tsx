@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -312,7 +312,6 @@ export default function QuotationGenerator() {
       address: quotation.address || '',
       pincode: quotation.pincode || '',
       email: quotation.email || '',
-      customerId: quotation.customerId || '',
     }));
   };
 
@@ -486,12 +485,20 @@ export default function QuotationGenerator() {
   };
 
   const openPreview = () => {
+    if (loadingIdentifiers || identifierError) {
+      toast.error('Quotation identifiers are not ready yet. Please try again.');
+      return;
+    }
     if (!validateQuotation()) return;
     setIsPreviewing(true);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const generatePDF = async () => {
+    if (loadingIdentifiers || identifierError) {
+      toast.error('Quotation identifiers are not ready yet. Please try again.');
+      return;
+    }
     if (!validateQuotation()) return;
 
     setIsGenerating(true);
@@ -808,10 +815,6 @@ export default function QuotationGenerator() {
               <Label>Email ID</Label>
               <Input name="email" value={formData.email} onChange={handleInputChange} placeholder="Enter email id" className={manualInputClass} />
             </div>
-            <div className="space-y-2">
-              <Label>Customer ID</Label>
-              <Input name="customerId" value={formData.customerId} onChange={handleInputChange} placeholder="Enter customer ID" className={manualInputClass} />
-            </div>
           </CardContent>
         </Card>
 
@@ -844,13 +847,28 @@ export default function QuotationGenerator() {
                 <div className="space-y-2">
                   <Label>Quote Number <span className="text-rose-600">*</span></Label>
                   <Input
-                    name="quoteNumber"
                     value={formData.quoteNumber}
-                    onChange={handleInputChange}
-                    placeholder="Or enter quote number manually"
+                    placeholder={loadingIdentifiers ? 'Generating quote number...' : 'Quote number'}
+                    readOnly
                     aria-required="true"
-                    className={requiredInputClass}
+                    className="border-amber-400 bg-amber-50/70 focus-visible:ring-amber-500"
                   />
+                  {identifierError && (
+                    <div className="flex items-center justify-between gap-2 text-sm text-destructive">
+                      <span>{identifierError}</span>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          identifierRequest.current = null;
+                          setIdentifierAttempt((attempt) => attempt + 1);
+                        }}
+                      >
+                        Retry
+                      </Button>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
