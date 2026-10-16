@@ -42,6 +42,9 @@ const ExpenseSchema = new mongoose.Schema({
   hrReviewedAt: { type: String, default: null },
   hrReviewComment: { type: String, default: null },
 
+  employeeAcceptedHr: { type: Boolean, default: false },
+  employeeAcceptedHrAt: { type: String, default: null },
+
   adminReviewedBy: { type: String, default: null },
   adminReviewedAt: { type: String, default: null },
   adminReviewComment: { type: String, default: null },
@@ -51,6 +54,10 @@ const ExpenseSchema = new mongoose.Schema({
 
   employeeReceived: { type: Boolean, default: false },
   employeeReceivedAt: { type: String, default: null },
+
+  originalAmount: { type: Number, default: null },
+  advanceDeducted: { type: Number, default: 0 },
+  advancePaymentIds: { type: [String], default: [] },
 
   cancelledBy: { type: String, default: null },
   cancelledAt: { type: String, default: null },

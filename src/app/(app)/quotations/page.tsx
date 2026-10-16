@@ -13,9 +13,6 @@ import { getQuotationHistory } from '@/app/actions';
 import { useAuth } from '@/lib/store';
 import { ArrowLeft, Eye, FileDown } from 'lucide-react';
 
-const manualInputClass = 'border-sky-300 bg-sky-50/70 focus-visible:ring-sky-500';
-const requiredInputClass = 'border-amber-400 bg-sky-50/70 focus-visible:ring-amber-500';
-
 const quotationTemplates: Record<string, { description: string; serviceDetails: string }> = {
   ecommerce: {
     description: 'E-commerce Website',
@@ -263,6 +260,7 @@ export default function QuotationGenerator() {
   const [selectedTemplate, setSelectedTemplate] = useState<string>('');
   const [savedQuotations, setSavedQuotations] = useState<SavedQuotation[]>([]);
   const [loadingSavedQuotations, setLoadingSavedQuotations] = useState(false);
+  const [isPreviewing, setIsPreviewing] = useState(false);
 
   useEffect(() => {
     if (!user) return;
