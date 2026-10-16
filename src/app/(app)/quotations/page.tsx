@@ -454,6 +454,7 @@ export default function QuotationGenerator() {
   const total = calculations.subtotal + calculations.sgst + calculations.cgst;
 
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isPreviewing, setIsPreviewing] = useState(false);
 
   const validateQuotation = () => {
     const hasMissingDetails =
@@ -556,6 +557,12 @@ export default function QuotationGenerator() {
         <p className="text-gray-500">
           {isPreviewing ? "Review the quotation before generating the PDF." : "Fill in the details, then preview your quotation before generating the PDF."}
         </p>
+        {!isPreviewing && (
+          <p className="mt-3 text-sm text-muted-foreground">
+            <span className="mr-1 inline-block h-2.5 w-2.5 rounded-full bg-sky-200 ring-1 ring-sky-400" aria-hidden="true" />
+            Blue boxes are for manual entry. <span className="font-semibold text-rose-600">*</span> Required field.
+          </p>
+        )}
       </div>
 
       {isPreviewing ? (
@@ -689,7 +696,7 @@ export default function QuotationGenerator() {
           </CardHeader>
           <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2 md:col-span-2">
-              <Label>Select Quotation</Label>
+              <Label>Quotation / Service Title <span className="text-rose-600">*</span></Label>
               <div className="space-y-3">
                 <Select onValueChange={handleQuotationTemplateSelect}>
                   <SelectTrigger>
@@ -711,6 +718,8 @@ export default function QuotationGenerator() {
                   onChange={(event) => handleFirstItemDescriptionChange(event.target.value)}
                   placeholder="Or type a custom service title"
                   aria-label="Custom service title"
+                  aria-required="true"
+                  className={requiredInputClass}
                 />
               </div>
             </div>
@@ -735,13 +744,20 @@ export default function QuotationGenerator() {
                     ))}
                   </SelectContent>
                 </Select>
-                <Input
-                  name="customerName"
-                  value={formData.customerName}
-                  onChange={handleInputChange}
-                  placeholder="Or enter customer name manually"
-                  aria-label="Customer name"
-                />
+                <div className="space-y-2">
+                  <Label>
+                    Customer Name <span className="text-rose-600">*</span>
+                  </Label>
+                  <Input
+                    name="customerName"
+                    value={formData.customerName}
+                    onChange={handleInputChange}
+                    placeholder="Or enter customer name manually"
+                    aria-label="Customer name"
+                    aria-required="true"
+                    className={requiredInputClass}
+                  />
+                </div>
               </div>
             </div>
             {selectedTemplate === 'digital' && (
@@ -768,32 +784,32 @@ export default function QuotationGenerator() {
               </div>
             )}
             <div className="space-y-2">
-              <Label>Company / Store / Shop Name *</Label>
-              <Input name="companyName" value={formData.companyName} onChange={handleInputChange} placeholder="Enter company name" />
+              <Label>Company / Store / Shop Name <span className="text-rose-600">*</span></Label>
+              <Input name="companyName" value={formData.companyName} onChange={handleInputChange} placeholder="Enter company name" aria-required="true" className={requiredInputClass} />
             </div>
             <div className="space-y-2">
-              <Label>Customer Mobile Number *</Label>
-              <Input name="customerMobile" value={formData.customerMobile} onChange={handleInputChange} placeholder="Enter mobile number" />
+              <Label>Customer Mobile Number <span className="text-rose-600">*</span></Label>
+              <Input name="customerMobile" value={formData.customerMobile} onChange={handleInputChange} placeholder="Enter mobile number" aria-required="true" className={requiredInputClass} />
             </div>
             <div className="space-y-2">
               <Label>Customer Mobile Number 2</Label>
-              <Input name="customerMobile2" value={formData.customerMobile2} onChange={handleInputChange} placeholder="Enter mobile number" />
+              <Input name="customerMobile2" value={formData.customerMobile2} onChange={handleInputChange} placeholder="Enter mobile number" className={manualInputClass} />
             </div>
             <div className="space-y-2">
-              <Label>Address *</Label>
-              <Input name="address" value={formData.address} onChange={handleInputChange} placeholder="Enter address" />
+              <Label>Address <span className="text-rose-600">*</span></Label>
+              <Input name="address" value={formData.address} onChange={handleInputChange} placeholder="Enter address" aria-required="true" className={requiredInputClass} />
             </div>
             <div className="space-y-2">
-              <Label>Pincode *</Label>
-              <Input name="pincode" value={formData.pincode} onChange={handleInputChange} placeholder="Enter pincode" />
+              <Label>Pincode <span className="text-rose-600">*</span></Label>
+              <Input name="pincode" value={formData.pincode} onChange={handleInputChange} placeholder="Enter pincode" aria-required="true" className={requiredInputClass} />
             </div>
             <div className="space-y-2">
               <Label>Email ID</Label>
-              <Input name="email" value={formData.email} onChange={handleInputChange} placeholder="Enter email id" />
+              <Input name="email" value={formData.email} onChange={handleInputChange} placeholder="Enter email id" className={manualInputClass} />
             </div>
             <div className="space-y-2">
               <Label>Customer ID</Label>
-              <Input name="customerId" value={formData.customerId} onChange={handleInputChange} placeholder="Enter customer ID" />
+              <Input name="customerId" value={formData.customerId} onChange={handleInputChange} placeholder="Enter customer ID" className={manualInputClass} />
             </div>
           </CardContent>
         </Card>
@@ -824,26 +840,30 @@ export default function QuotationGenerator() {
                     ))}
                   </SelectContent>
                 </Select>
-                <Input
-                  name="quoteNumber"
-                  value={formData.quoteNumber}
-                  onChange={handleInputChange}
-                  placeholder="Or enter quote number manually"
-                  aria-label="Quote number"
-                />
+                <div className="space-y-2">
+                  <Label>Quote Number <span className="text-rose-600">*</span></Label>
+                  <Input
+                    name="quoteNumber"
+                    value={formData.quoteNumber}
+                    onChange={handleInputChange}
+                    placeholder="Or enter quote number manually"
+                    aria-required="true"
+                    className={requiredInputClass}
+                  />
+                </div>
               </div>
             </div>
             <div className="space-y-2">
-              <Label>Date *</Label>
-              <Input type="date" name="date" value={formData.date} onChange={handleInputChange} />
+              <Label>Date <span className="text-rose-600">*</span></Label>
+              <Input type="date" name="date" value={formData.date} onChange={handleInputChange} aria-required="true" className={requiredInputClass} />
             </div>
             <div className="space-y-2">
-              <Label>Valid Until *</Label>
-              <Input type="date" name="validUntil" value={formData.validUntil} onChange={handleInputChange} />
+              <Label>Valid Until <span className="text-rose-600">*</span></Label>
+              <Input type="date" name="validUntil" value={formData.validUntil} onChange={handleInputChange} aria-required="true" className={requiredInputClass} />
             </div>
             <div className="space-y-2">
-              <Label>BDE Name *</Label>
-              <Input name="bdeName" value={formData.bdeName} onChange={handleInputChange} placeholder="Enter BDE Name" />
+              <Label>BDE Name <span className="text-rose-600">*</span></Label>
+              <Input name="bdeName" value={formData.bdeName} onChange={handleInputChange} placeholder="Enter BDE Name" aria-required="true" className={requiredInputClass} />
             </div>
           </CardContent>
         </Card>
@@ -864,7 +884,7 @@ export default function QuotationGenerator() {
                 </div>
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                   <div className="space-y-2">
-                    <Label>Choose a preset (optional)</Label>
+                    <Label>Service Description <span className="text-rose-600">*</span></Label>
                     <Select onValueChange={(value) => handleItemPresetSelect(index, value)}>
                       <SelectTrigger>
                         <SelectValue placeholder="Select a service preset..." />
@@ -897,17 +917,19 @@ export default function QuotationGenerator() {
                       onChange={e => handleItemChange(index, 'description', e.target.value)}
                       placeholder="Or enter a service description manually"
                       aria-label={`Manual description for item ${index + 1}`}
+                      aria-required="true"
+                      className={requiredInputClass}
                     />
                   </div>
                 </div>
                 <div className={`grid grid-cols-1 gap-4 ${selectedTemplate === 'rcs' ? 'md:grid-cols-4' : 'md:grid-cols-5'}`}>
                   <div className="space-y-2">
-                    <Label>{selectedTemplate === 'rcs' ? 'Rate' : 'Unit Price'}</Label>
-                    <Input type="number" value={item.unitPrice} onChange={e => handleItemChange(index, 'unitPrice', e.target.value)} placeholder="0.00" />
+                    <Label>{selectedTemplate === 'rcs' ? 'Rate' : 'Unit Price'} <span className="text-rose-600">*</span></Label>
+                    <Input type="number" value={item.unitPrice} onChange={e => handleItemChange(index, 'unitPrice', e.target.value)} placeholder="0.00" aria-required="true" className={requiredInputClass} />
                   </div>
                   <div className="space-y-2">
-                    <Label>Quantity</Label>
-                    <Input type="number" value={item.quantity} onChange={e => handleItemChange(index, 'quantity', e.target.value)} placeholder="1" />
+                    <Label>Quantity <span className="text-rose-600">*</span></Label>
+                    <Input type="number" value={item.quantity} onChange={e => handleItemChange(index, 'quantity', e.target.value)} placeholder="1" aria-required="true" className={requiredInputClass} />
                   </div>
                   {selectedTemplate === 'rcs' && (
                     <div className="space-y-2">
@@ -919,11 +941,11 @@ export default function QuotationGenerator() {
                   )}
                   <div className="space-y-2">
                     <Label>SGST %</Label>
-                    <Input type="number" value={item.sgstPercent} onChange={e => handleItemChange(index, 'sgstPercent', e.target.value)} placeholder="0" />
+                    <Input type="number" value={item.sgstPercent} onChange={e => handleItemChange(index, 'sgstPercent', e.target.value)} placeholder="0" className={manualInputClass} />
                   </div>
                   <div className="space-y-2">
                     <Label>CGST %</Label>
-                    <Input type="number" value={item.cgstPercent} onChange={e => handleItemChange(index, 'cgstPercent', e.target.value)} placeholder="0" />
+                    <Input type="number" value={item.cgstPercent} onChange={e => handleItemChange(index, 'cgstPercent', e.target.value)} placeholder="0" className={manualInputClass} />
                   </div>
                 </div>
                 <div className="flex items-center space-x-2 pt-2">
@@ -932,7 +954,7 @@ export default function QuotationGenerator() {
                 </div>
                 <div className="space-y-2">
                   <Label>Service Details (Enter each point on a new line)</Label>
-                  <Textarea rows={4} value={item.serviceDetails} onChange={e => handleItemChange(index, 'serviceDetails', e.target.value)} placeholder="• Detail 1&#10;• Detail 2" className="resize-none" />
+                  <Textarea rows={4} value={item.serviceDetails} onChange={e => handleItemChange(index, 'serviceDetails', e.target.value)} placeholder="• Detail 1&#10;• Detail 2" className={`resize-none ${manualInputClass}`} />
                 </div>
               </div>
             ))}
@@ -988,11 +1010,12 @@ export default function QuotationGenerator() {
                     onChange={e => updateAdditionalService(index, 'description', e.target.value)}
                     placeholder="Or enter a service description manually"
                     aria-label={`Manual description for additional service ${index + 1}`}
+                    className={manualInputClass}
                   />
                 </div>
                 <div className="w-48 space-y-2">
                   <Label>Amount</Label>
-                  <Input value={service.amount} onChange={e => updateAdditionalService(index, 'amount', e.target.value)} />
+                  <Input value={service.amount} onChange={e => updateAdditionalService(index, 'amount', e.target.value)} className={manualInputClass} />
                 </div>
                 <Button variant="ghost" className="mt-8 text-red-500" onClick={() => removeAdditionalService(index)}>Delete</Button>
               </div>
