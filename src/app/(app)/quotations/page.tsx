@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -12,6 +12,9 @@ import { toast } from 'sonner';
 import { getQuotationHistory } from '@/app/actions';
 import { useAuth } from '@/lib/store';
 import { ArrowLeft, Eye, FileDown } from 'lucide-react';
+
+const manualInputClass = 'border-sky-300 bg-sky-50/70 focus-visible:ring-sky-500';
+const requiredInputClass = 'border-amber-400 bg-sky-50/70 focus-visible:ring-amber-500';
 
 const quotationTemplates: Record<string, { description: string; serviceDetails: string }> = {
   ecommerce: {
@@ -261,6 +264,48 @@ export default function QuotationGenerator() {
   const [savedQuotations, setSavedQuotations] = useState<SavedQuotation[]>([]);
   const [loadingSavedQuotations, setLoadingSavedQuotations] = useState(false);
   const [isPreviewing, setIsPreviewing] = useState(false);
+  const [loadingIdentifiers, setLoadingIdentifiers] = useState(true);
+  const [identifierError, setIdentifierError] = useState('');
+  const [identifierAttempt, setIdentifierAttempt] = useState(0);
+  const identifierRequest = useRef<Promise<{ quoteNumber: string; customerId: string }> | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    setLoadingIdentifiers(true);
+    setIdentifierError('');
+
+    if (!identifierRequest.current) {
+      identifierRequest.current = fetch('/api/quotations')
+        .then(async (response) => {
+          const result = await response.json();
+          if (!response.ok) throw new Error(result.error || 'Failed to generate quotation identifiers');
+          return result as { quoteNumber: string; customerId: string };
+        })
+        .catch((error) => {
+          identifierRequest.current = null;
+          throw error;
+        });
+    }
+
+    identifierRequest.current
+      .then(({ quoteNumber, customerId }) => {
+        if (!active) return;
+        setFormData((current) => ({ ...current, quoteNumber, customerId }));
+      })
+      .catch((error: unknown) => {
+        if (!active) return;
+        const message = error instanceof Error ? error.message : 'Failed to generate quotation identifiers';
+        setIdentifierError(message);
+        toast.error(message);
+      })
+      .finally(() => {
+        if (active) setLoadingIdentifiers(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [identifierAttempt]);
 
   useEffect(() => {
     if (!user) return;
@@ -308,7 +353,6 @@ export default function QuotationGenerator() {
       address: quotation.address || '',
       pincode: quotation.pincode || '',
       email: quotation.email || '',
-      customerId: quotation.customerId || '',
     }));
   };
 
@@ -454,7 +498,6 @@ export default function QuotationGenerator() {
   const total = calculations.subtotal + calculations.sgst + calculations.cgst;
 
   const [isGenerating, setIsGenerating] = useState(false);
-  const [isPreviewing, setIsPreviewing] = useState(false);
 
   const validateQuotation = () => {
     const hasMissingDetails =
@@ -485,12 +528,20 @@ export default function QuotationGenerator() {
   };
 
   const openPreview = () => {
+    if (loadingIdentifiers || identifierError) {
+      toast.error('Quotation identifiers are not ready yet. Please try again.');
+      return;
+    }
     if (!validateQuotation()) return;
     setIsPreviewing(true);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const generatePDF = async () => {
+    if (loadingIdentifiers || identifierError) {
+      toast.error('Quotation identifiers are not ready yet. Please try again.');
+      return;
+    }
     if (!validateQuotation()) return;
 
     setIsGenerating(true);
@@ -807,10 +858,6 @@ export default function QuotationGenerator() {
               <Label>Email ID</Label>
               <Input name="email" value={formData.email} onChange={handleInputChange} placeholder="Enter email id" className={manualInputClass} />
             </div>
-            <div className="space-y-2">
-              <Label>Customer ID</Label>
-              <Input name="customerId" value={formData.customerId} onChange={handleInputChange} placeholder="Enter customer ID" className={manualInputClass} />
-            </div>
           </CardContent>
         </Card>
 
@@ -843,13 +890,28 @@ export default function QuotationGenerator() {
                 <div className="space-y-2">
                   <Label>Quote Number <span className="text-rose-600">*</span></Label>
                   <Input
-                    name="quoteNumber"
                     value={formData.quoteNumber}
-                    onChange={handleInputChange}
-                    placeholder="Or enter quote number manually"
+                    placeholder={loadingIdentifiers ? 'Generating quote number...' : 'Quote number'}
+                    readOnly
                     aria-required="true"
-                    className={requiredInputClass}
+                    className="border-amber-400 bg-amber-50/70 focus-visible:ring-amber-500"
                   />
+                  {identifierError && (
+                    <div className="flex items-center justify-between gap-2 text-sm text-destructive">
+                      <span>{identifierError}</span>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          identifierRequest.current = null;
+                          setIdentifierAttempt((attempt) => attempt + 1);
+                        }}
+                      >
+                        Retry
+                      </Button>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
