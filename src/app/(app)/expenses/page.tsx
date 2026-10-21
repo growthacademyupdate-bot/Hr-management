@@ -14,6 +14,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Checkbox } from "@/components/ui/checkbox";
 import { useDataTable } from "@/hooks/useDataTable";
 import { SortableHeader } from "@/components/SortableHeader";
 import { DataTablePagination } from "@/components/DataTablePagination";
@@ -45,6 +46,7 @@ export default function ExpensesPage() {
   const [galleryExpense, setGalleryExpense] = useState<Expense | null>(null);
   const [previewZoom, setPreviewZoom] = useState(1);
   const [employeeExpensesModal, setEmployeeExpensesModal] = useState<string | null>(null);
+  const [selectedEmployeeExpenseIds, setSelectedEmployeeExpenseIds] = useState<string[]>([]);
   const [confirmReceiptExpense, setConfirmReceiptExpense] = useState<Expense | null>(null);
   const [isConfirmingReceipt, setIsConfirmingReceipt] = useState(false);
 
@@ -2292,7 +2294,15 @@ export default function ExpensesPage() {
       </Dialog>
 
       {/* --- EMPLOYEE EXPENSES MODAL --- */}
-      <Dialog open={!!employeeExpensesModal} onOpenChange={(open) => !open && setEmployeeExpensesModal(null)}>
+      <Dialog 
+        open={!!employeeExpensesModal} 
+        onOpenChange={(open) => {
+          if (!open) {
+            setEmployeeExpensesModal(null);
+            setSelectedEmployeeExpenseIds([]);
+          }
+        }}
+      >
         <DialogContent className="max-w-[95vw] max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>
@@ -2303,6 +2313,26 @@ export default function ExpensesPage() {
             <Table>
               <TableHeader className="bg-muted/50">
                 <TableRow>
+                  <TableHead className="w-[45px] text-center">
+                    <Checkbox
+                      checked={
+                        employeeExpenses.length > 0 &&
+                        selectedEmployeeExpenseIds.length === employeeExpenses.length
+                          ? true
+                          : selectedEmployeeExpenseIds.length > 0
+                          ? "indeterminate"
+                          : false
+                      }
+                      onCheckedChange={(checked) => {
+                        if (checked) {
+                          setSelectedEmployeeExpenseIds(employeeExpenses.map((e) => e.id));
+                        } else {
+                          setSelectedEmployeeExpenseIds([]);
+                        }
+                      }}
+                      aria-label="Select all expenses"
+                    />
+                  </TableHead>
                   <TableHead>Claim ID</TableHead>
                   <TableHead>Title</TableHead>
                   <TableHead>Category</TableHead>
@@ -2315,235 +2345,281 @@ export default function ExpensesPage() {
               <TableBody>
                 {employeeExpenses.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={7} className="text-center py-4 text-muted-foreground">
+                    <TableCell colSpan={8} className="text-center py-4 text-muted-foreground">
                       No expenses found for this employee.
                     </TableCell>
                   </TableRow>
                 ) : (
-                  employeeExpenses.map(exp => (
-                    <TableRow key={exp.id}>
-                      <TableCell className="font-mono text-xs">{exp.id}</TableCell>
-                      <TableCell>
-                        <div className="font-medium text-sm">{exp.title}</div>
-                        <div className="text-xs text-muted-foreground truncate max-w-[200px]">{exp.description}</div>
-                      </TableCell>
-                      <TableCell><Badge variant="secondary" className="font-normal">{exp.category}</Badge></TableCell>
-                      <TableCell className="text-xs">{new Date(exp.expenseDate).toLocaleDateString()}</TableCell>
-                      <TableCell className="text-sm">
-                        <div className="font-bold text-foreground">
-                          ₹{(exp.originalAmount != null && exp.advanceDeducted ? exp.originalAmount : exp.amount).toLocaleString('en-IN')}
-                        </div>
-                        {exp.advanceDeducted != null && exp.advanceDeducted > 0 && (
-                          <div className="text-[10px] text-purple-600 dark:text-purple-400 font-medium whitespace-nowrap">
-                            -₹{exp.advanceDeducted.toLocaleString('en-IN')} adv (Net: ₹{exp.amount.toLocaleString('en-IN')})
+                  employeeExpenses.map(exp => {
+                    const isSelected = selectedEmployeeExpenseIds.includes(exp.id);
+                    return (
+                      <TableRow 
+                        key={exp.id}
+                        className={isSelected ? "bg-emerald-50/40 dark:bg-emerald-950/20" : undefined}
+                      >
+                        <TableCell className="text-center">
+                          <Checkbox
+                            checked={isSelected}
+                            onCheckedChange={(checked) => {
+                              if (checked) {
+                                setSelectedEmployeeExpenseIds(prev => [...prev, exp.id]);
+                              } else {
+                                setSelectedEmployeeExpenseIds(prev => prev.filter(id => id !== exp.id));
+                              }
+                            }}
+                            aria-label={`Select claim ${exp.id}`}
+                          />
+                        </TableCell>
+                        <TableCell className="font-mono text-xs">{exp.id}</TableCell>
+                        <TableCell>
+                          <div className="font-medium text-sm">{exp.title}</div>
+                          <div className="text-xs text-muted-foreground truncate max-w-[200px]">{exp.description}</div>
+                        </TableCell>
+                        <TableCell><Badge variant="secondary" className="font-normal">{exp.category}</Badge></TableCell>
+                        <TableCell className="text-xs">{new Date(exp.expenseDate).toLocaleDateString()}</TableCell>
+                        <TableCell className="text-sm">
+                          <div className="font-bold text-foreground">
+                            ₹{(exp.originalAmount != null && exp.advanceDeducted ? exp.originalAmount : exp.amount).toLocaleString('en-IN')}
                           </div>
-                        )}
-                      </TableCell>
-                      <TableCell>{renderStatusBadge(exp.status)}</TableCell>
-                      <TableCell className="text-right whitespace-nowrap">
-                        <div className="flex items-center justify-end gap-1">
-                          {/* View Images / Details */}
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8 text-blue-600 hover:bg-blue-50"
-                            title="View Images"
-                            onClick={() => {
-                              setGalleryExpense(exp);
-                            }}
-                          >
-                            <Eye className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8"
-                            title="View Claim Details"
-                            onClick={() => {
-                              setSelectedExpense(exp);
-                              setOpenReceiptModal(true);
-                            }}
-                          >
-                            <Info className="h-4 w-4 text-muted-foreground" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8 text-indigo-600 hover:bg-indigo-50"
-                            title="Print Expense Bill"
-                            onClick={() => setPrintExpense(exp)}
-                          >
-                            <FileText className="h-4 w-4" />
-                          </Button>
-
-                          {/* HR Approval Action */}
-                          {isHR && exp.status === "pending" && (
-                            <div className="flex items-center gap-1">
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                className="h-7 text-xs bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100"
-                                onClick={() => {
-                                  setSelectedExpense(exp);
-                                  setReviewAction("approve");
-                                  setReviewTargetStage("hr");
-                                  setOpenReviewModal(true);
-                                }}
-                              >
-                                <Check className="h-3 w-3 mr-1" /> Approve
-                              </Button>
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                className="h-7 text-xs bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100"
-                                onClick={() => {
-                                  setSelectedExpense(exp);
-                                  setReviewAction("reject");
-                                  setReviewTargetStage("hr");
-                                  setOpenReviewModal(true);
-                                }}
-                              >
-                                <X className="h-3 w-3 mr-1" /> Reject
-                              </Button>
+                          {exp.advanceDeducted != null && exp.advanceDeducted > 0 && (
+                            <div className="text-[10px] text-purple-600 dark:text-purple-400 font-medium whitespace-nowrap">
+                              -₹{exp.advanceDeducted.toLocaleString('en-IN')} adv (Net: ₹{exp.amount.toLocaleString('en-IN')})
                             </div>
                           )}
-
-                          {/* Admin Approval Action */}
-                          {isAdmin && (exp.status === "pending" || exp.status === "hr_approved") && (
-                            <div className="flex items-center gap-1">
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                className="h-7 text-xs bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100"
-                                onClick={() => {
-                                  setSelectedExpense(exp);
-                                  setReviewAction("approve");
-                                  setReviewTargetStage("admin");
-                                  setOpenReviewModal(true);
-                                }}
-                              >
-                                <Check className="h-3 w-3 mr-1" /> Approve
-                              </Button>
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                className="h-7 text-xs bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100"
-                                onClick={() => {
-                                  setSelectedExpense(exp);
-                                  setReviewAction("reject");
-                                  setReviewTargetStage("admin");
-                                  setOpenReviewModal(true);
-                                }}
-                              >
-                                <X className="h-3 w-3 mr-1" /> Reject
-                              </Button>
-                            </div>
-                          )}
-
-                          {/* Mark as Reimbursed Action (Admin or HR on approved expenses) */}
-                          {(isAdmin || isHR) && (exp.status === "admin_approved" || exp.status === "hr_approved") && (
-                            <Button
-                              variant="default"
-                              size="sm"
-                              className="h-7 text-xs bg-emerald-600 hover:bg-emerald-700 text-white"
-                              onClick={() => handleMarkReimbursed(exp)}
-                            >
-                              <Wallet className="h-3 w-3 mr-1" /> Mark Paid
-                            </Button>
-                          )}
-
-                          {/* Employee Cancel Action */}
-                          {isEmployee && exp.status === "pending" && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="h-7 text-xs text-rose-600 hover:bg-rose-50"
-                              onClick={() => handleCancelExpense(exp.id)}
-                            >
-                              Cancel
-                            </Button>
-                          )}
-
-                          {/* Edit Expense */}
-                          {((isEmployee && exp.status === "pending") || isAdmin || isHR) && (
+                        </TableCell>
+                        <TableCell>{renderStatusBadge(exp.status)}</TableCell>
+                        <TableCell className="text-right whitespace-nowrap">
+                          <div className="flex items-center justify-end gap-1">
+                            {/* View Images / Details */}
                             <Button
                               variant="ghost"
                               size="icon"
-                              className="h-8 w-8 hover:bg-slate-100"
-                              title="Edit Expense Record"
+                              className="h-8 w-8 text-blue-600 hover:bg-blue-50"
+                              title="View Images"
                               onClick={() => {
-                                setEditExpenseId(exp.id);
-                                setFormData({
-                                  title: exp.title,
-                                  category: exp.category as any,
-                                  amount: exp.amount.toString(),
-                                  expenseDate: exp.expenseDate,
-                                  description: exp.description,
-                                  receiptUrls: exp.receiptUrls || [],
-                                  gstPercent: (exp.gstPercent || 0).toString(),
-                                  bankHolderName: exp.bankHolderName || "",
-                                  bankName: exp.bankName || "",
-                                  branch: exp.branch || "",
-                                  accountNo: exp.accountNo || "",
-                                  ifscCode: exp.ifscCode || "",
-                                  upiId: exp.upiId || "",
-                                  customCategory: "",
-                                  vehicleType: exp.vehicleType || "",
-                                  vehicleNumber: exp.vehicleNumber || "",
-                                  distanceKm: exp.distanceKm ? exp.distanceKm.toString() : "",
-                                  vehicleAverage: exp.vehicleAverage ? exp.vehicleAverage.toString() : "",
-                                  petrolRate: exp.petrolRate ? exp.petrolRate.toString() : "",
-                                  trips: exp.trips ? exp.trips.map((t: any) => ({
-                                    date: t.date || "",
-                                    distanceKm: t.distanceKm?.toString() || "",
-                                    vehicleAverage: t.vehicleAverage?.toString() || "",
-                                    petrolRate: t.petrolRate?.toString() || "",
-                                    amount: t.amount || 0
-                                  })) : [],
-                                  targetEmployeeId: exp.employeeId || "",
-                                });
-                                setOpenAddModal(true);
+                                setGalleryExpense(exp);
                               }}
                             >
-                              <Pencil className="h-4 w-4 text-slate-600" />
+                              <Eye className="h-4 w-4" />
                             </Button>
-                          )}
-
-                          {/* Delete Expense */}
-                          {((isEmployee && exp.status === "pending") || isAdmin || isHR) && (
                             <Button
                               variant="ghost"
                               size="icon"
-                              className="h-8 w-8 text-rose-600 hover:bg-rose-50"
-                              title="Delete Expense Record"
-                              onClick={async () => {
-                                if (confirm(`Are you sure you want to delete expense record ${exp.id}?`)) {
-                                  try {
-                                    await api.deleteExpense(exp.id);
-                                    toast.success("Expense record deleted");
-                                  } catch (e: any) {
-                                    toast.error(e.message || "Failed to delete expense");
-                                  }
-                                }
+                              className="h-8 w-8"
+                              title="View Claim Details"
+                              onClick={() => {
+                                setSelectedExpense(exp);
+                                setOpenReceiptModal(true);
                               }}
                             >
-                              <Trash2 className="h-4 w-4" />
+                              <Info className="h-4 w-4 text-muted-foreground" />
                             </Button>
-                          )}
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 text-indigo-600 hover:bg-indigo-50"
+                              title="Print Expense Bill"
+                              onClick={() => setPrintExpense(exp)}
+                            >
+                              <FileText className="h-4 w-4" />
+                            </Button>
+
+                            {/* HR Approval Action */}
+                            {isHR && exp.status === "pending" && (
+                              <div className="flex items-center gap-1">
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="h-7 text-xs bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100"
+                                  onClick={() => {
+                                    setSelectedExpense(exp);
+                                    setReviewAction("approve");
+                                    setReviewTargetStage("hr");
+                                    setOpenReviewModal(true);
+                                  }}
+                                >
+                                  <Check className="h-3 w-3 mr-1" /> Approve
+                                </Button>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="h-7 text-xs bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100"
+                                  onClick={() => {
+                                    setSelectedExpense(exp);
+                                    setReviewAction("reject");
+                                    setReviewTargetStage("hr");
+                                    setOpenReviewModal(true);
+                                  }}
+                                >
+                                  <X className="h-3 w-3 mr-1" /> Reject
+                                </Button>
+                              </div>
+                            )}
+
+                            {/* Admin Approval Action */}
+                            {isAdmin && (exp.status === "pending" || exp.status === "hr_approved") && (
+                              <div className="flex items-center gap-1">
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="h-7 text-xs bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100"
+                                  onClick={() => {
+                                    setSelectedExpense(exp);
+                                    setReviewAction("approve");
+                                    setReviewTargetStage("admin");
+                                    setOpenReviewModal(true);
+                                  }}
+                                >
+                                  <Check className="h-3 w-3 mr-1" /> Approve
+                                </Button>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="h-7 text-xs bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100"
+                                  onClick={() => {
+                                    setSelectedExpense(exp);
+                                    setReviewAction("reject");
+                                    setReviewTargetStage("admin");
+                                    setOpenReviewModal(true);
+                                  }}
+                                >
+                                  <X className="h-3 w-3 mr-1" /> Reject
+                                </Button>
+                              </div>
+                            )}
+
+                            {/* Mark as Reimbursed Action (Admin or HR on approved expenses) */}
+                            {(isAdmin || isHR) && (exp.status === "admin_approved" || exp.status === "hr_approved") && (
+                              <Button
+                                variant="default"
+                                size="sm"
+                                className="h-7 text-xs bg-emerald-600 hover:bg-emerald-700 text-white"
+                                onClick={() => handleMarkReimbursed(exp)}
+                              >
+                                <Wallet className="h-3 w-3 mr-1" /> Mark Paid
+                              </Button>
+                            )}
+
+                            {/* Employee Cancel Action */}
+                            {isEmployee && exp.status === "pending" && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-7 text-xs text-rose-600 hover:bg-rose-50"
+                                onClick={() => handleCancelExpense(exp.id)}
+                              >
+                                Cancel
+                              </Button>
+                            )}
+
+                            {/* Edit Expense */}
+                            {((isEmployee && exp.status === "pending") || isAdmin || isHR) && (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8 hover:bg-slate-100"
+                                title="Edit Expense Record"
+                                onClick={() => {
+                                  setEditExpenseId(exp.id);
+                                  setFormData({
+                                    title: exp.title,
+                                    category: exp.category as any,
+                                    amount: exp.amount.toString(),
+                                    expenseDate: exp.expenseDate,
+                                    description: exp.description,
+                                    receiptUrls: exp.receiptUrls || [],
+                                    gstPercent: (exp.gstPercent || 0).toString(),
+                                    bankHolderName: exp.bankHolderName || "",
+                                    bankName: exp.bankName || "",
+                                    branch: exp.branch || "",
+                                    accountNo: exp.accountNo || "",
+                                    ifscCode: exp.ifscCode || "",
+                                    upiId: exp.upiId || "",
+                                    customCategory: "",
+                                    vehicleType: exp.vehicleType || "",
+                                    vehicleNumber: exp.vehicleNumber || "",
+                                    distanceKm: exp.distanceKm ? exp.distanceKm.toString() : "",
+                                    vehicleAverage: exp.vehicleAverage ? exp.vehicleAverage.toString() : "",
+                                    petrolRate: exp.petrolRate ? exp.petrolRate.toString() : "",
+                                    trips: exp.trips ? exp.trips.map((t: any) => ({
+                                      date: t.date || "",
+                                      distanceKm: t.distanceKm?.toString() || "",
+                                      vehicleAverage: t.vehicleAverage?.toString() || "",
+                                      petrolRate: t.petrolRate?.toString() || "",
+                                      amount: t.amount || 0
+                                    })) : [],
+                                    targetEmployeeId: exp.employeeId || "",
+                                  });
+                                  setOpenAddModal(true);
+                                }}
+                              >
+                                <Pencil className="h-4 w-4 text-slate-600" />
+                              </Button>
+                            )}
+
+                            {/* Delete Expense */}
+                            {((isEmployee && exp.status === "pending") || isAdmin || isHR) && (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8 text-rose-600 hover:bg-rose-50"
+                                title="Delete Expense Record"
+                                onClick={async () => {
+                                  if (confirm(`Are you sure you want to delete expense record ${exp.id}?`)) {
+                                    try {
+                                      await api.deleteExpense(exp.id);
+                                      toast.success("Expense record deleted");
+                                    } catch (e: any) {
+                                      toast.error(e.message || "Failed to delete expense");
+                                    }
+                                  }
+                                }}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            )}
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })
                 )}
               </TableBody>
             </Table>
           </div>
           
-          <div className="mt-4 p-4 bg-emerald-50 rounded-lg flex justify-between items-center border border-emerald-100">
-            <span className="font-semibold text-lg text-emerald-800">Total Expenses:</span>
-            <span className="font-bold text-xl text-emerald-600">
-              ₹{employeeExpenses.reduce((sum, exp) => sum + exp.amount, 0).toLocaleString()}
-            </span>
+          <div className="mt-4 p-4 bg-emerald-50 dark:bg-emerald-950/30 rounded-lg flex flex-wrap justify-between items-center gap-3 border border-emerald-100 dark:border-emerald-800/50">
+            <div className="flex items-center gap-3">
+              <span className="font-semibold text-lg text-emerald-800 dark:text-emerald-300">
+                {selectedEmployeeExpenseIds.length > 0 ? "Selected Expenses Total:" : "Total Expenses:"}
+              </span>
+              {selectedEmployeeExpenseIds.length > 0 && (
+                <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-300">
+                  {selectedEmployeeExpenseIds.length} of {employeeExpenses.length} selected
+                </span>
+              )}
+            </div>
+            <div className="flex items-center gap-3">
+              {selectedEmployeeExpenseIds.length > 0 && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 text-xs text-muted-foreground hover:text-foreground"
+                  onClick={() => setSelectedEmployeeExpenseIds([])}
+                >
+                  Clear Selection
+                </Button>
+              )}
+              <span className="font-bold text-xl text-emerald-600 dark:text-emerald-400">
+                ₹{((expensesToSum) => {
+                  return expensesToSum.reduce((sum, exp) => sum + exp.amount, 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                })(
+                  selectedEmployeeExpenseIds.length > 0
+                    ? employeeExpenses.filter(exp => selectedEmployeeExpenseIds.includes(exp.id))
+                    : employeeExpenses
+                )}
+              </span>
+            </div>
           </div>
         </DialogContent>
       </Dialog>
