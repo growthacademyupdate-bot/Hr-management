@@ -1955,10 +1955,13 @@ export default function ExpensesPage() {
 
       {/* --- MODAL 2: RECEIPT & DETAILS VIEW --- */}
       <Dialog open={openReceiptModal} onOpenChange={setOpenReceiptModal}>
-        <DialogContent className="sm:max-w-[550px]">
+        <DialogContent
+          className="sm:max-w-[650px] max-h-[90vh] overflow-hidden flex flex-col"
+          onInteractOutside={(event) => event.preventDefault()}
+        >
           {selectedExpense && (
-            <div>
-              <DialogHeader>
+            <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+              <DialogHeader className="shrink-0 pr-8">
                 <DialogTitle className="flex items-center justify-between text-lg font-bold">
                   <span>Claim {selectedExpense.id} — {db.employees.find((employee) => employee.id === selectedExpense.employeeId)?.name || selectedExpense.employeeId}</span>
                   {renderStatusBadge(selectedExpense.status)}
@@ -1968,7 +1971,7 @@ export default function ExpensesPage() {
                 </DialogDescription>
               </DialogHeader>
 
-              <div className="space-y-4 py-4 text-sm">
+              <div className="min-h-0 flex-1 space-y-4 overflow-y-auto py-4 pr-2 text-sm">
                 <div className="p-3 rounded-lg bg-muted/40 border space-y-1">
                   <div className="font-semibold text-base">{selectedExpense.title}</div>
                   <div className="text-xs text-muted-foreground flex items-center gap-2">
@@ -2062,7 +2065,7 @@ export default function ExpensesPage() {
                 </div>
               </div>
 
-              <DialogFooter>
+              <DialogFooter className="shrink-0 border-t pt-3">
                 <Button variant="outline" onClick={() => setOpenReceiptModal(false)}>Close</Button>
               </DialogFooter>
             </div>
