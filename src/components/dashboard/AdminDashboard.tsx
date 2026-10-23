@@ -51,7 +51,7 @@ export function AdminDashboard() {
   const completedTasks = db.tasks.filter((t) => t.status === "completed" || t.status === "reviewed").length;
   const totalTasks = db.tasks.length;
   
-  const pendingExpenses = db.expenses.filter((e) => e.status === "hr_approved").length;
+  const pendingExpenses = db.expenses.filter((e) => e.status === "pending").length;
   
   const attendanceIssues = todayAtt.filter((a) => a.status === "Late" || a.status === "Incomplete" || a.status === "Short Day").length;
   
@@ -108,7 +108,7 @@ export function AdminDashboard() {
         <StatCard label="On Leave Today" value={onLeaveToday} icon={UserX} tone="warning" trend="Approved leaves" />
         <StatCard label="Pending Leaves" value={pendingLeaves} icon={Clock} tone="warning" trend="Requires Admin approval" />
         <StatCard label="Pending Tasks" value={pendingTasks} icon={ListChecks} tone="info" trend={`${totalTasks > 0 ? Math.round((completedTasks/totalTasks)*100) : 0}% completion`} />
-        <StatCard label="Pending Expenses" value={pendingExpenses} icon={Receipt} tone="warning" trend="Requires Admin approval" />
+        <StatCard label="Pending Expenses" value={pendingExpenses} icon={Receipt} tone="warning" trend="Awaiting HR review" />
         <StatCard label="Attendance Issues" value={attendanceIssues} icon={AlertTriangle} tone="destructive" trend="Late/Incomplete" />
         <StatCard label="Pending Quotations" value={0} icon={FileText} tone="info" trend="No data" />
       </div>
@@ -221,16 +221,12 @@ export function AdminDashboard() {
                 <span className="font-bold">₹{db.expenses.filter(e => e.status === "pending").reduce((a,b)=>a+b.amount,0).toLocaleString()}</span>
               </div>
               <div className="flex justify-between items-center border-b pb-2">
-                <span className="text-muted-foreground text-sm">Awaiting Employee Acceptance</span>
-                <span className="font-bold text-blue-600">₹{db.expenses.filter(e => e.status === "hr_approved" && !e.employeeAcceptedHr).reduce((a,b)=>a+b.amount,0).toLocaleString()}</span>
+                <span className="text-muted-foreground text-sm">HR Approved (Ready for Payout)</span>
+                <span className="font-bold text-blue-600">₹{db.expenses.filter(e => e.status === "hr_approved" || e.status === "admin_approved").reduce((a,b)=>a+b.amount,0).toLocaleString()}</span>
               </div>
               <div className="flex justify-between items-center border-b pb-2">
-                <span className="text-muted-foreground text-sm">Ready for Admin Approval</span>
-                <span className="font-bold text-warning">₹{db.expenses.filter(e => e.status === "hr_approved" && e.employeeAcceptedHr).reduce((a,b)=>a+b.amount,0).toLocaleString()}</span>
-              </div>
-              <div className="flex justify-between items-center border-b pb-2">
-                <span className="text-muted-foreground text-sm">Approved / Paid</span>
-                <span className="font-bold text-success">₹{db.expenses.filter(e => e.status === "admin_approved" || e.status === "reimbursed").reduce((a,b)=>a+b.amount,0).toLocaleString()}</span>
+                <span className="text-muted-foreground text-sm">Paid (Awaiting Employee Receipt)</span>
+                <span className="font-bold text-success">₹{db.expenses.filter(e => e.status === "reimbursed" && !e.employeeReceived).reduce((a,b)=>a+b.amount,0).toLocaleString()}</span>
               </div>
               {(() => {
                 const advs = db.advancePayments || [];

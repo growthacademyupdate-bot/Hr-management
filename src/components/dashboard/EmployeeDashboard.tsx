@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { Clock, Activity, ListChecks, CheckCircle2, TrendingUp, Calendar, Receipt, Wallet, HandCoins, Check } from "lucide-react";
+import { Clock, Activity, ListChecks, CheckCircle2, TrendingUp, Calendar, Receipt, Wallet, HandCoins } from "lucide-react";
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid } from "recharts";
 import { Skeleton } from "@/components/ui/skeleton";
 import { StatusBadge } from "@/components/dashboard/SharedDashboardComponents";
@@ -45,26 +45,14 @@ export function EmployeeDashboard() {
     return myExpenses.filter((e) => e.status === "reimbursed" && e.employeeReceived);
   }, [myExpenses]);
 
-  const pendingHrApprovalClaims = useMemo(() => {
-    return myExpenses.filter((e) => e.status === "hr_approved" && !e.employeeAcceptedHr);
+  const pendingReviewExpenses = useMemo(() => {
+    return myExpenses.filter((e) => e.status === "pending");
   }, [myExpenses]);
 
-  const pendingHrApprovalGrossAmount = useMemo(() => {
-    return pendingHrApprovalClaims.reduce((sum, e) => sum + (e.originalAmount != null && e.advanceDeducted ? e.originalAmount : e.amount), 0);
-  }, [pendingHrApprovalClaims]);
-
-  const pendingHrApprovalAmount = useMemo(() => {
-    return pendingHrApprovalClaims.reduce((sum, e) => sum + e.amount, 0);
-  }, [pendingHrApprovalClaims]);
-
-  const pendingHrApprovalAdvanceDeducted = useMemo(() => {
-    return pendingHrApprovalClaims.reduce((sum, e) => sum + (e.advanceDeducted || 0), 0);
-  }, [pendingHrApprovalClaims]);
-
-  // Pending claims waiting for approval from employee perspective:
-  // Once employee accepts HR approval, or Admin approves, it moves out of employee's pending action queue
-  const pendingReviewExpenses = useMemo(() => {
-    return myExpenses.filter((e) => e.status === "pending" || (e.status === "hr_approved" && !e.employeeAcceptedHr));
+  const approvedPayoutAmount = useMemo(() => {
+    return myExpenses
+      .filter((e) => e.status === "hr_approved" || e.status === "admin_approved")
+      .reduce((sum, e) => sum + e.amount, 0);
   }, [myExpenses]);
 
   const pendingReimbursedAmount = useMemo(() => {
@@ -100,20 +88,6 @@ export function EmployeeDashboard() {
       .reduce((sum, a) => sum + Math.max(0, a.amount - (a.settledAmount || 0)), 0);
   }, [myAdvances]);
 
-  const [isAcceptingHr, setIsAcceptingHr] = useState(false);
-
-  const handleAcceptHrExpense = async (expenseId: string, amount: number) => {
-    setIsAcceptingHr(true);
-    try {
-      await api.employeeAcceptHrExpense(expenseId);
-      toast.success(`You accepted HR's approval for ₹${amount.toLocaleString('en-IN')}. It is deducted from your pending expenses!`);
-    } catch (err: any) {
-      toast.error(err.message || "Failed to accept HR approval");
-    } finally {
-      setIsAcceptingHr(false);
-    }
-  };
-
   if (!user?.employeeId) return null;
 
   if (db.isLoading) {
@@ -146,7 +120,7 @@ export function EmployeeDashboard() {
   const activeTasks = myTasks.filter((t) => t.status === "assigned" || t.status === "working_progress");
 
   // Expenses
-  const pendingExpenses = myExpenses.filter((e) => e.status === "pending" || e.status === "hr_approved").length;
+  const pendingExpenses = pendingReviewExpenses.length;
 
   const handleConfirmAllReceipts = async () => {
     if (unconfirmedReimbursed.length === 0) return;
@@ -187,42 +161,6 @@ export function EmployeeDashboard() {
         description={currentDateFormatted} 
       />
 
-      {/* HR Approved Expense Notification Banner (Awaiting Employee Acceptance) */}
-      {pendingHrApprovalClaims.length > 0 && (
-        <div className="bg-gradient-to-r from-blue-500/15 via-indigo-500/10 to-blue-500/15 border-2 border-blue-500/40 rounded-xl p-4 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 shadow-sm animate-in fade-in duration-300">
-          <div className="flex items-center gap-3">
-            <div className="h-11 w-11 rounded-full bg-blue-600 text-white flex items-center justify-center shrink-0 shadow-sm animate-bounce">
-              <CheckCircle2 className="h-6 w-6" />
-            </div>
-            <div>
-              <h4 className="font-bold text-blue-950 dark:text-blue-100 flex items-center gap-2 text-base">
-                HR Approved Your Expense: ₹{pendingHrApprovalGrossAmount.toLocaleString('en-IN')}
-                <Badge variant="outline" className="bg-blue-100 text-blue-800 border-blue-300 text-[10px]">
-                  {pendingHrApprovalClaims.length} Claim{pendingHrApprovalClaims.length > 1 ? "s" : ""} Approved
-                </Badge>
-              </h4>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                {pendingHrApprovalAdvanceDeducted > 0 ? (
-                  <>
-                    ₹{pendingHrApprovalAdvanceDeducted.toLocaleString('en-IN')} adjusted from advance &bull; Net payout: ₹{pendingHrApprovalAmount.toLocaleString('en-IN')} &bull; Remaining advance: <strong>₹{activeAdvanceBalance.toLocaleString('en-IN')}</strong>. Please accept to proceed.
-                  </>
-                ) : (
-                  <>
-                    HR has approved your expense claim. Please confirm and accept it so it can be forwarded to Admin for payout.
-                  </>
-                )}
-              </p>
-            </div>
-          </div>
-          <Button
-            className="bg-blue-600 hover:bg-blue-700 text-white font-semibold shadow-md gap-2 shrink-0 w-full md:w-auto"
-            onClick={() => setShowReceiveModal(true)}
-          >
-            <Check className="h-4 w-4" /> Review & Accept Claim{pendingHrApprovalClaims.length > 1 ? "s" : ""}
-          </Button>
-        </div>
-      )}
-
       {/* Reimbursement Disbursed Notification Banner */}
       {unconfirmedReimbursed.length > 0 && (
         <div className="bg-gradient-to-r from-emerald-500/15 via-teal-500/10 to-emerald-500/15 border-2 border-emerald-500/40 rounded-xl p-4 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 shadow-sm animate-in fade-in duration-300">
@@ -238,7 +176,7 @@ export function EmployeeDashboard() {
                 </Badge>
               </h4>
               <p className="text-xs text-muted-foreground mt-0.5">
-                HR and Admin have approved and paid your expense claims. Did you receive this money into your account?
+                HR has approved and paid your expense claims. Did you receive this money into your account?
               </p>
             </div>
           </div>
@@ -376,23 +314,19 @@ export function EmployeeDashboard() {
             </div>
           </CardHeader>
           <CardContent>
-            <div className={`grid grid-cols-2 ${totalAdvanceTaken > 0 ? "md:grid-cols-5" : "md:grid-cols-4"} gap-2 mb-2`}>
+            <div className={`grid grid-cols-2 ${totalAdvanceTaken > 0 ? "md:grid-cols-4" : "md:grid-cols-3"} gap-2 mb-2`}>
               <div className="bg-muted p-3 rounded-lg text-center">
                 <div className="text-2xl font-bold">₹{myExpenses.filter(e => e.status === "pending").reduce((a,b)=>a+b.amount,0).toLocaleString('en-IN')}</div>
                 <div className="text-[10px] uppercase text-muted-foreground font-semibold tracking-wider">Pending HR</div>
               </div>
-              <div className="bg-blue-50 dark:bg-blue-950/20 text-blue-700 p-3 rounded-lg text-center">
-                <div className="text-2xl font-bold">₹{pendingHrApprovalAmount.toLocaleString('en-IN')}</div>
-                <div className="text-[10px] uppercase font-semibold tracking-wider">HR Approved (Accept)</div>
-              </div>
               <div className="bg-indigo-50 dark:bg-indigo-950/20 text-indigo-600 p-3 rounded-lg text-center">
-                <div className="text-2xl font-bold">₹{myExpenses.filter(e => e.status === "admin_approved" || (e.status === "hr_approved" && e.employeeAcceptedHr)).reduce((a,b)=>a+b.amount,0).toLocaleString('en-IN')}</div>
-                <div className="text-[10px] uppercase font-semibold tracking-wider">Approved (In Pipeline)</div>
+                <div className="text-2xl font-bold">₹{approvedPayoutAmount.toLocaleString('en-IN')}</div>
+                <div className="text-[10px] uppercase font-semibold tracking-wider">Approved (Ready for Payout)</div>
               </div>
               <div className="bg-emerald-50 dark:bg-emerald-950/20 text-emerald-700 p-3 rounded-lg text-center">
                 <div className="text-2xl font-bold">₹{pendingReimbursedAmount.toLocaleString('en-IN')}</div>
                 <div className="text-[10px] uppercase font-semibold tracking-wider">
-                  {pendingReimbursedAmount === 0 ? "Reimbursed (Settled)" : "Disbursed (Unclaimed)"}
+                  {pendingReimbursedAmount === 0 ? "Paid (Received)" : "Paid (Awaiting Receipt)"}
                 </div>
               </div>
               {totalAdvanceTaken > 0 && (
@@ -533,56 +467,6 @@ export function EmployeeDashboard() {
               </div>
             </div>
 
-            {/* Awaiting HR Approval Acceptance by Employee */}
-            {pendingHrApprovalClaims.length > 0 && (
-              <div className="p-3 bg-blue-50/80 dark:bg-blue-950/30 border-2 border-blue-500 rounded-lg space-y-2">
-                <div className="flex items-center justify-between">
-                  <h4 className="font-bold text-sm text-blue-950 dark:text-blue-200 flex items-center gap-1.5">
-                    <CheckCircle2 className="h-4 w-4 text-blue-600" /> HR Approved Claims (Please Accept)
-                  </h4>
-                  <Badge variant="outline" className="bg-blue-100 text-blue-800 border-blue-300 font-bold">
-                    ₹{pendingHrApprovalAmount.toLocaleString('en-IN')}
-                  </Badge>
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  HR has approved these claims. Accepting them will minus them from your pending claims and submit them to Admin for payout:
-                </p>
-                <div className="space-y-1.5 max-h-36 overflow-y-auto">
-                  {pendingHrApprovalClaims.map((exp) => (
-                    <div key={exp.id} className="p-2.5 rounded bg-white dark:bg-card border text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                      <div>
-                        <span className="font-semibold">{exp.title}</span>
-                        <div className="text-[11px] text-muted-foreground">{exp.id} &bull; {exp.expenseDate} &bull; {exp.category}</div>
-                        {exp.hrReviewComment && (
-                          <div className="text-[11px] text-blue-700 dark:text-blue-300 italic mt-0.5">HR: &quot;{exp.hrReviewComment}&quot;</div>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-2 justify-between sm:justify-end shrink-0">
-                        <div className="text-right">
-                          <div className="font-bold text-sm text-foreground">
-                            ₹{(exp.originalAmount != null && exp.advanceDeducted ? exp.originalAmount : exp.amount).toLocaleString('en-IN')}
-                          </div>
-                          {exp.advanceDeducted != null && exp.advanceDeducted > 0 && (
-                            <div className="text-[10px] text-purple-600 dark:text-purple-400">
-                              -₹{exp.advanceDeducted.toLocaleString('en-IN')} adv (Net: ₹{exp.amount.toLocaleString('en-IN')})
-                            </div>
-                          )}
-                        </div>
-                        <Button
-                          size="sm"
-                          className="h-7 text-xs bg-blue-600 hover:bg-blue-700 text-white font-medium"
-                          onClick={() => handleAcceptHrExpense(exp.id, exp.amount)}
-                          disabled={isAcceptingHr}
-                        >
-                          <Check className="h-3.5 w-3.5 mr-1" /> Accept Approval
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
             {/* Awaiting Confirmation (If Any) */}
             {unconfirmedReimbursed.length > 0 && (
               <div className="p-3 bg-emerald-50/80 border-2 border-emerald-500 rounded-lg space-y-2">
@@ -595,7 +479,7 @@ export function EmployeeDashboard() {
                   </Badge>
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  The following claims have been disbursed by Admin/HR. Please confirm once the money is in your account:
+                  The following claims have been paid by HR. Please confirm once the money is in your account:
                 </p>
                 <div className="space-y-1.5 max-h-36 overflow-y-auto">
                   {unconfirmedReimbursed.map((exp) => (
@@ -670,7 +554,7 @@ export function EmployeeDashboard() {
                       <div className="text-right">
                         <div className="font-bold">₹{exp.amount.toLocaleString('en-IN')}</div>
                         <Badge variant="outline" className="text-[10px] capitalize">
-                          {exp.status === "pending" ? "Pending HR" : exp.status === "hr_approved" ? "Pending Admin" : "Approved"}
+                          {exp.status === "pending" ? "Pending HR" : "Approved"}
                         </Badge>
                       </div>
                     </div>
