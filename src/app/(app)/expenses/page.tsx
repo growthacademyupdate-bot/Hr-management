@@ -46,6 +46,7 @@ export default function ExpensesPage() {
   const [previewZoom, setPreviewZoom] = useState(1);
   const [employeeExpensesModal, setEmployeeExpensesModal] = useState<string | null>(null);
   const [selectedEmployeeExpenseIds, setSelectedEmployeeExpenseIds] = useState<string[]>([]);
+  const [isBatchReview, setIsBatchReview] = useState(false);
   const [confirmReceiptExpense, setConfirmReceiptExpense] = useState<Expense | null>(null);
   const [isConfirmingReceipt, setIsConfirmingReceipt] = useState(false);
 
@@ -601,8 +602,61 @@ export default function ExpensesPage() {
   const validBulkRows = bulkBills.filter((r) => r.title.trim() && Number(r.amount) > 0);
   const totalBulkAmount = validBulkRows.reduce((sum, r) => sum + (Number(r.amount) || 0), 0);
 
-  // Handle Review Dialog Submit
+  // Handle Review Dialog Submit (Single or Batch)
   const handleReviewSubmit = async () => {
+    if (isBatchReview) {
+      if (selectedEmployeeExpenseIds.length === 0) return;
+      if (reviewAction === "reject" && !reviewComment.trim()) {
+        toast.error("Please provide a reason for rejection");
+        return;
+      }
+      setIsSubmitting(true);
+      try {
+        const targetExpenses = expensesData.filter(exp => selectedEmployeeExpenseIds.includes(exp.id));
+        let successCount = 0;
+        let failCount = 0;
+
+        for (const exp of targetExpenses) {
+          try {
+            if (reviewTargetStage === "hr") {
+              if (exp.status === "pending") {
+                await api.hrReviewExpense(exp.id, reviewAction, reviewComment);
+                successCount++;
+              }
+            } else {
+              if (exp.status === "pending" || exp.status === "hr_approved") {
+                await api.adminReviewExpense(exp.id, reviewAction, reviewComment);
+                successCount++;
+              }
+            }
+          } catch (e) {
+            failCount++;
+          }
+        }
+
+        if (successCount > 0) {
+          toast.success(
+            `${successCount} expense${successCount > 1 ? "s" : ""} ${
+              reviewAction === "approve" ? "approved" : "rejected"
+            } successfully!`
+          );
+        }
+        if (failCount > 0) {
+          toast.error(`${failCount} expense${failCount > 1 ? "s" : ""} failed to update`);
+        }
+
+        setSelectedEmployeeExpenseIds([]);
+        setOpenReviewModal(false);
+        setIsBatchReview(false);
+        setReviewComment("");
+      } catch (err: any) {
+        toast.error(err.message || "Failed to process batch review");
+      } finally {
+        setIsSubmitting(false);
+      }
+      return;
+    }
+
     if (!selectedExpense) return;
     if (reviewAction === "reject" && !reviewComment.trim()) {
       toast.error("Please provide a reason for rejection");
@@ -2030,7 +2084,13 @@ export default function ExpensesPage() {
           <DialogHeader>
             <DialogTitle className="font-bold">Review Expense Claim</DialogTitle>
             <DialogDescription>
-              Claim {selectedExpense?.id} (₹{selectedExpense?.amount.toLocaleString()} - {selectedExpense?.title})
+              {isBatchReview ? (
+                <>
+                  Applying {reviewAction} to <strong>{selectedEmployeeExpenseIds.length}</strong> selected expense claim(s).
+                </>
+              ) : (
+                <>Claim {selectedExpense?.id} (₹{selectedExpense?.amount.toLocaleString()} - {selectedExpense?.title})</>
+              )}
             </DialogDescription>
           </DialogHeader>
 
@@ -2456,7 +2516,38 @@ export default function ExpensesPage() {
                 </span>
               )}
             </div>
-            <div className="flex items-center gap-3">
+            <div className="flex flex-wrap items-center gap-3">
+              {selectedEmployeeExpenseIds.length > 0 && (isAdmin || isHR) && (
+                <div className="flex items-center gap-2">
+                  <Button
+                    size="sm"
+                    className="h-8 text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm"
+                    onClick={() => {
+                      setIsBatchReview(true);
+                      setReviewAction("approve");
+                      setReviewTargetStage(isAdmin ? "admin" : "hr");
+                      setReviewComment("");
+                      setOpenReviewModal(true);
+                    }}
+                  >
+                    <Check className="h-3.5 w-3.5 mr-1" /> Approve Selected ({selectedEmployeeExpenseIds.length})
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-8 text-xs font-semibold bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-900 shadow-sm"
+                    onClick={() => {
+                      setIsBatchReview(true);
+                      setReviewAction("reject");
+                      setReviewTargetStage(isAdmin ? "admin" : "hr");
+                      setReviewComment("");
+                      setOpenReviewModal(true);
+                    }}
+                  >
+                    <X className="h-3.5 w-3.5 mr-1" /> Reject Selected ({selectedEmployeeExpenseIds.length})
+                  </Button>
+                </div>
+              )}
               {selectedEmployeeExpenseIds.length > 0 && (
                 <Button
                   variant="ghost"
