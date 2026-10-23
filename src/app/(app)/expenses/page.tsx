@@ -617,18 +617,10 @@ export default function ExpensesPage() {
         let failCount = 0;
 
         for (const exp of targetExpenses) {
+          if (exp.status !== "pending") continue;
           try {
-            if (reviewTargetStage === "hr") {
-              if (exp.status === "pending") {
-                await api.hrReviewExpense(exp.id, reviewAction, reviewComment);
-                successCount++;
-              }
-            } else {
-              if (exp.status === "pending" || exp.status === "hr_approved") {
-                await api.adminReviewExpense(exp.id, reviewAction, reviewComment);
-                successCount++;
-              }
-            }
+            await api.hrReviewExpense(exp.id, reviewAction, reviewComment);
+            successCount++;
           } catch (e) {
             failCount++;
           }
@@ -2517,7 +2509,7 @@ export default function ExpensesPage() {
               )}
             </div>
             <div className="flex flex-wrap items-center gap-3">
-              {selectedEmployeeExpenseIds.length > 0 && (isAdmin || isHR) && (
+              {selectedEmployeeExpenseIds.length > 0 && isHR && (
                 <div className="flex items-center gap-2">
                   <Button
                     size="sm"
@@ -2525,7 +2517,6 @@ export default function ExpensesPage() {
                     onClick={() => {
                       setIsBatchReview(true);
                       setReviewAction("approve");
-                      setReviewTargetStage(isAdmin ? "admin" : "hr");
                       setReviewComment("");
                       setOpenReviewModal(true);
                     }}
@@ -2539,7 +2530,6 @@ export default function ExpensesPage() {
                     onClick={() => {
                       setIsBatchReview(true);
                       setReviewAction("reject");
-                      setReviewTargetStage(isAdmin ? "admin" : "hr");
                       setReviewComment("");
                       setOpenReviewModal(true);
                     }}
