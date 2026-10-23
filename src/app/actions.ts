@@ -1436,13 +1436,13 @@ export async function cancelExpense(expenseId: string, userId: string) {
 
 export async function hrReviewExpense(expenseId: string, action: "approve" | "reject", comment: string, hrId: string, userRole: string) {
   await connectDB();
-  if (userRole !== "hr" && userRole !== "admin") throw new Error("Unauthorized");
+  if (userRole !== "hr") throw new Error("Unauthorized");
   const expense = await Expense.findOne({ id: expenseId });
   if (!expense) throw new Error("Expense claim not found");
   if (expense.status !== "pending") throw new Error("Expense claim is not pending HR review");
 
   if (action === "approve") {
-    // Deduct from active advances only upon HR/Admin approval
+    // Deduct from active advances only upon HR approval
     const rawGrossAmount = expense.originalAmount != null && expense.originalAmount > 0 ? expense.originalAmount : expense.amount;
     let advanceDeducted = 0;
     const deductedAdvanceIds: string[] = [];
@@ -1520,69 +1520,17 @@ export async function hrReviewExpense(expenseId: string, action: "approve" | "re
     actionUrl: `/expenses`,
   });
 
-  if (action === "approve") {
-    await createNotification({
-      recipientId: "u_admin",
-      senderId: hrId,
-      senderRole: userRole,
-      title: "Expense Requires Final Approval",
-      message: `HR approved an expense claim of ₹${expense.amount}. Final Admin approval required.`,
-      type: "EXPENSE_HR_APPROVED",
-      module: "EXPENSE",
-      referenceId: expenseId,
-      actionUrl: `/expenses`,
-    });
-  }
-
-  return serialize(expense);
-}
-
-export async function adminReviewExpense(expenseId: string, action: "approve" | "reject", comment: string, adminId: string, userRole: string) {
-  await connectDB();
-  if (userRole !== "admin") throw new Error("Unauthorized");
-  const expense = await Expense.findOne({ id: expenseId });
-  if (!expense) throw new Error("Expense claim not found");
-  if (expense.status !== "hr_approved") throw new Error("Expense claim must be approved by HR before Admin review");
-
-  expense.status = action === "approve" ? "admin_approved" : "admin_rejected";
-  expense.adminReviewedBy = adminId;
-  expense.adminReviewedAt = new Date().toISOString();
-  expense.adminReviewComment = comment || null;
-  await expense.save();
-
-  // If Admin rejects an expense with advance deductions, restore the advance
-  if (action === "reject") {
-    await restoreExpenseAdvance(expense);
-  }
-
-  await createActivity({
-    employeeId: expense.employeeId, actorId: adminId, actorRole: userRole,
-    activityType: action === "approve" ? "EXPENSE_ADMIN_APPROVED" : "EXPENSE_ADMIN_REJECTED", module: "EXPENSE", referenceId: expenseId,
-    message: `Your expense claim of ₹${expense.amount} has been finally ${action === "approve" ? "approved" : "rejected"} by Admin.`,
-    metadata: { reason: comment }
-  });
-
-  await createNotification({
-    recipientId: expense.employeeId,
-    senderId: adminId,
-    senderRole: userRole,
-    title: `Expense Claim ${action === "approve" ? "Approved" : "Rejected"} by Admin`,
-    message: `Your expense claim for ₹${expense.amount} was ${action === "approve" ? "approved" : "rejected"} by Admin.`,
-    type: action === "approve" ? "EXPENSE_ADMIN_APPROVED" : "EXPENSE_ADMIN_REJECTED",
-    module: "EXPENSE",
-    referenceId: expenseId,
-    actionUrl: `/expenses`,
-  });
-
   return serialize(expense);
 }
 
 export async function markExpenseReimbursed(expenseId: string, reviewerId: string, userRole: string) {
   await connectDB();
-  if (userRole !== "admin" && userRole !== "hr") throw new Error("Unauthorized");
+  if (userRole !== "hr") throw new Error("Unauthorized");
   const expense = await Expense.findOne({ id: expenseId });
   if (!expense) throw new Error("Expense claim not found");
-  if (expense.status !== "admin_approved") throw new Error("Expense must be approved by both HR and Admin before marking as reimbursed (paid)");
+  if (expense.status !== "hr_approved" && expense.status !== "admin_approved") {
+    throw new Error("Expense must be approved by HR before marking it as paid");
+  }
 
   expense.status = "reimbursed";
   expense.reimbursedBy = reviewerId;
@@ -1620,54 +1568,6 @@ export async function markExpenseReimbursed(expenseId: string, reviewerId: strin
       expenseId: expense.id,
     }).catch(console.error);
   }
-
-  return serialize(expense);
-}
-
-export async function employeeAcceptHrExpense(expenseId: string, employeeId: string) {
-  await connectDB();
-  const expense = await Expense.findOne({ id: expenseId });
-  if (!expense) throw new Error("Expense claim not found");
-  if (expense.employeeId !== employeeId) throw new Error("Unauthorized to accept this expense");
-  if (expense.status !== "hr_approved") throw new Error("Expense must be approved by HR first");
-
-  expense.employeeAcceptedHr = true;
-  expense.employeeAcceptedHrAt = new Date().toISOString();
-  await expense.save();
-
-  await createActivity({
-    employeeId,
-    actorId: employeeId,
-    actorRole: "employee",
-    activityType: "EXPENSE_EMPLOYEE_ACCEPTED",
-    module: "EXPENSE",
-    referenceId: expenseId,
-    message: `You accepted HR approval for expense claim of ₹${expense.amount} (${expense.title || expense.category}).`
-  });
-
-  await createNotification({
-    recipientId: "u_hr",
-    senderId: employeeId,
-    senderRole: "employee",
-    title: "Employee Accepted HR Approved Expense",
-    message: `Employee accepted HR approval for ₹${expense.amount} (${expense.title || expense.category}). Claim forwarded to Admin.`,
-    type: "EXPENSE_EMPLOYEE_ACCEPTED",
-    module: "EXPENSE",
-    referenceId: expenseId,
-    actionUrl: `/expenses`
-  });
-
-  await createNotification({
-    recipientId: "u_admin",
-    senderId: employeeId,
-    senderRole: "employee",
-    title: "Expense Ready for Admin Payout Approval",
-    message: `HR approved and employee accepted expense claim of ₹${expense.amount}. Final Admin approval required.`,
-    type: "EXPENSE_EMPLOYEE_ACCEPTED",
-    module: "EXPENSE",
-    referenceId: expenseId,
-    actionUrl: `/expenses`
-  });
 
   return serialize(expense);
 }

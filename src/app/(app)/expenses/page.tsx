@@ -41,7 +41,6 @@ export default function ExpensesPage() {
   const [openReviewModal, setOpenReviewModal] = useState(false);
   const [reviewAction, setReviewAction] = useState<"approve" | "reject">("approve");
   const [reviewComment, setReviewComment] = useState("");
-  const [reviewTargetStage, setReviewTargetStage] = useState<"hr" | "admin">("hr");
   const [printExpense, setPrintExpense] = useState<Expense | null>(null);
   const [galleryExpense, setGalleryExpense] = useState<Expense | null>(null);
   const [previewZoom, setPreviewZoom] = useState(1);
@@ -230,49 +229,32 @@ export default function ExpensesPage() {
     setSearch(globalSearch);
   }, [globalSearch, setSearch]);
 
-  // Employee Accept HR Approval Modal State
-  const [acceptingHrExpense, setAcceptingHrExpense] = useState<Expense | null>(null);
-  const [isSubmittingHrAccept, setIsSubmittingHrAccept] = useState(false);
-
   // Calculate Metrics
   const metrics = useMemo(() => {
     const relevant = isEmployee ? db.expenses.filter((e) => e.employeeId === currentUserId) : db.expenses;
-    
-    // Total Claimed: Active outstanding claims that are not yet accepted by employee, approved by admin, reimbursed, rejected or cancelled.
-    // Includes original gross amount if advance was adjusted
+
+    // Keep acknowledged reimbursements in history, but remove them from outstanding balances.
     const totalClaimed = relevant.reduce((sum, e) => {
-      // Exclude cancelled, rejected
       if (e.status === "cancelled" || e.status === "hr_rejected" || e.status === "admin_rejected") return sum;
-      // When accepted by employee, or approved by admin, or reimbursed, deduct it from active Total Claimed
-      if (e.employeeAcceptedHr || e.status === "admin_approved" || e.status === "reimbursed") return sum;
+      if (e.status === "reimbursed" && e.employeeReceived) return sum;
       const effectiveAmt = (e.originalAmount != null && e.advanceDeducted ? e.originalAmount : e.amount);
       return sum + effectiveAmt;
     }, 0);
-    
-    // Expenses awaiting HR approval or awaiting employee acceptance
-    // Uses original gross amount so the user sees the real value of their pending claim
+
     const pendingAmount = relevant.filter((e) => {
-      if (isEmployee) {
-        return e.status === "pending" || (e.status === "hr_approved" && !e.employeeAcceptedHr);
-      }
-      return e.status === "pending" || (e.status === "hr_approved" && !e.employeeAcceptedHr);
+      return e.status === "pending";
     }).reduce((sum, e) => sum + (e.originalAmount != null && e.advanceDeducted ? e.originalAmount : e.amount), 0);
 
     const approvedAmount = relevant.filter((e) => {
-      // When HR approves and employee accepts, or when Admin approves
-      return e.status === "admin_approved" || (e.status === "hr_approved" && (isHR || e.employeeAcceptedHr));
+      return e.status === "hr_approved" || e.status === "admin_approved";
     }).reduce((sum, e) => sum + e.amount, 0);
-    const reimbursedAmount = relevant.filter((e) => e.status === "reimbursed").reduce((sum, e) => sum + e.amount, 0);
+    const reimbursedAmount = relevant
+      .filter((e) => e.status === "reimbursed" && !e.employeeReceived)
+      .reduce((sum, e) => sum + e.amount, 0);
     
     // Cleared (settled) vs Unconfirmed reimbursed
     const clearedAmount = relevant.filter((e) => e.status === "reimbursed" && e.employeeReceived).reduce((sum, e) => sum + e.amount, 0);
     const pendingClearanceAmount = relevant.filter((e) => e.status === "reimbursed" && !e.employeeReceived).reduce((sum, e) => sum + e.amount, 0);
-
-    // HR Approved claims specifically waiting for employee to accept
-    const pendingEmployeeAcceptance = relevant.filter((e) => e.status === "hr_approved" && !e.employeeAcceptedHr);
-    const pendingEmployeeAcceptanceAmount = pendingEmployeeAcceptance.reduce((sum, e) => sum + (e.originalAmount != null && e.advanceDeducted ? e.originalAmount : e.amount), 0);
-    const pendingEmployeeAcceptanceNet = pendingEmployeeAcceptance.reduce((sum, e) => sum + e.amount, 0);
-    const pendingEmployeeAcceptanceAdvanceDeducted = pendingEmployeeAcceptance.reduce((sum, e) => sum + (e.advanceDeducted || 0), 0);
 
     // Advances
     const relevantAdvances = isEmployee ? (db.advancePayments || []).filter((a) => a.employeeId === currentUserId) : (db.advancePayments || []);
@@ -286,21 +268,17 @@ export default function ExpensesPage() {
     return {
       totalClaimed,
       pendingAmount,
-      pendingCount: relevant.filter((e) => isEmployee ? (e.status === "pending" || (e.status === "hr_approved" && !e.employeeAcceptedHr)) : e.status === "pending").length,
+      pendingCount: relevant.filter((e) => e.status === "pending").length,
       approvedAmount,
       reimbursedAmount,
       clearedAmount,
       pendingClearanceAmount,
-      pendingEmployeeAcceptance,
-      pendingEmployeeAcceptanceAmount,
-      pendingEmployeeAcceptanceNet,
-      pendingEmployeeAcceptanceAdvanceDeducted,
       totalAdvanceTaken,
       activeAdvanceTaken,
       clearedAdvanceTaken,
       advancesCount: relevantAdvances.length,
     };
-  }, [db.expenses, db.advancePayments, isEmployee, isHR, currentUserId]);
+  }, [db.expenses, db.advancePayments, isEmployee, currentUserId]);
 
   if (!user) return null;
 
@@ -686,13 +664,8 @@ export default function ExpensesPage() {
     }
     setIsSubmitting(true);
     try {
-      if (reviewTargetStage === "hr") {
-        await api.hrReviewExpense(selectedExpense.id, reviewAction, reviewComment);
-        toast.success(`Expense ${reviewAction === "approve" ? "approved" : "rejected"} by HR`);
-      } else {
-        await api.adminReviewExpense(selectedExpense.id, reviewAction, reviewComment);
-        toast.success(`Expense ${reviewAction === "approve" ? "approved" : "rejected"} by Admin`);
-      }
+      await api.hrReviewExpense(selectedExpense.id, reviewAction, reviewComment);
+      toast.success(`Expense ${reviewAction === "approve" ? "approved" : "rejected"} by HR`);
       setOpenReviewModal(false);
       setReviewComment("");
     } catch (err: any) {
@@ -752,20 +725,6 @@ export default function ExpensesPage() {
     }
   };
 
-  // Employee Accept HR Approval Handler
-  const handleEmployeeAcceptHr = async (expense: Expense) => {
-    setIsSubmittingHrAccept(true);
-    try {
-      await api.employeeAcceptHrExpense(expense.id);
-      toast.success(`You have accepted HR's approval for ₹${expense.amount.toLocaleString("en-IN")}. Claim deducted from your pending balance and sent to Admin for payout approval!`);
-      setAcceptingHrExpense(null);
-    } catch (err: any) {
-      toast.error(err.message || "Failed to accept HR approval");
-    } finally {
-      setIsSubmittingHrAccept(false);
-    }
-  };
-
   // Employee Acknowledge Receipt Handler
   const handleAcknowledgeReceipt = async () => {
     if (!confirmReceiptExpense) return;
@@ -792,15 +751,12 @@ export default function ExpensesPage() {
   };
 
   // Helper for Status Badges
-  const renderStatusBadge = (status: Expense["status"], employeeReceived?: boolean, employeeAcceptedHr?: boolean) => {
+  const renderStatusBadge = (status: Expense["status"], employeeReceived?: boolean) => {
     switch (status) {
       case "pending":
         return <Badge variant="outline" className="bg-amber-500/10 text-amber-600 border-amber-500/30 font-medium"><Clock className="w-3 h-3 mr-1" /> Pending HR</Badge>;
       case "hr_approved":
-        if (employeeAcceptedHr) {
-          return <Badge variant="outline" className="bg-emerald-500/10 text-emerald-700 border-emerald-500/30 font-medium"><CheckCircle2 className="w-3 h-3 mr-1" /> Accepted by You (Awaiting Admin)</Badge>;
-        }
-        return <Badge variant="outline" className="bg-blue-500/10 text-blue-700 border-blue-500/30 font-medium animate-pulse"><Clock className="w-3 h-3 mr-1" /> HR Approved (Action Required)</Badge>;
+        return <Badge variant="outline" className="bg-blue-500/10 text-blue-700 border-blue-500/30 font-medium"><CheckCircle2 className="w-3 h-3 mr-1" /> HR Approved (Ready for Payout)</Badge>;
       case "admin_approved":
         return <Badge variant="outline" className="bg-indigo-500/10 text-indigo-600 border-indigo-500/30 font-medium"><ShieldCheck className="w-3 h-3 mr-1" /> Admin Approved (Ready for Payout)</Badge>;
       case "reimbursed":
@@ -908,53 +864,6 @@ export default function ExpensesPage() {
         </div>
       </div>
 
-      {/* Employee HR Approval Notification & Acceptance Banner */}
-      {isEmployee && metrics.pendingEmployeeAcceptance.length > 0 && (
-        <div className="bg-gradient-to-r from-blue-500/15 via-indigo-500/10 to-blue-500/15 border-2 border-blue-500/40 rounded-xl p-4 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 shadow-sm animate-in fade-in duration-300">
-          <div className="flex items-center gap-3">
-            <div className="h-11 w-11 rounded-full bg-blue-600 text-white flex items-center justify-center shrink-0 shadow-sm animate-bounce">
-              <CheckCircle2 className="h-6 w-6" />
-            </div>
-            <div>
-              <h4 className="font-bold text-blue-950 dark:text-blue-100 flex items-center gap-2 text-base">
-                HR Approved Your Expense: ₹{metrics.pendingEmployeeAcceptanceAmount.toLocaleString('en-IN')}
-                <Badge variant="outline" className="bg-blue-100 text-blue-800 border-blue-300 text-[10px]">
-                  {metrics.pendingEmployeeAcceptance.length} Claim{metrics.pendingEmployeeAcceptance.length > 1 ? "s" : ""} Approved
-                </Badge>
-              </h4>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                {metrics.pendingEmployeeAcceptanceAdvanceDeducted > 0 ? (
-                  <>
-                    ₹{metrics.pendingEmployeeAcceptanceAdvanceDeducted.toLocaleString('en-IN')} adjusted from advance &bull; Net payout: ₹{metrics.pendingEmployeeAcceptanceNet.toLocaleString('en-IN')} &bull; Remaining active advance: <strong>₹{metrics.activeAdvanceTaken.toLocaleString('en-IN')}</strong>. Please accept this approval.
-                  </>
-                ) : (
-                  <>
-                    HR has reviewed and approved your claim{metrics.pendingEmployeeAcceptance.length > 1 ? "s" : ""}. Please accept this approval so it can be forwarded to Admin for payout.
-                  </>
-                )}
-              </p>
-            </div>
-          </div>
-          <div className="flex items-center gap-2 w-full md:w-auto shrink-0">
-            {metrics.pendingEmployeeAcceptance.length === 1 ? (
-              <Button
-                className="bg-blue-600 hover:bg-blue-700 text-white font-semibold shadow-md gap-2 w-full md:w-auto"
-                onClick={() => setAcceptingHrExpense(metrics.pendingEmployeeAcceptance[0])}
-              >
-                <Check className="h-4 w-4" /> Accept HR Approval
-              </Button>
-            ) : (
-              <Button
-                className="bg-blue-600 hover:bg-blue-700 text-white font-semibold shadow-md gap-2 w-full md:w-auto"
-                onClick={() => setAcceptingHrExpense(metrics.pendingEmployeeAcceptance[0])}
-              >
-                <Check className="h-4 w-4" /> Review & Accept Claims
-              </Button>
-            )}
-          </div>
-        </div>
-      )}
-
       {/* Metric Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
         <StatCard
@@ -982,7 +891,7 @@ export default function ExpensesPage() {
           label="Total Reimbursed"
           value={`₹${metrics.reimbursedAmount.toLocaleString()}`}
           icon={Wallet}
-          trend={`₹${metrics.clearedAmount.toLocaleString()} cleared by employee`}
+          trend={`₹${metrics.pendingClearanceAmount.toLocaleString()} awaiting employee receipt`}
           tone="success"
         />
         <div 
@@ -1134,9 +1043,63 @@ export default function ExpensesPage() {
                         </div>
                       )}
                     </TableCell>
-                    <TableCell>{renderStatusBadge(item.status, item.employeeReceived, item.employeeAcceptedHr)}</TableCell>
-                    <TableCell className="text-right whitespace-nowrap">
-                      <div className="flex items-center justify-end gap-1">
+                    <TableCell>{renderStatusBadge(item.status, item.employeeReceived)}</TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex flex-wrap items-center justify-end gap-1">
+                        {isHR && (
+                          <div className="flex flex-wrap items-center justify-end gap-1">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="h-8 text-xs"
+                              onClick={() => {
+                                setSelectedExpense(item);
+                                setOpenReceiptModal(true);
+                              }}
+                            >
+                              Review
+                            </Button>
+                            {item.status === "pending" && (
+                              <>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="h-8 text-xs bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100"
+                                  onClick={() => {
+                                    setSelectedExpense(item);
+                                    setReviewAction("approve");
+                                    setOpenReviewModal(true);
+                                  }}
+                                >
+                                  <Check className="h-3 w-3 mr-1" /> Approve
+                                </Button>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="h-8 text-xs bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100"
+                                  onClick={() => {
+                                    setSelectedExpense(item);
+                                    setReviewAction("reject");
+                                    setOpenReviewModal(true);
+                                  }}
+                                >
+                                  <X className="h-3 w-3 mr-1" /> Reject
+                                </Button>
+                              </>
+                            )}
+                            {(item.status === "hr_approved" || item.status === "admin_approved") && (
+                              <Button
+                                variant="default"
+                                size="sm"
+                                className="h-8 text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-medium shadow-sm"
+                                onClick={() => handleMarkReimbursed(item)}
+                              >
+                                <Wallet className="h-3 w-3 mr-1" /> Mark Paid
+                              </Button>
+                            )}
+                          </div>
+                        )}
+
                         {/* View Images / Details */}
                         <Button
                           variant="ghost"
@@ -1171,108 +1134,9 @@ export default function ExpensesPage() {
                           <FileText className="h-4 w-4" />
                         </Button>
 
-                        {/* Employee Accept HR Approval Action */}
-                        {isEmployee && item.status === "hr_approved" && (
-                          !item.employeeAcceptedHr ? (
-                            <Button
-                              size="sm"
-                              className="h-7 text-xs bg-blue-600 hover:bg-blue-700 text-white font-medium shadow-sm animate-pulse"
-                              onClick={() => setAcceptingHrExpense(item)}
-                            >
-                              <Check className="h-3.5 w-3.5 mr-1" /> Accept HR Approval
-                            </Button>
-                          ) : (
-                            <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-300 text-xs">
-                              <CheckCircle2 className="h-3 w-3 mr-1" /> Accepted (Pending Admin)
-                            </Badge>
-                          )
-                        )}
-
-                        {/* HR Approval Action */}
-                        {isHR && item.status === "pending" && (
-                          <div className="flex items-center gap-1">
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="h-7 text-xs bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100"
-                              onClick={() => {
-                                setSelectedExpense(item);
-                                setReviewAction("approve");
-                                setReviewTargetStage("hr");
-                                setOpenReviewModal(true);
-                              }}
-                            >
-                              <Check className="h-3 w-3 mr-1" /> Approve
-                            </Button>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="h-7 text-xs bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100"
-                              onClick={() => {
-                                setSelectedExpense(item);
-                                setReviewAction("reject");
-                                setReviewTargetStage("hr");
-                                setOpenReviewModal(true);
-                              }}
-                            >
-                              <X className="h-3 w-3 mr-1" /> Reject
-                            </Button>
-                          </div>
-                        )}
-
-                        {/* Admin Approval Action - Requires HR to have approved first */}
-                        {isAdmin && item.status === "hr_approved" && (
-                          <div className="flex items-center gap-1">
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="h-7 text-xs bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100"
-                              onClick={() => {
-                                setSelectedExpense(item);
-                                setReviewAction("approve");
-                                setReviewTargetStage("admin");
-                                setOpenReviewModal(true);
-                              }}
-                            >
-                              <Check className="h-3 w-3 mr-1" /> Approve
-                            </Button>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="h-7 text-xs bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100"
-                              onClick={() => {
-                                setSelectedExpense(item);
-                                setReviewAction("reject");
-                                setReviewTargetStage("admin");
-                                setOpenReviewModal(true);
-                              }}
-                            >
-                              <X className="h-3 w-3 mr-1" /> Reject
-                            </Button>
-                          </div>
-                        )}
-
                         {isAdmin && item.status === "pending" && (
                           <span className="text-[11px] text-amber-700 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
                             Awaiting HR Review
-                          </span>
-                        )}
-
-                        {/* Mark as Reimbursed Action (Admin or HR) - Requires Admin Approval */}
-                        {(isAdmin || isHR) && item.status === "admin_approved" && (
-                          <Button
-                            variant="default"
-                            size="sm"
-                            className="h-7 text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-medium shadow-sm"
-                            onClick={() => handleMarkReimbursed(item)}
-                          >
-                            <Wallet className="h-3 w-3 mr-1" /> Mark Paid
-                          </Button>
-                        )}
-
-                        {(isAdmin || isHR) && item.status === "hr_approved" && (
-                          <span className="text-[11px] text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-200">
-                            {item.employeeAcceptedHr ? "Employee Accepted (Ready for Admin)" : "Awaiting Employee Acceptance"}
                           </span>
                         )}
 
@@ -2104,7 +1968,7 @@ export default function ExpensesPage() {
             <div>
               <DialogHeader>
                 <DialogTitle className="flex items-center justify-between text-lg font-bold">
-                  <span>Claim {selectedExpense.id} — Details</span>
+                  <span>Claim {selectedExpense.id} — {db.employees.find((employee) => employee.id === selectedExpense.employeeId)?.name || selectedExpense.employeeId}</span>
                   {renderStatusBadge(selectedExpense.status)}
                 </DialogTitle>
                 <DialogDescription>
@@ -2152,6 +2016,17 @@ export default function ExpensesPage() {
                   <div>
                     <div className="font-semibold text-xs text-muted-foreground uppercase tracking-wider mb-1">Description</div>
                     <div className="p-3 rounded-md bg-card border text-sm">{selectedExpense.description}</div>
+                  </div>
+                )}
+
+                {isHR && (selectedExpense.status === "hr_approved" || selectedExpense.status === "admin_approved") && (
+                  <div className="flex justify-end border-t pt-3">
+                    <Button
+                      className="bg-emerald-600 text-white hover:bg-emerald-700"
+                      onClick={() => handleMarkReimbursed(selectedExpense)}
+                    >
+                      <Wallet className="h-4 w-4 mr-1" /> Mark Paid
+                    </Button>
                   </div>
                 )}
 
@@ -2203,20 +2078,11 @@ export default function ExpensesPage() {
         </DialogContent>
       </Dialog>
 
-      {/* --- MODAL 3: HR / ADMIN REVIEW DIALOG --- */}
-      <Dialog 
-        open={openReviewModal} 
-        onOpenChange={(open) => {
-          setOpenReviewModal(open);
-          if (!open) setIsBatchReview(false);
-        }}
-      >
+      {/* --- MODAL 3: HR REVIEW DIALOG --- */}
+      <Dialog open={openReviewModal} onOpenChange={setOpenReviewModal}>
         <DialogContent className="sm:max-w-[450px]">
           <DialogHeader>
-            <DialogTitle className="capitalize font-bold">
-              {reviewTargetStage.toUpperCase()} Review — {reviewAction === "approve" ? "Approve Expense" : "Reject Expense"}
-              {isBatchReview && ` (${selectedEmployeeExpenseIds.length} Selected)`}
-            </DialogTitle>
+            <DialogTitle className="font-bold">Review Expense Claim</DialogTitle>
             <DialogDescription>
               {isBatchReview ? (
                 <>
@@ -2229,6 +2095,24 @@ export default function ExpensesPage() {
           </DialogHeader>
 
           <div className="space-y-4 py-4">
+            <div className="flex gap-2">
+              <Button
+                type="button"
+                variant={reviewAction === "approve" ? "default" : "outline"}
+                className={reviewAction === "approve" ? "flex-1 bg-emerald-600 hover:bg-emerald-700" : "flex-1"}
+                onClick={() => setReviewAction("approve")}
+              >
+                <Check className="h-4 w-4 mr-1" /> Approve
+              </Button>
+              <Button
+                type="button"
+                variant={reviewAction === "reject" ? "destructive" : "outline"}
+                className="flex-1"
+                onClick={() => setReviewAction("reject")}
+              >
+                <X className="h-4 w-4 mr-1" /> Reject
+              </Button>
+            </div>
             <div className="space-y-2">
               <Label className="text-sm font-semibold">
                 Review Notes / Reason {reviewAction === "reject" ? "*" : "(Optional)"}
@@ -2501,7 +2385,6 @@ export default function ExpensesPage() {
                                   onClick={() => {
                                     setSelectedExpense(exp);
                                     setReviewAction("approve");
-                                    setReviewTargetStage("hr");
                                     setOpenReviewModal(true);
                                   }}
                                 >
@@ -2514,7 +2397,6 @@ export default function ExpensesPage() {
                                   onClick={() => {
                                     setSelectedExpense(exp);
                                     setReviewAction("reject");
-                                    setReviewTargetStage("hr");
                                     setOpenReviewModal(true);
                                   }}
                                 >
@@ -2523,40 +2405,8 @@ export default function ExpensesPage() {
                               </div>
                             )}
 
-                            {/* Admin Approval Action */}
-                            {isAdmin && (exp.status === "pending" || exp.status === "hr_approved") && (
-                              <div className="flex items-center gap-1">
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  className="h-7 text-xs bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100"
-                                  onClick={() => {
-                                    setSelectedExpense(exp);
-                                    setReviewAction("approve");
-                                    setReviewTargetStage("admin");
-                                    setOpenReviewModal(true);
-                                  }}
-                                >
-                                  <Check className="h-3 w-3 mr-1" /> Approve
-                                </Button>
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  className="h-7 text-xs bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100"
-                                  onClick={() => {
-                                    setSelectedExpense(exp);
-                                    setReviewAction("reject");
-                                    setReviewTargetStage("admin");
-                                    setOpenReviewModal(true);
-                                  }}
-                                >
-                                  <X className="h-3 w-3 mr-1" /> Reject
-                                </Button>
-                              </div>
-                            )}
-
-                            {/* Mark as Reimbursed Action (Admin or HR on approved expenses) */}
-                            {(isAdmin || isHR) && (exp.status === "admin_approved" || exp.status === "hr_approved") && (
+                            {/* HR marks approved claims as paid */}
+                            {isHR && (exp.status === "admin_approved" || exp.status === "hr_approved") && (
                               <Button
                                 variant="default"
                                 size="sm"
@@ -3233,7 +3083,7 @@ export default function ExpensesPage() {
                         Disbursed Reimbursements Awaiting Confirmation
                       </h4>
                       <p className="text-xs text-muted-foreground">
-                        {isEmployee ? "You have received the funds below. Click to acknowledge receipt and clear your balance." : "Payment released by Admin/HR. Awaiting employee acknowledgement."}
+                        {isEmployee ? "You have received the funds below. Click to acknowledge receipt and clear your balance." : "Payment released by HR. Awaiting employee acknowledgement."}
                       </p>
                     </div>
                   </div>
@@ -3317,103 +3167,6 @@ export default function ExpensesPage() {
 
           <DialogFooter>
             <Button variant="outline" onClick={() => setOpenStatusPopup(false)}>Close</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* EMPLOYEE ACCEPT HR APPROVAL MODAL */}
-      <Dialog open={!!acceptingHrExpense} onOpenChange={(open) => !open && setAcceptingHrExpense(null)}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <div className="flex items-center gap-2 text-blue-600">
-              <CheckCircle2 className="h-6 w-6" />
-              <DialogTitle>Accept HR Approval</DialogTitle>
-            </div>
-            <DialogDescription>
-              HR has approved your expense claim. Please confirm your acceptance.
-            </DialogDescription>
-          </DialogHeader>
-
-          {acceptingHrExpense && (
-            <div className="space-y-4 py-3">
-              <div className="bg-blue-50/60 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 rounded-lg p-3 text-xs space-y-2">
-                <div className="flex justify-between items-center">
-                  <span className="text-muted-foreground">Claim ID:</span>
-                  <span className="font-mono font-semibold">{acceptingHrExpense.id}</span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-muted-foreground">Expense Title:</span>
-                  <span className="font-semibold text-foreground">{acceptingHrExpense.title}</span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-muted-foreground">Category:</span>
-                  <Badge variant="outline" className="text-[10px]">{acceptingHrExpense.category}</Badge>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-muted-foreground">Expense Date:</span>
-                  <span>{new Date(acceptingHrExpense.expenseDate).toLocaleDateString()}</span>
-                </div>
-                {acceptingHrExpense.hrReviewComment && (
-                  <div className="pt-1 border-t border-blue-200 dark:border-blue-800">
-                    <span className="text-muted-foreground block mb-0.5">HR Comment:</span>
-                    <p className="text-foreground italic">{acceptingHrExpense.hrReviewComment}</p>
-                  </div>
-                )}
-                <div className="flex justify-between items-center pt-2 border-t border-blue-200 dark:border-blue-800 text-sm">
-                  <span className="font-bold">Claim Amount:</span>
-                  <span className="font-bold text-foreground">
-                    ₹{(acceptingHrExpense.originalAmount != null && acceptingHrExpense.advanceDeducted ? acceptingHrExpense.originalAmount : acceptingHrExpense.amount).toLocaleString('en-IN')}
-                  </span>
-                </div>
-                {acceptingHrExpense.advanceDeducted != null && acceptingHrExpense.advanceDeducted > 0 && (
-                  <>
-                    <div className="flex justify-between items-center text-xs text-purple-700 dark:text-purple-300">
-                      <span>Deducted from Advance:</span>
-                      <span className="font-semibold">-₹{acceptingHrExpense.advanceDeducted.toLocaleString('en-IN')}</span>
-                    </div>
-                    <div className="flex justify-between items-center text-xs font-bold text-blue-700 dark:text-blue-400">
-                      <span>Net Cash Payout:</span>
-                      <span>₹{acceptingHrExpense.amount.toLocaleString('en-IN')}</span>
-                    </div>
-                  </>
-                )}
-              </div>
-
-              <div className="p-3 bg-muted/40 rounded-lg text-xs text-muted-foreground space-y-1">
-                <div className="font-semibold text-foreground flex items-center gap-1.5">
-                  <Info className="h-4 w-4 text-blue-600" /> What happens next?
-                </div>
-                <p>
-                  • This expense will be <strong>deducted from your pending review amount</strong>.
-                </p>
-                <p>
-                  • It will be forwarded to <strong>Admin for final payout disbursement</strong>.
-                </p>
-              </div>
-            </div>
-          )}
-
-          <DialogFooter className="flex sm:justify-between items-center gap-2">
-            <Button
-              variant="outline"
-              onClick={() => setAcceptingHrExpense(null)}
-              disabled={isSubmittingHrAccept}
-            >
-              Cancel
-            </Button>
-            <Button
-              className="bg-blue-600 hover:bg-blue-700 text-white font-semibold gap-2"
-              onClick={() => acceptingHrExpense && handleEmployeeAcceptHr(acceptingHrExpense)}
-              disabled={isSubmittingHrAccept}
-            >
-              {isSubmittingHrAccept ? (
-                <>Processing...</>
-              ) : (
-                <>
-                  <Check className="h-4 w-4" /> Yes, I Accept This Claim
-                </>
-              )}
-            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

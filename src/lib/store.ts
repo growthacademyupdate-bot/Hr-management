@@ -6,7 +6,7 @@ import {
   getLeaves, addLeave, cancelLeave, hrReviewLeave, adminReviewLeave, deleteLeave as deleteLeaveAction,
   getAttendance, getActivities, logLogoutActivity, deleteAttendance, deleteActivity as deleteActivityAction, updateSystemSetting, getSystemSettings, updateSystemSettings,
   getHolidays, createHoliday, updateHoliday, deleteHoliday,
-  getExpenses, addExpense, addBulkExpenses, updateExpense, cancelExpense, hrReviewExpense, adminReviewExpense, markExpenseReimbursed, acknowledgeExpenseReceipt, employeeAcceptHrExpense, deleteExpense,
+  getExpenses, addExpense, addBulkExpenses, updateExpense, cancelExpense, hrReviewExpense, markExpenseReimbursed, acknowledgeExpenseReceipt, deleteExpense,
   getAdvancePayments, createAdvancePayment, deleteAdvancePayment,
   getNotifications, markNotificationAsRead, markAllNotificationsAsRead, deleteNotification as deleteNotificationAction, broadcastNotification, editBroadcastNotification, deleteBroadcastNotification,
   getDailyReports, addDailyReport, deleteDailyReport,
@@ -398,25 +398,8 @@ export const api = {
     }
     notify();
   },
-  async adminReviewExpense(expenseId: string, action: "approve" | "reject", comment: string) {
-    const user = getCurrentUser();
-    if (!user) return;
-    const authorId = user.employeeId || user.id;
-    const e = await adminReviewExpense(expenseId, action, comment, authorId, user.role);
-    currentDB.expenses = currentDB.expenses.map(x => x.id === expenseId ? e : x);
-    try {
-      const advs = await getAdvancePayments(user?.role, authorId);
-      currentDB.advancePayments = advs || [];
-      const emps = await getEmployees();
-      currentDB.employees = emps || [];
-    } catch (err) {
-      console.error("Error refreshing advances after adminReviewExpense:", err);
-    }
-    notify();
-  },
   async markExpenseReimbursed(expenseId: string) { const user = getCurrentUser(); if (!user) return; const e = await markExpenseReimbursed(expenseId, user.employeeId || user.id, user.role); currentDB.expenses = currentDB.expenses.map(x => x.id === expenseId ? e : x); notify(); },
   async acknowledgeExpenseReceipt(expenseId: string) { const user = getCurrentUser(); if (!user) return; const e = await acknowledgeExpenseReceipt(expenseId, user.employeeId || user.id); currentDB.expenses = currentDB.expenses.map(x => x.id === expenseId ? e : x); notify(); return e; },
-  async employeeAcceptHrExpense(expenseId: string) { const user = getCurrentUser(); if (!user) return; const e = await employeeAcceptHrExpense(expenseId, user.employeeId || user.id); currentDB.expenses = currentDB.expenses.map(x => x.id === expenseId ? e : x); notify(); return e; },
   async updateExpense(id: string, data: any) { const user = getCurrentUser(); if (!user) return; const e = await updateExpense(id, data, user.role, user.employeeId || user.id); currentDB.expenses = currentDB.expenses.map(x => x.id === id ? e : x); notify(); },
   async deleteExpense(id: string) {
     const user = getCurrentUser();
@@ -672,7 +655,7 @@ export const ROLE_MENUS: Record<Role, { label: string; to: string; icon: string 
   employee: [
     { label: "Dashboard", to: "/dashboard", icon: "LayoutDashboard" },
     { label: "Daily Task Report", to: "/daily-report", icon: "ClipboardList" },
-    { label: "RCS Marketing", to: "/rcs-marketing", icon: "Megaphone" },
+    // { label: "RCS Marketing", to: "/rcs-marketing", icon: "Megaphone" },
     { label: "My Tasks", to: "/tasks", icon: "ListTodo" },
     { label: "Attendance", to: "/attendance", icon: "CalendarCheck" },
     { label: "Activity", to: "/activity", icon: "Activity" },
